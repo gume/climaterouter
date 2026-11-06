@@ -1214,9 +1214,9 @@ interrupted heating in tests.
 - [x] Safe return from boost to single-target routing through the handover state machine.
 - [x] Unit tests for the boost model and pure routing.
 - [x] README/setup/dashboard examples updated for boost.
+- [x] Hassfest and HACS validation workflow (`.github/workflows/validate.yml`).
 - [ ] Integration tests for boost start/expiry/cancel/resume (needs the HA test harness).
 - [ ] Live verification in the test HA.
-- [ ] HACS validation, hassfest, release workflow.
 - [ ] `v0.4.0` tag/release (owner action).
 
 **Acceptance:** boost is safely disabled by default; enabling it activates both targets for a bounded time; HACS

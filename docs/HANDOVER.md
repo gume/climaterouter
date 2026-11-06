@@ -20,6 +20,9 @@
 | `d4815bc` | `feat: detect and expose target conflicts with monitor/reassert/adopt policies` |
 | `36a2465` | `docs: record M5 conflict handling and bump to 0.3.0` |
 | `90aefd5` | `feat: implement bounded both-target boost with safe single-target return` |
+| `a9be862` | `fix: interrupt the boosted spare target on an explicit cool command` |
+| `fa4899e` | `docs: record M6 boost behaviour and verification steps` |
+| `1719d3d` | `ci: add hassfest and HACS validation workflow` |
 
 The working tree is clean. Nothing after `95cb4cd` has been pushed (the assistant has no GitHub credentials); the
 owner must push the local commits and tag a release before the live test instance can be updated.
@@ -291,7 +294,9 @@ docker compose logs -f homeassistant
 ```
 
 `requirements_test.txt` lists `pytest-homeassistant-custom-component`, but the current tests do not need it and it
-was **not** installed locally. CI installs only `pytest` and `ruff`.
+was **not** installed locally. CI installs only `pytest` and `ruff`. A separate `Validate` workflow runs
+`home-assistant/actions/hassfest` and `hacs/action` (integration category, brands ignored because the domain has no
+brand assets yet).
 
 ---
 
@@ -423,9 +428,10 @@ with a Python version matching the supported HA. Suggested coverage:
 - [x] Persist boost across restart, expire it on the exact deadline, and emit start/end events.
 - [x] Return to single-target routing through the handover state machine.
 - [x] Unit tests for `BoostState` and pure boost routing.
+- [x] Add hassfest and HACS validation workflow (`.github/workflows/validate.yml`, brands ignored).
 - [ ] Integration tests for boost start/expiry/cancel/restart and return handover.
 - [ ] Live verification in the test HA.
-- [ ] Add `hassfest`, HACS validation, a release workflow and the `v0.4.0` tag/release (owner action).
+- [ ] Tag/release `v0.4.0` (owner action).
 
 ---
 
