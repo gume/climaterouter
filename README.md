@@ -50,6 +50,17 @@ The proxy is deliberately thin:
 - It reads current/target temperature and preset from the active target and mirrors them.
 - It detects direct changes made to the underlying VTherms and reports conflicts instead of silently fighting them.
 
+### Lovelace cards (Equinox / VTherm)
+
+The proxy forwards a **read-only** subset of the active target's VTherm attributes, so cards that render VTherm
+extras (for example Equinox) can show the radiator's power percentage, window/presence/safety messages and similar
+status. The AC is an `over_climate` thermostat and has no regulation percentage, so the power gauge only appears
+while the radiator is active.
+
+The Equinox **lock button is not supported** through the proxy. Equinox calls `versatile_thermostat.lock`/`unlock`
+on the card entity, and those services only work on real VTherm entities. Set `hide_lock_button: true` on the card
+when it targets `climate.climaterouter`; see [`docs/HANDOVER.md`](docs/HANDOVER.md) §3.9 for the alternatives.
+
 ## Planned capabilities
 
 | Capability | Summary |

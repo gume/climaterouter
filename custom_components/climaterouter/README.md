@@ -18,6 +18,13 @@ Implemented milestones (see [`docs/PLAN.md`](../../docs/PLAN.md)):
 - **M6** — feature-flagged boost: bounded both-target operation with heat-only and availability interlocks,
   persistence, boost events, active/remaining entities, and a safe handover back to single-target routing.
 
+## Lovelace cards
+
+The proxy exposes a read-only subset of the active target's VTherm attributes (`vt_display.py`), so Equinox and
+similar cards can show the regulation percentage and the window/presence/safety status of the active target. The
+lock is deliberately not exposed: Equinox calls `versatile_thermostat.lock`/`unlock` on the card entity, which a
+proxy cannot receive. Set `hide_lock_button: true` when the card targets the proxy.
+
 ## Entities
 
 | Entity | Purpose |

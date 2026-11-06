@@ -207,6 +207,17 @@ class MockClimate(ClimateEntity):
 | Diagnostics | Contains config, snapshot, targets, conflicts, no exceptions. |
 | Event payloads | Required keys present. |
 
+### 4.7 Card-facing VTherm attributes (`test_vt_display.py`)
+
+| Test | Expected |
+|---|---|
+| No active targets | No VTherm attributes. |
+| Active `over_switch` target | `is_over_switch`, `power_percent`, managers and curated `specific_states` are forwarded. |
+| Lock configured on the target | `is_lock_configured`, `lock_manager` and `specific_states.is_locked` are **not** forwarded. |
+| Boost / both targets active | The target with a regulation percentage supplies the gauge. |
+| Active `over_climate` target | No `power_percent`, matching the real VTherm. |
+| Plain climate target | No VTherm attributes. |
+
 ## 5. Manual acceptance tests
 
 ### 5.1 Scheduler time scheme
@@ -239,6 +250,15 @@ class MockClimate(ClimateEntity):
 3. Press `button.<name>_force_handover` (or call `climaterouter.force_handover`); verify the old target is sent
    `off` and the new target starts without waiting for `handover_idle_confirm`.
 4. Verify `sensor.last_handover` updates and the button becomes unavailable once no handover is in progress.
+
+### 5.2b Equinox card on the proxy
+
+1. Point an Equinox card at `climate.<name>` and set `hide_lock_button: true`.
+2. With the radiator active, verify the power gauge shows `power_percent` and the state icons reflect the active
+   target's window/presence/safety messages.
+3. Hand over to the AC; verify the gauge disappears (VTherm `over_climate` has no regulation percentage) and the
+   card still shows mode/preset/temperature.
+4. Verify the card has no lock button and no `is_lock_configured` attribute is exposed by the proxy.
 
 ### 5.3 Manual override
 

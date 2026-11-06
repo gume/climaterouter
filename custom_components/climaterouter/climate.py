@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import timedelta
 from typing import Any
 
@@ -27,6 +28,7 @@ from .models import (
     SetpointKind,
     Target,
 )
+from .vt_display import build_vt_display_attributes
 
 PARALLEL_UPDATES = 0
 
@@ -169,10 +171,26 @@ class RouterClimate(RouterEntity, ClimateEntity):
         return state.preset_mode if state and state.preset_mode else "none"
 
     @property
+    def _vt_display_attributes(self) -> dict[str, Any]:
+        """Return read-only VTherm display attributes for the active target."""
+        snapshot = self._snapshot
+        attributes: list[Mapping[str, Any]] = []
+        for target in Target:
+            if target not in snapshot.active_targets:
+                continue
+            state = snapshot.targets.get(target)
+            if state is None:
+                continue
+            entity_state = self.hass.states.get(state.entity_id)
+            if entity_state is not None:
+                attributes.append(entity_state.attributes)
+        return build_vt_display_attributes(attributes)
+
+    @property
     def extra_state_attributes(self) -> dict[str, Any]:
         snapshot = self._snapshot
         state = self._active_state
-        return {
+        attributes = {
             "active_target": snapshot.active_label,
             "pending_target": (
                 snapshot.pending_target.value if snapshot.pending_target else "none"
@@ -212,6 +230,11 @@ class RouterClimate(RouterEntity, ClimateEntity):
                 for target, target_state in snapshot.targets.items()
             },
         }
+        # Cards such as Equinox recognise VTherm extras only when the climate
+        # entity exposes VTherm's attribute names. Keep the proxy authoritative
+        # and add only a read-only view of the active target.
+        attributes.update(self._vt_display_attributes)
+        return attributes
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         await self.coordinator.async_set_temperature(

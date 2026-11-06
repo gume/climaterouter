@@ -25,10 +25,11 @@
 | `1719d3d` | `ci: add hassfest and HACS validation workflow` |
 | `2b9b300` | `fix: call async_extract_entity_ids with the 2026.11 signature` |
 | `081aa85` | `feat: add forced handover and forward commands during pending handover` |
+| `bf19c92` | `docs: record the forced-handover commit` |
 
-Everything up to `c41bd4a` (tag `v0.4.0`) is pushed. `2b9b300` is local and must be pushed by the owner; the
-assistant has no GitHub credentials. The live instance is updated through the Marketplace, not by pushing directly
-from this checkout.
+Everything through `bf19c92` (version **0.5.0**) is pushed to `origin/main` and installed in the live test instance.
+The working tree now contains the read-only VTherm display attributes for Lovelace cards (version **0.6.0**), which
+still needs to be pushed and installed through the Marketplace. The assistant has no GitHub credentials.
 
 ---
 
@@ -41,7 +42,7 @@ Milestones M1–M6 from [`PLAN.md`](PLAN.md) are implemented. M1–M3 were valid
 |---|---|---|
 | M1 — skeleton and config flow | Done | Config/options/reconfigure flows, device, proxy entity, services, diagnostics, translations, CI. |
 | M2 — proxy and routing | Done | Hysteresis, manual switch, route override, `off`/`cool`, command forwarding, status entities. |
-| M3 — safe handover | Done | Idle detection, off confirmation, timeout, queued desired state, startup reconciliation, events. |
+| M3 — safe handover | Done, live-verified | Idle detection, off confirmation, timeout, queued desired state, startup reconciliation, events. The manual forced handover and command forwarding during `PENDING` were verified live in 0.5.0 (see section 6). |
 | M4 — manual override | Implemented, not live-verified | Temperature/preset/mode override, absolute deadline, baseline capture/restore, persistence, handover forwarding, events, binary sensor, remaining sensor and cancel button. Unit coverage is limited to the pure model helpers. |
 | M5 — conflicts | Implemented, not live-verified | Setpoint/preset/mode mismatch, unavailable targets, underlying timed presets, stale manual switch, both-on and inactive-target-on detection; own-context and guard suppression; `monitor`/`reassert`/`adopt` policies, auto-resolve switches, events, history and clear button. Unit coverage is limited to the pure classifier. |
 | M6 — boost | Implemented, not live-verified | Feature-flagged both-target boost with heat-only/availability/handover interlocks, persistence, expiry, start/end events, active/remaining entities, and a handover back to single-target routing. |
@@ -61,6 +62,7 @@ custom_components/climaterouter/
 ├── router.py            # HA-free choose_route() and helpers
 ├── coordinator.py       # event listeners, routing, handover, forwarding, persistence
 ├── climate.py           # proxy climate entity
+├── vt_display.py        # read-only VTherm attributes for Lovelace cards
 ├── entity.py            # shared coordinator entity + DeviceInfo
 ├── binary_sensor.py     # active/heating/cooling/pending/conflict/stale/ready
 ├── sensor.py            # active/pending/reason/outdoor/timestamps/counts
@@ -76,7 +78,8 @@ custom_components/climaterouter/
 tests/
 ├── conftest.py          # stubs the `climaterouter` package; no HA needed
 ├── test_router.py       # routing precedence, hysteresis, fallback (pure)
-└── test_models.py       # config parsing, desired-state round-trip
+├── test_models.py       # config parsing, desired-state round-trip
+└── test_vt_display.py   # card-facing VTherm attribute selection and lock exclusion
 
 .github/workflows/ci.yml # ruff + pytest on Python 3.13
 test_environment/        # Docker HA lab, fake_hvac, docs/TEST_ENVIRONMENT.md
@@ -256,6 +259,30 @@ Events fired on the HA bus:
 - Exposed through `binary_sensor.<name>_boost_active`, `sensor.<name>_boost_remaining`, the proxy climate's
   `boost_active`/`boost_until`/`boost_targets` attributes and diagnostics.
 
+### 3.9 Lovelace card compatibility (Equinox)
+
+Equinox 0.4.4 builds its VTherm view model only when the climate entity exposes VTherm attributes
+(`is_over_*`, `configuration`, `specific_states`, ...). The proxy now forwards a **read-only** subset from the
+active target (`vt_display.py`):
+
+- `is_over_switch` / `is_over_valve` / `is_over_climate`, `power_percent`, `valve_open_percent`, `on_percent`;
+- `configuration` (`type`, `have_valve_regulation`, `proportional_function`);
+- read-only managers and flags for power, presence, window, safety and heating-failure;
+- a curated `specific_states` with `messages`/`hvac_mode_reason` (without `is_locked`).
+
+When two targets are active (boost), the target that reports a regulation percentage wins, so the gauge shows the
+radiator's `power_percent`. An `over_climate` target has no regulation percentage, matching the real VTherm.
+
+The **lock is deliberately not forwarded**. Equinox's lock button is hard-wired to
+`versatile_thermostat.lock`/`unlock` on the card entity. Those are VTherm platform entity services, so a
+ClimateRouter proxy cannot receive them; exposing `is_lock_configured` would only render a button that fails.
+Options are:
+
+1. Set `hide_lock_button: true` on the Equinox card when it targets the proxy.
+2. Lock the underlying VTherm entities with `lock_users=true` and `lock_automations=false`, so the VTherm UI is
+   protected while ClimateRouter can still control them.
+3. Add native ClimateRouter lock services and upstream Equinox support for a configurable lock service/entity.
+
 ---
 
 ## 4. Test lab state
@@ -270,19 +297,19 @@ Defined in `test_environment/`; full instructions in [`TEST_ENVIRONMENT.md`](TES
   The mount has been removed and ClimateRouter is now a Marketplace-managed custom repository
   (`gume/climaterouter`, repository id `1448098130`). The local `test_environment/` Compose lab is reference only and
   cannot be started from this host.
-- The Marketplace installs from the default branch (`main`) because the repository has no GitHub release; `main` at
-  `c41bd4a` reported version **0.4.0** in the live instance.
+- The Marketplace installs from the default branch (`main`) because the repository has no GitHub release. `main` at
+  `bf19c92` reports version **0.5.0** in the live instance.
 - Live-entering v0.4.0 exposed a real service bug: HA 2026.11 changed `async_extract_entity_ids()` to take only the
   `ServiceCall`. The previous `(hass, call)` call made every `climaterouter.*` service fail with
-  `AttributeError: 'HomeAssistant' object has no attribute 'hass'`. Fixed in `2b9b300` (version 0.4.1); it still
-  needs to be pushed and installed before M4–M6 can be verified.
+  `AttributeError: 'HomeAssistant' object has no attribute 'hass'`. Fixed in `2b9b300` (version 0.4.1) and verified
+  live: `climaterouter.recalculate` returns HTTP 200.
 - The config entry was recreated after the mount change. New entry id **`01M6SAYNX19FHJ5KQAEYMM3K9N`**; the device
   was put back in area `living_room` and the entity ids were renamed back to the `living_room_climaterouter_*` form
   (e.g. `climate.living_room_climaterouter`) so existing dashboards and Scheduler references keep working.
 - `fake_hvac` entries: one system, `Fake HVAC Lab`, exposing `climate.living_room_fake_ac`,
   `sensor.living_room_fake_room_temperature`, `sensor.living_room_fake_outdoor_temperature`,
   `switch.living_room_fake_radiator`, and the matching `number` controls.
-- Router entry **`ClimateRouter`** (entry id `01M6S67XQXRR48GVT3917H924P`), read from diagnostics:
+- Router entry **`ClimateRouter`** (entry id `01M6SAYNX19FHJ5KQAEYMM3K9N`), read from diagnostics:
   - radiator `climate.living_room_room_radiator`, AC `climate.living_room_room_ac`;
   - outdoor sensor `sensor.living_room_fake_outdoor_temperature`;
   - manual switch `input_boolean.climaterouter_manul` (`on` targets the AC);
@@ -296,9 +323,9 @@ Defined in `test_environment/`; full instructions in [`TEST_ENVIRONMENT.md`](TES
   `binary_sensor.living_room_climaterouter_conflict`.
 - VTherm entities expose the common presets `none`/`frost`/`eco`/`comfort`/`boost`; both currently support
   `heat` and the AC also supports `cool`.
-- Baseline state when read: both VTherms on (`active_target=both`), `route_reason=fallback_outdoor`, desired preset
-  `eco`, and the outdoor sensor stale despite a value of 5.0 °C (last update older than `outdoor_stale_after`).
-  This both-on/stale state must be cleaned up before feature verification.
+- Baseline state after the 0.5.0 verification: `active_target=ac`, radiator `off`, AC `heat` at 23.5 °C,
+  outdoor 6.0 °C fresh, `route_reason=hysteresis`, no pending handover. The earlier both-on/stale state was cleaned
+  up.
 
 The `.storage` directory is git-ignored. `test_environment/reset.sh` removes it, so test entries are disposable; do
 not encode assumptions about them in code.
@@ -335,8 +362,7 @@ brand assets yet).
 ## 6. What was verified manually
 
 Run against the live container through the REST API, with the proxy wired to the two fake ACs during M1–M3. The
-current live entry uses the two VTherm entities described in section 4 and is still on version 0.1.0; re-run these
-scenarios after the upgrade before claiming M4–M6 verification.
+current live entry uses the two VTherm entities described in section 4 and runs version **0.5.0**.
 
 | Scenario | Result |
 |---|---|
@@ -347,16 +373,16 @@ scenarios after the upgrade before claiming M4–M6 verification.
 | Handover while old target is heating | stays `pending`; old target is not interrupted |
 | Proxy `off` | both targets off, handover cancelled |
 | Route override `radiator` / `ac` | OK |
-| Setpoint change during pending handover | queued and applied on completion |
+| Setpoint change during pending handover | 0.5.0: forwarded to the active AC immediately (23.5) and kept for the pending radiator; old target no longer overwrites it |
+| Forced handover button/service | 0.5.0: AC off, radiator started at 23.5 without waiting for idle, `last_handover` updated, button unavailable afterwards |
 | Temperature forwarding while steady | OK |
 | Restart with persisted `heat` | resumes without crashing when targets start late |
 | No prior command, underlying target already on | adopted, no commands sent |
 | Diagnostics endpoint | OK |
 
-The M4 override, M5 conflict and M6 boost implementations have **not** been exercised in the live instance yet:
-version `0.4.0` still needs to be pushed/released and installed there. Not yet covered by automated tests: config
-flow, coordinator, handover, override expiry/cancel/handover/restart, conflict policies, boost safety/expiry/return,
-persistence, event payloads.
+The M4 override, M5 conflict and M6 boost implementations have **not** been exercised in the live instance yet.
+Not yet covered by automated tests: config flow, coordinator, handover, override expiry/cancel/handover/restart,
+conflict policies, boost safety/expiry/return, persistence, event payloads.
 
 ---
 
@@ -391,6 +417,11 @@ persistence, event payloads.
 10. **`strings.json` and `translations/en.json` are duplicated** and must be edited together.
 11. `binary_sensor.target_mismatch` only compares the two targets' setpoints; it is not the full M5 mismatch
     detector. Use `binary_sensor.<name>_conflict` for the desired-vs-actual comparison.
+12. **The Equinox lock is not available through the proxy.** Equinox hard-codes
+    `versatile_thermostat.lock`/`unlock` on the card entity, and those are VTherm platform entity services, so a
+    ClimateRouter proxy cannot receive them. `vt_display.py` therefore never forwards `is_lock_configured` or
+    `lock_manager`. Hide the button with `hide_lock_button: true`, or implement a native lock and request upstream
+    Equinox support for a configurable lock service/entity.
 
 ---
 
@@ -398,26 +429,26 @@ persistence, event payloads.
 
 ### 8.1 Immediate
 
-1. Owner: push `main` and tag/release **`v0.4.0`** (the manifest and `const.VERSION` are already bumped).
-   `hacs.json` no longer sets `zip_release`, so HACS installs from the normal GitHub source archive; no release
-   asset needs to be uploaded.
-2. Push `2b9b300` (version 0.4.1) and update ClimateRouter through the **Marketplace** in the test HA (custom
-   repository `gume/climaterouter`, repository id `1448098130`), then restart Home Assistant. Do not re-add the old
-   `custom_components/climaterouter` bind mount: it makes the folder a mount point (`EBUSY`) and the Marketplace
-   cannot back it up before replacing it.
-3. Read the actual VTherm entity IDs and the router entry configuration back through the REST API, then re-run the
-   routing/handover scenarios with VTherm instead of the fake ACs.
-4. Exercise M4 in the live instance: start a short temperature override, confirm it reaches the active VTherm,
+1. Owner: push the current working tree (version **0.6.0**, read-only VTherm display attributes), then update
+   ClimateRouter through the **Marketplace** in the test HA (custom repository `gume/climaterouter`, repository id
+   `1448098130`) and restart Home Assistant. Do not re-add the old `custom_components/climaterouter` bind mount: it
+   makes the folder a mount point (`EBUSY`) and the Marketplace cannot back it up before replacing it.
+2. Verify in the live instance that the proxy exposes `is_over_switch`/`power_percent` while the radiator is active
+   and the Equinox gauge/status icons appear. Verify the lock button is absent (`hide_lock_button: true`) and that
+   `is_lock_configured` is not exposed.
+3. Exercise M4 in the live instance: start a short temperature override, confirm it reaches the active VTherm,
    cause a handover while it is active, let it expire, and confirm the baseline is restored. Repeat with
    `cancel_manual_override` and `hvac_mode: off`. Record the results here.
-5. Exercise M5 in the live instance: change the active VTherm setpoint externally with `conflict_policy: monitor`;
+4. Exercise M5 in the live instance: change the active VTherm setpoint externally with `conflict_policy: monitor`;
    confirm the conflict binary sensor/count/attributes and both events; repeat under `reassert` and `adopt`; turn
    the inactive VTherm on manually; make a target unavailable. Record the results here.
-6. Exercise M6 in the live instance (enable `boost_enabled` first): start heat, call `set_boost` for a short
+5. Exercise M6 in the live instance (enable `boost_enabled` first): start heat, call `set_boost` for a short
    duration, confirm both VTherms run and `active_target=both`; cancel and let it expire; confirm the dropped
    target stops only when idle and normal routing resumes. Also confirm boost is rejected before heat and while a
    handover is pending. Record the results here.
-7. Decide whether to keep the 2026.11 version floor or add an older-version import fallback (section 7.1).
+6. Decide whether to keep the 2026.11 version floor or add an older-version import fallback (section 7.1).
+7. Decide whether ClimateRouter should get a native lock (services + enforcement) and, if so, request Equinox
+   support for a configurable lock service/entity; the current Equinox lock button cannot target the proxy.
 
 ### 8.2 Automated tests
 
