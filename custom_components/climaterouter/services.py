@@ -16,6 +16,7 @@ from .const import (
     SERVICE_CANCEL_MANUAL_OVERRIDE,
     SERVICE_CLEAR_CONFLICTS,
     SERVICE_CLEAR_ROUTE_OVERRIDE,
+    SERVICE_FORCE_HANDOVER,
     SERVICE_RECALCULATE,
     SERVICE_SET_BOOST,
     SERVICE_SET_MANUAL_OVERRIDE,
@@ -86,6 +87,10 @@ def async_register_services(hass: HomeAssistant) -> None:
         for coordinator in await _async_coordinators(hass, call):
             await coordinator.async_clear_conflicts()
 
+    async def handle_force_handover(call: ServiceCall) -> None:
+        for coordinator in await _async_coordinators(hass, call):
+            await coordinator.async_force_handover()
+
     async def handle_set_manual_override(call: ServiceCall) -> None:
         temperature = call.data.get("temperature")
         preset_mode = call.data.get("preset_mode")
@@ -139,6 +144,12 @@ def async_register_services(hass: HomeAssistant) -> None:
         DOMAIN,
         SERVICE_CLEAR_CONFLICTS,
         handle_clear_conflicts,
+        schema=EMPTY_ENTITY_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_FORCE_HANDOVER,
+        handle_force_handover,
         schema=EMPTY_ENTITY_SCHEMA,
     )
     hass.services.async_register(

@@ -202,6 +202,8 @@ class MockClimate(ClimateEntity):
 | `set_boost` enabled, valid | Both targets active, sensor on, expiry works. |
 | `recalculate` | Route re-evaluated, event if changed. |
 | `clear_conflicts` | UI conflict flag cleared, underlying unchanged. |
+| `force_handover` while steady | `ServiceValidationError` / nothing to do. |
+| `force_handover` while pending | old target switched off, new target started without waiting for idle. |
 | Diagnostics | Contains config, snapshot, targets, conflicts, no exceptions. |
 | Event payloads | Required keys present. |
 
@@ -228,6 +230,15 @@ class MockClimate(ClimateEntity):
 4. Verify radiator receives `off`, then AC receives mode/preset/temperature.
 5. Verify no gap where both are on (unless boost).
 6. Verify `sensor.last_handover` updates.
+
+### 5.2a Forced handover and commands during a pending handover
+
+1. Make the old target stay active so the handover stalls in `pending`.
+2. Set a new target temperature on the proxy; verify the **active** target receives it immediately and the proxy
+   keeps showing it after the settle window, while the pending target still gets it when it starts.
+3. Press `button.<name>_force_handover` (or call `climaterouter.force_handover`); verify the old target is sent
+   `off` and the new target starts without waiting for `handover_idle_confirm`.
+4. Verify `sensor.last_handover` updates and the button becomes unavailable once no handover is in progress.
 
 ### 5.3 Manual override
 

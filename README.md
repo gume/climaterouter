@@ -83,7 +83,7 @@ The proxy is deliberately thin:
 - `sensor.climaterouter_last_handover` — timestamp of the last completed handover.
 - `sensor.climaterouter_conflict_count` — diagnostic conflict counter.
 - `select.climaterouter_route_override` — `auto` / `radiator` / `ac` (manual route override).
-- `button.climaterouter_cancel_override`, `_recalculate_route`, `_clear_conflicts`.
+- `button.climaterouter_cancel_override`, `_recalculate_route`, `_clear_conflicts`, `_force_handover`.
 
 ## Services
 
@@ -94,6 +94,7 @@ The proxy is deliberately thin:
 - `climaterouter.set_boost` / `climaterouter.cancel_boost` (requires `boost_enabled`)
 - `climaterouter.recalculate`
 - `climaterouter.clear_conflicts`
+- `climaterouter.force_handover`
 
 ## Documentation
 

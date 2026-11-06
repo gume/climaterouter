@@ -128,6 +128,10 @@
       "name": "Clear conflicts",
       "description": "Acknowledge and clear the current conflict state."
     },
+    "force_handover": {
+      "name": "Force handover",
+      "description": "Complete a pending handover immediately, without waiting for the old target to become idle."
+    },
     "set_manual_override": {
       "name": "Set manual override",
       "description": "Apply a temperature or preset for a bounded time, then restore the latest schedule command.",

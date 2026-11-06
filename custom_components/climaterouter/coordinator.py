@@ -280,6 +280,38 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         """Force a route evaluation."""
         await self.async_evaluate(explicit=True)
 
+    async def async_force_handover(self) -> None:
+        """Complete the current handover without waiting for the old target to idle."""
+        async with self._lock:
+            if self._handover_state not in (
+                HandoverState.PENDING,
+                HandoverState.STOPPING_OLD,
+                HandoverState.STARTING_NEW,
+            ):
+                raise HomeAssistantError("No handover is in progress")
+
+            self._refresh_inputs()
+            target = self._pending_target
+            if target is None:
+                target = self._single_target(self._route_decision())
+            if target is None:
+                raise HomeAssistantError("No target can serve the requested mode")
+
+            old = self._single_active()
+            if self._handover_state is HandoverState.STARTING_NEW:
+                await self._async_start_new(target)
+            elif old is not None and old is not target:
+                await self._async_stop_old(old, target)
+                if self._handover_state is HandoverState.STOPPING_OLD:
+                    # The off command went out. A forced handover does not wait
+                    # for the idle confirmation or the off-confirm timeout; the
+                    # old target is stopped first and conflict detection catches
+                    # it if it stays on.
+                    await self._async_start_new(target)
+            else:
+                await self._async_start_new(target)
+            self._publish()
+
     async def async_clear_conflicts(self) -> None:
         """Acknowledge and clear the current conflict state."""
         now = dt_util.utcnow()
@@ -846,6 +878,14 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
                 HandoverState.STOPPING_OLD,
                 HandoverState.STARTING_NEW,
             ):
+                if explicit and self._handover_state is HandoverState.PENDING:
+                    active = self._single_active()
+                    if active is not None and active is not self._pending_target:
+                        # A command received during a pending handover must
+                        # still reach the target that is heating/cooling now.
+                        # The pending target receives the same desired state
+                        # when the handover starts it.
+                        await self._async_forward_desired(active)
                 await self._async_advance_handover(decision)
                 self._publish()
                 return

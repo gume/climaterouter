@@ -36,6 +36,8 @@ Implemented milestones (see [`docs/PLAN.md`](../../docs/PLAN.md)):
 | `select.<name>_route_override` | Force `auto`, `radiator` or `ac`. |
 | `button.<name>_recalculate_route` | Re-evaluate immediately. |
 | `button.<name>_cancel_override` | Cancel the override and restore the baseline. |
+| `button.<name>_clear_conflicts` | Acknowledge and clear current conflicts. |
+| `button.<name>_force_handover` | Finish a pending handover without waiting for the old target to idle. |
 | `sensor.<name>_outdoor_temperature` | Outdoor value the router used. |
 
 ## Services
@@ -48,6 +50,7 @@ Implemented milestones (see [`docs/PLAN.md`](../../docs/PLAN.md)):
 - `climaterouter.set_boost` (`duration_minutes`, `targets: both`; requires `boost_enabled` and heat mode)
 - `climaterouter.cancel_boost`
 - `climaterouter.clear_conflicts`
+- `climaterouter.force_handover`
 
 All services target the proxy climate entity.
 

@@ -42,6 +42,14 @@ clear_conflicts:
       integration: climaterouter
       domain: climate
 
+force_handover:
+  name: Force handover
+  description: Complete a pending handover immediately, without waiting for the old target to become idle.
+  target:
+    entity:
+      integration: climaterouter
+      domain: climate
+
 set_manual_override:
   name: Set manual override
   description: Apply a temperature or preset for a bounded time, then restore the latest schedule command.

@@ -24,6 +24,7 @@
 | `fa4899e` | `docs: record M6 boost behaviour and verification steps` |
 | `1719d3d` | `ci: add hassfest and HACS validation workflow` |
 | `2b9b300` | `fix: call async_extract_entity_ids with the 2026.11 signature` |
+| `e6190ec` | `feat: add forced handover and forward commands during pending handover` |
 
 Everything up to `c41bd4a` (tag `v0.4.0`) is pushed. `2b9b300` is local and must be pushed by the owner; the
 assistant has no GitHub credentials. The live instance is updated through the Marketplace, not by pushing directly
@@ -120,6 +121,9 @@ The proxy entity (`climate.py`) delegates to coordinator methods. Important edge
   (state changes, watchdog, startup) only publishes `route_reason=unavailable`.
 - Commands are sent with `blocking=True` and a per-call `Context`; the context id is stored in `_contexts` so the
   coordinator can ignore state changes caused by its own commands during conflict detection.
+- A command received while a handover is `PENDING` is forwarded to the currently active target **and** kept in the
+  desired state for the pending target. It is not silently ignored while the old target keeps running on its old
+  setpoint.
 
 ### 3.3 Handover state machine
 
@@ -142,6 +146,10 @@ STEADY ──route change──▶ PENDING (old target active)
   bounded by `off_confirm_timeout`; on timeout the state becomes `CONFLICT` and a
   `climaterouter_handover_aborted` event fires.
 - `STARTING_NEW` applies the queued desired state (temperature or preset) to the new target.
+- `button.<name>_force_handover` / `climaterouter.force_handover` completes a pending handover immediately. It
+  still sends `off` to the old target first, but skips both the idle confirmation and the off-confirm timeout. If
+  the old target stays on, normal conflict detection reports the overlap. The button is available only while a
+  handover is in progress.
 - Time-based transitions schedule their own follow-up evaluation via `_schedule_check()` /
   `_async_scheduled_check()`. Do not remove this: state-change events alone can leave an idle-confirmation or
   timeout stuck until the 30 s watchdog.
@@ -372,8 +380,9 @@ persistence, event payloads.
    integration tests and no live verification. It requires heat mode, both targets available and no pending
    handover. The return to single-target routing reuses the handover state machine, so the dropped target is only
    stopped once idle; if it never becomes idle the normal off-confirm timeout applies.
-6. **`handover_max_wait` from the plan is not implemented.** `off_confirm_timeout` bounds the off confirmation;
-   there is no forced interruption of an active old target.
+6. **`handover_max_wait` from the plan is not implemented.** `off_confirm_timeout` bounds the off confirmation, and
+   the manual `force_handover` button/service can end a stuck handover. There is still no automatic timeout that
+   interrupts an active old target.
 7. **`last_handover` is not persisted**, so `sensor.last_handover` is `unknown` after a restart.
 8. **`route_changed` fires only when the active target changes**, not when only `route_reason` changes.
 9. **Options flow writes every field into `entry.options`** (the entry data stays as originally created). The
