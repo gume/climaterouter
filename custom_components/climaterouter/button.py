@@ -35,6 +35,14 @@ async def async_setup_entry(
             RouterButton(
                 coordinator,
                 entry,
+                "cancel_override",
+                "Cancel override",
+                "mdi:timer-cancel-outline",
+                coordinator.async_cancel_manual_override,
+            ),
+            RouterButton(
+                coordinator,
+                entry,
                 "clear_conflicts",
                 "Clear conflicts",
                 "mdi:check-circle-outline",

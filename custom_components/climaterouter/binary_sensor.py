@@ -79,7 +79,13 @@ SENSOR_SPECS: tuple[
         None,
         lambda snapshot: snapshot.handover_state.value == "pending",
     ),
-    ("manual_override", "Manual override", None, None, lambda _snapshot: False),
+    (
+        "manual_override",
+        "Manual override",
+        None,
+        None,
+        lambda snapshot: snapshot.override is not None,
+    ),
     ("boost_active", "Boost active", None, None, lambda _snapshot: False),
     (
         "conflict",

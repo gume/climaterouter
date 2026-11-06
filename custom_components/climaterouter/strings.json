@@ -127,6 +127,32 @@
     "clear_conflicts": {
       "name": "Clear conflicts",
       "description": "Acknowledge and clear the current conflict state."
+    },
+    "set_manual_override": {
+      "name": "Set manual override",
+      "description": "Apply a temperature or preset for a bounded time, then restore the latest schedule command.",
+      "fields": {
+        "duration_minutes": {
+          "name": "Duration",
+          "description": "How long the override lasts. Defaults to the configured override duration."
+        },
+        "temperature": {
+          "name": "Temperature",
+          "description": "Target temperature for the override."
+        },
+        "preset_mode": {
+          "name": "Preset",
+          "description": "Preset to apply for the override."
+        },
+        "hvac_mode": {
+          "name": "HVAC mode",
+          "description": "Optional mode override. Use off to cancel the override and turn the proxy off."
+        }
+      }
+    },
+    "cancel_manual_override": {
+      "name": "Cancel manual override",
+      "description": "Cancel the active override and restore the latest schedule command."
     }
   }
 }

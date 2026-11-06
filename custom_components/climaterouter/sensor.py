@@ -15,6 +15,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util import dt as dt_util
 
 from .coordinator import ClimateRouterCoordinator
 from .entity import RouterEntity
@@ -29,6 +30,12 @@ def _active_target(snapshot: RouterSnapshot) -> str:
 
 def _pending_target(snapshot: RouterSnapshot) -> str:
     return snapshot.pending_target.value if snapshot.pending_target else "none"
+
+
+def _override_remaining(snapshot: RouterSnapshot) -> int:
+    if snapshot.override is None:
+        return 0
+    return snapshot.override.remaining_minutes(dt_util.utcnow())
 
 
 SENSOR_SPECS: tuple[
@@ -86,7 +93,7 @@ SENSOR_SPECS: tuple[
         None,
         None,
         "min",
-        lambda snapshot: 0,
+        _override_remaining,
     ),
     (
         "boost_remaining",

@@ -189,7 +189,7 @@ class RouterClimate(RouterEntity, ClimateEntity):
             "active_target_hvac_mode": state.hvac_mode if state else None,
             "active_target_preset_mode": state.preset_mode if state else None,
             "active_target_temperature": state.target_temperature if state else None,
-            "override": None,
+            "override": snapshot.override.to_dict() if snapshot.override else None,
             "boost_active": False,
             "conflict_count": 0,
             "conflicts": [],

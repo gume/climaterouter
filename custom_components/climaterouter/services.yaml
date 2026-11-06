@@ -41,3 +41,60 @@ clear_conflicts:
     entity:
       integration: climaterouter
       domain: climate
+
+set_manual_override:
+  name: Set manual override
+  description: Apply a temperature or preset for a bounded time, then restore the latest schedule command.
+  target:
+    entity:
+      integration: climaterouter
+      domain: climate
+  fields:
+    duration_minutes:
+      name: Duration
+      description: How long the override lasts. Defaults to the configured override duration.
+      required: false
+      example: 45
+      selector:
+        number:
+          min: 1
+          max: 1440
+          unit_of_measurement: min
+          mode: box
+    temperature:
+      name: Temperature
+      description: Target temperature for the override.
+      required: false
+      example: 22.5
+      selector:
+        number:
+          min: 5
+          max: 35
+          step: 0.5
+          unit_of_measurement: "°C"
+          mode: box
+    preset_mode:
+      name: Preset
+      description: Preset to apply for the override.
+      required: false
+      example: comfort
+      selector:
+        text:
+    hvac_mode:
+      name: HVAC mode
+      description: Optional mode override. Use off to cancel the override and turn the proxy off.
+      required: false
+      selector:
+        select:
+          options:
+            - heat
+            - cool
+            - "off"
+
+cancel_manual_override:
+  name: Cancel manual override
+  description: Cancel the active override and restore the latest schedule command.
+  target:
+    entity:
+      integration: climaterouter
+      domain: climate
