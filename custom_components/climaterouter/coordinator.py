@@ -319,13 +319,16 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             )
 
         now = dt_util.utcnow()
-        if self._override is None:
-            baseline = self._baseline.copy()
-            if baseline.is_empty:
-                active = self._single_active() or self._first_on_target()
-                if active is not None:
-                    baseline = self._adopt_desired(active)
-            self._baseline = baseline
+        if self._override is not None:
+            # Keep the original baseline, but close the previous episode first.
+            self._end_override("replaced")
+
+        baseline = self._baseline.copy()
+        if baseline.is_empty:
+            active = self._single_active() or self._first_on_target()
+            if active is not None:
+                baseline = self._adopt_desired(active)
+        self._baseline = baseline
 
         if temperature is not None:
             kind = "temperature"
