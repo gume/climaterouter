@@ -19,9 +19,14 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the fake radiator switch."""
+    """Set up the fake radiator and simulation switches."""
     system: FakeHvacSystem = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([FakeRadiatorSwitch(system, entry.entry_id)])
+    async_add_entities(
+        [
+            FakeRadiatorSwitch(system, entry.entry_id),
+            FakeSimulationSwitch(system, entry.entry_id),
+        ]
+    )
 
 
 class FakeRadiatorSwitch(FakeHvacEntity, SwitchEntity):
@@ -55,3 +60,27 @@ class FakeRadiatorSwitch(FakeHvacEntity, SwitchEntity):
             "room_temperature": round(self._system.room_temperature, 2),
             "simulation_enabled": self._system.simulation_enabled,
         }
+
+
+class FakeSimulationSwitch(FakeHvacEntity, SwitchEntity):
+    """Pause or resume the simulated thermal ticker."""
+
+    _attr_name = "Simulation"
+    _attr_icon = "mdi:play-pause"
+
+    def __init__(self, system: FakeHvacSystem, entry_id: str) -> None:
+        super().__init__(system, entry_id)
+        self._attr_unique_id = f"{entry_id}_simulation"
+
+    @property
+    def is_on(self) -> bool:
+        """Return whether the simulation is evolving."""
+        return self._system.simulation_enabled
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Resume the thermal simulation."""
+        await self._system.async_set_simulation(True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Pause the thermal simulation."""
+        await self._system.async_set_simulation(False)

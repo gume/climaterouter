@@ -5,7 +5,7 @@ from __future__ import annotations
 from homeassistant.const import Platform
 
 DOMAIN = "fake_hvac"
-PLATFORMS = [Platform.SENSOR, Platform.SWITCH, Platform.CLIMATE]
+PLATFORMS = [Platform.SENSOR, Platform.SWITCH, Platform.CLIMATE, Platform.NUMBER]
 
 CONF_NAME = "name"
 CONF_ROOM_TEMPERATURE = "room_temperature"

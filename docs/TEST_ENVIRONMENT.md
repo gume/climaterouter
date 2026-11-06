@@ -87,7 +87,14 @@ The integration imports this block through its config flow and creates these ent
 | `sensor.fake_outdoor_temperature` | Simulated outdoor temperature. Also used as the VTherm outdoor sensor. |
 | `sensor.fake_thermal_power` | Current net thermal power in watts; negative means cooling. |
 | `switch.fake_radiator` | Radiator on/off. VTherm `over_switch` controls this. |
+| `switch.fake_simulation` | Pause/resume the thermal ticker without stopping Home Assistant. |
+| `number.fake_room_temperature_control` | Slider that forces the simulated room temperature. |
+| `number.fake_outdoor_temperature_control` | Slider that sets the simulated outdoor temperature. |
 | `climate.fake_ac` | Fake AC with `off` / `heat` / `cool`, target temperature and presets. VTherm `over_climate` controls this. |
+
+The two `number` entities are the dashboard-friendly equivalent of `fake_hvac.set_room_temperature` and
+`fake_hvac.set_outdoor_temperature`. While the simulation runs, a forced room temperature keeps evolving from the
+value you set; turn off `switch.fake_simulation` first if you need it to stay put.
 
 Entity IDs are derived from the names in the integration. If you change the names or already have entities with the
 same IDs, check **Developer Tools → States** for the actual IDs and adjust the VTherm setup.
