@@ -12,13 +12,15 @@ from homeassistant.helpers.service import async_extract_entity_ids
 
 from .const import (
     DOMAIN,
+    SERVICE_CANCEL_MANUAL_OVERRIDE,
     SERVICE_CLEAR_CONFLICTS,
     SERVICE_CLEAR_ROUTE_OVERRIDE,
     SERVICE_RECALCULATE,
+    SERVICE_SET_MANUAL_OVERRIDE,
     SERVICE_SET_ROUTE_OVERRIDE,
 )
 from .coordinator import ClimateRouterCoordinator
-from .models import ROUTE_AC, ROUTE_AUTO, ROUTE_RADIATOR
+from .models import HVAC_COOL, HVAC_HEAT, HVAC_OFF, ROUTE_AC, ROUTE_AUTO, ROUTE_RADIATOR
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,6 +28,14 @@ SET_ROUTE_OVERRIDE_SCHEMA = cv.make_entity_service_schema(
     {vol.Required("route"): vol.In([ROUTE_AUTO, ROUTE_RADIATOR, ROUTE_AC])}
 )
 EMPTY_ENTITY_SCHEMA = cv.make_entity_service_schema({})
+SET_MANUAL_OVERRIDE_SCHEMA = cv.make_entity_service_schema(
+    {
+        vol.Optional("duration_minutes"): vol.All(vol.Coerce(int), vol.Range(min=1)),
+        vol.Optional("temperature"): vol.Coerce(float),
+        vol.Optional("preset_mode"): cv.string,
+        vol.Optional("hvac_mode"): vol.In([HVAC_OFF, HVAC_HEAT, HVAC_COOL]),
+    }
+)
 
 
 async def _async_coordinators(
@@ -68,6 +78,27 @@ def async_register_services(hass: HomeAssistant) -> None:
         for coordinator in await _async_coordinators(hass, call):
             await coordinator.async_clear_conflicts()
 
+    async def handle_set_manual_override(call: ServiceCall) -> None:
+        temperature = call.data.get("temperature")
+        preset_mode = call.data.get("preset_mode")
+        hvac_mode = call.data.get("hvac_mode")
+        if sum(value is not None for value in (temperature, preset_mode, hvac_mode)) != 1:
+            raise ServiceValidationError(
+                "Exactly one of temperature, preset_mode, or hvac_mode is required"
+            )
+        duration = call.data.get("duration_minutes")
+        for coordinator in await _async_coordinators(hass, call):
+            await coordinator.async_set_manual_override(
+                temperature=temperature,
+                preset_mode=preset_mode,
+                hvac_mode=hvac_mode,
+                duration_minutes=duration,
+            )
+
+    async def handle_cancel_manual_override(call: ServiceCall) -> None:
+        for coordinator in await _async_coordinators(hass, call):
+            await coordinator.async_cancel_manual_override()
+
     hass.services.async_register(
         DOMAIN, SERVICE_RECALCULATE, handle_recalculate, schema=EMPTY_ENTITY_SCHEMA
     )
@@ -87,5 +118,17 @@ def async_register_services(hass: HomeAssistant) -> None:
         DOMAIN,
         SERVICE_CLEAR_CONFLICTS,
         handle_clear_conflicts,
+        schema=EMPTY_ENTITY_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_MANUAL_OVERRIDE,
+        handle_set_manual_override,
+        schema=SET_MANUAL_OVERRIDE_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_CANCEL_MANUAL_OVERRIDE,
+        handle_cancel_manual_override,
         schema=EMPTY_ENTITY_SCHEMA,
     )

@@ -8,7 +8,7 @@ from homeassistant.const import Platform
 
 DOMAIN: Final = "climaterouter"
 NAME: Final = "ClimateRouter"
-VERSION: Final = "0.1.0"
+VERSION: Final = "0.2.0"
 
 PLATFORMS: Final = [
     Platform.CLIMATE,
@@ -49,6 +49,8 @@ SERVICE_RECALCULATE: Final = "recalculate"
 SERVICE_SET_ROUTE_OVERRIDE: Final = "set_route_override"
 SERVICE_CLEAR_ROUTE_OVERRIDE: Final = "clear_route_override"
 SERVICE_CLEAR_CONFLICTS: Final = "clear_conflicts"
+SERVICE_SET_MANUAL_OVERRIDE: Final = "set_manual_override"
+SERVICE_CANCEL_MANUAL_OVERRIDE: Final = "cancel_manual_override"
 
 # Events.
 EVENT_ROUTE_CHANGED: Final = f"{DOMAIN}_route_changed"

@@ -46,6 +46,8 @@ from .const import (
     EVENT_HANDOVER_ABORTED,
     EVENT_HANDOVER_COMPLETED,
     EVENT_HANDOVER_STARTED,
+    EVENT_OVERRIDE_ENDED,
+    EVENT_OVERRIDE_STARTED,
     EVENT_ROUTE_CHANGED,
     STORAGE_KEY,
     STORAGE_VERSION,
@@ -62,6 +64,7 @@ from .models import (
     ROUTE_RADIATOR,
     DesiredState,
     HandoverState,
+    OverrideState,
     RouteDecision,
     RouteInputs,
     RouterConfig,
@@ -101,7 +104,10 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._manual_switch_state: str | None = None
         self._manual_switch_stale = False
 
+        self._baseline = DesiredState()
         self._desired = DesiredState()
+        self._override: OverrideState | None = None
+        self._override_unsub: Any | None = None
         self._active_targets: frozenset[Target] = frozenset()
         self._pending_target: Target | None = None
         self._handover_state = HandoverState.OFF
@@ -136,6 +142,8 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         await self._async_load_store()
         self._refresh_inputs()
         self.data = self._build_snapshot()
+        if self._override is not None:
+            self._schedule_override_expiry()
 
         entity_ids = [
             self.config.radiator_entity_id,
@@ -175,6 +183,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             timer()
         self._unsubs.clear()
         self._timers.clear()
+        self._cancel_override_timer()
         await self._store.async_save(self._data_to_save())
 
     # ------------------------------------------------------------------
@@ -193,13 +202,13 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         if hvac_mode is not None:
             self._apply_mode(hvac_mode)
         if preset_mode is not None:
-            self._desired.setpoint_kind = SetpointKind.PRESET
-            self._desired.preset_mode = preset_mode
-            self._desired.target_temperature = None
+            self._baseline.setpoint_kind = SetpointKind.PRESET
+            self._baseline.preset_mode = preset_mode
+            self._baseline.target_temperature = None
         if temperature is not None:
-            self._desired.setpoint_kind = SetpointKind.TEMPERATURE
-            self._desired.target_temperature = float(temperature)
-            self._desired.preset_mode = None
+            self._baseline.setpoint_kind = SetpointKind.TEMPERATURE
+            self._baseline.target_temperature = float(temperature)
+            self._baseline.preset_mode = None
 
         await self._async_command_received()
 
@@ -210,20 +219,20 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Handle a preset change."""
-        self._desired.setpoint_kind = SetpointKind.PRESET
-        self._desired.preset_mode = preset_mode
-        self._desired.target_temperature = None
+        self._baseline.setpoint_kind = SetpointKind.PRESET
+        self._baseline.preset_mode = preset_mode
+        self._baseline.target_temperature = None
         await self._async_command_received()
 
     async def async_turn_on(self) -> None:
         """Turn the proxy on in the last known (or heat) mode."""
-        if self._desired.hvac_mode in (None, HVAC_OFF):
-            self._desired.hvac_mode = HVAC_HEAT
+        if self._baseline.hvac_mode in (None, HVAC_OFF):
+            self._baseline.hvac_mode = HVAC_HEAT
         await self._async_command_received()
 
     async def async_turn_off(self) -> None:
         """Turn everything off immediately."""
-        self._desired.hvac_mode = HVAC_OFF
+        self._baseline.hvac_mode = HVAC_OFF
         await self._async_command_received()
 
     async def async_set_route_override(self, value: str) -> None:
@@ -259,13 +268,153 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             self._pending_target = None
             self._handover_state = HandoverState.OFF
             self._idle_since = None
-        self._desired.hvac_mode = hvac_mode
+        self._baseline.hvac_mode = hvac_mode
 
     async def _async_command_received(self) -> None:
         """Record the command, persist it, and evaluate the route."""
         self._last_command = dt_util.utcnow()
+        if self._baseline.hvac_mode == HVAC_OFF and self._override is not None:
+            # An explicit off is a safety command and ends any override.
+            self._end_override("off")
+        if self._override is not None:
+            # Schedule commands update the baseline; the override keeps winning.
+            self._override.baseline = self._baseline.copy()
+        self._sync_desired()
         self._store.async_delay_save(self._data_to_save, 1)
         await self.async_evaluate(explicit=True)
+
+    # ------------------------------------------------------------------
+    # Manual override
+    # ------------------------------------------------------------------
+    async def async_set_manual_override(
+        self,
+        *,
+        temperature: float | None = None,
+        preset_mode: str | None = None,
+        hvac_mode: str | None = None,
+        duration_minutes: int | None = None,
+    ) -> None:
+        """Start or replace a bounded manual override."""
+        supplied = [value is not None for value in (temperature, preset_mode, hvac_mode)]
+        if sum(supplied) != 1:
+            raise HomeAssistantError(
+                "Exactly one of temperature, preset_mode, or hvac_mode is required"
+            )
+
+        if hvac_mode == HVAC_OFF:
+            await self.async_cancel_manual_override(cause="off")
+            await self.async_set_hvac_mode(HVAC_OFF)
+            return
+        if hvac_mode is not None and hvac_mode not in MODES:
+            raise HomeAssistantError(f"Unsupported HVAC mode: {hvac_mode}")
+
+        duration = (
+            self.config.default_override_minutes
+            if duration_minutes is None
+            else int(duration_minutes)
+        )
+        if duration < 1 or duration > self.config.max_override_minutes:
+            raise HomeAssistantError(
+                f"Override duration must be between 1 and {self.config.max_override_minutes} minutes"
+            )
+
+        now = dt_util.utcnow()
+        if self._override is None:
+            baseline = self._baseline.copy()
+            if baseline.is_empty:
+                active = self._single_active() or self._first_on_target()
+                if active is not None:
+                    baseline = self._adopt_desired(active)
+            self._baseline = baseline
+
+        if temperature is not None:
+            kind = "temperature"
+            value: Any = float(temperature)
+        elif preset_mode is not None:
+            kind = "preset"
+            value = str(preset_mode)
+        else:
+            kind = "hvac_mode"
+            value = str(hvac_mode)
+
+        self._override = OverrideState(
+            kind=kind,
+            value=value,
+            until=now + timedelta(minutes=duration),
+            baseline=self._baseline.copy(),
+            started_at=now,
+        )
+        self._last_command = now
+        self._sync_desired()
+        self._schedule_override_expiry()
+        self._store.async_delay_save(self._data_to_save, 1)
+
+        self.hass.bus.async_fire(
+            EVENT_OVERRIDE_STARTED,
+            {
+                "entry_id": self.entry.entry_id,
+                "kind": kind,
+                "value": value,
+                "duration_minutes": duration,
+                "until": self._override.until.isoformat(),
+            },
+        )
+        await self.async_evaluate(explicit=True)
+
+    async def async_cancel_manual_override(self, cause: str = "cancelled") -> None:
+        """Cancel an active manual override and restore the baseline."""
+        if self._override is None:
+            return
+        self._end_override(cause)
+        self._store.async_delay_save(self._data_to_save, 1)
+        await self.async_evaluate()
+
+    def _end_override(self, cause: str) -> None:
+        """Clear the override without forwarding; callers evaluate afterwards."""
+        if self._override is None:
+            return
+        override = self._override
+        self._cancel_override_timer()
+        self._override = None
+        self._sync_desired()
+        self.hass.bus.async_fire(
+            EVENT_OVERRIDE_ENDED,
+            {
+                "entry_id": self.entry.entry_id,
+                "kind": override.kind,
+                "cause": cause,
+            },
+        )
+
+    def _sync_desired(self) -> None:
+        """Recompute the effective desired state from baseline and override."""
+        self._desired = self._baseline.with_override(self._override)
+
+    async def _async_override_expired(self, _now: datetime) -> None:
+        self._override_unsub = None
+        if self._override is None:
+            return
+        if not self._override.is_expired(dt_util.utcnow()):
+            self._schedule_override_expiry()
+            return
+        self._end_override("expired")
+        self._store.async_delay_save(self._data_to_save, 1)
+        await self.async_evaluate()
+
+    def _schedule_override_expiry(self) -> None:
+        """Schedule the exact deadline in addition to the watchdog check."""
+        self._cancel_override_timer()
+        if self._override is None:
+            return
+        delay = (self._override.until - dt_util.utcnow()).total_seconds()
+        self._override_unsub = async_call_later(
+            self.hass, max(delay, 0), self._async_override_expired
+        )
+
+    def _cancel_override_timer(self) -> None:
+        if self._override_unsub is not None:
+            self._override_unsub()
+            self._override_unsub = None
 
     # ------------------------------------------------------------------
     # Evaluation
@@ -638,8 +787,9 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
 
         self._last_route = active
         self._handover_state = HandoverState.STEADY
-        if self._desired.is_empty:
-            self._desired = self._adopt_desired(active)
+        if self._baseline.is_empty:
+            self._baseline = self._adopt_desired(active)
+            self._sync_desired()
 
     def _adopt_desired(self, target: Target) -> DesiredState:
         state = self._states[target]
@@ -679,6 +829,8 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
     async def _async_watchdog(self, _now: datetime) -> None:
         if not self._ready:
             return
+        if self._override is not None and self._override.is_expired(dt_util.utcnow()):
+            await self._async_override_expired(dt_util.utcnow())
         now = time.monotonic()
         for context_id in [key for key, expiry in self._contexts.items() if expiry < now]:
             self._contexts.pop(context_id, None)
@@ -812,6 +964,13 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             return next(iter(self._active_targets))
         return None
 
+    def _first_on_target(self) -> Target | None:
+        """Return the first target whose HVAC mode is not off, if any."""
+        for target in Target:
+            if self._states[target].hvac_mode not in (None, HVAC_OFF):
+                return target
+        return None
+
     @staticmethod
     def _single_target(decision: RouteDecision) -> Target | None:
         if len(decision.targets) == 1:
@@ -843,6 +1002,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             route_reason=self._route_reason,
             handover_state=self._handover_state,
             desired=self._desired,
+            override=self._override,
             boost_until=None,
             conflicts=(),
             outdoor_temperature=self._outdoor_temperature,
@@ -921,7 +1081,13 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             return
         desired = data.get("desired")
         if isinstance(desired, dict):
-            self._desired = DesiredState.from_dict(desired)
+            self._baseline = DesiredState.from_dict(desired)
+        override_data = data.get("override")
+        if isinstance(override_data, dict):
+            override = OverrideState.from_dict(override_data)
+            if override is not None and not override.is_expired(dt_util.utcnow()):
+                self._override = override
+        self._sync_desired()
         last_route = data.get("last_route")
         if last_route in (Target.RADIATOR.value, Target.AC.value):
             self._last_route = Target(last_route)
@@ -929,7 +1095,8 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
     def _data_to_save(self) -> dict[str, Any]:
         return {
             "version": STORAGE_VERSION,
-            "desired": self._desired.to_dict(),
+            "desired": self._baseline.to_dict(),
+            "override": self._override.to_dict() if self._override is not None else None,
             "last_route": self._last_route.value if self._last_route else None,
         }
 
