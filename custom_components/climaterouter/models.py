@@ -264,6 +264,20 @@ class Conflict:
     source_guess: str = ""
     resolved: bool = False
 
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for events, attributes, and diagnostics."""
+        return {
+            "key": self.key,
+            "type": self.type,
+            "target": self.target.value if self.target else None,
+            "expected": self.expected,
+            "actual": self.actual,
+            "first_seen": self.first_seen.isoformat(),
+            "last_seen": self.last_seen.isoformat(),
+            "source_guess": self.source_guess,
+            "resolved": self.resolved,
+        }
+
 
 @dataclass(frozen=True)
 class RouterSnapshot:
@@ -279,6 +293,7 @@ class RouterSnapshot:
     override: OverrideState | None = None
     boost_until: datetime | None = None
     conflicts: tuple[Conflict, ...] = ()
+    conflict_count: int = 0
     outdoor_temperature: float | None = None
     outdoor_stale: bool = True
     manual_switch_state: str | None = None

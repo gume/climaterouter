@@ -3,17 +3,22 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from .models import (
     HVAC_COOL,
+    HVAC_HEAT,
     HVAC_OFF,
     ROUTE_AC,
     ROUTE_AUTO,
     ROUTE_RADIATOR,
+    DesiredState,
     RouteDecision,
     RouteInputs,
+    SetpointKind,
     Target,
     TargetCapability,
+    UnderlyingState,
 )
 
 
@@ -131,6 +136,43 @@ def setpoint_differs(expected: float | None, actual: float | None, tolerance: fl
 def values_differ(expected: object, actual: object) -> bool:
     """Return whether two plain values differ."""
     return expected != actual
+
+
+def target_conflict(
+    expected: DesiredState,
+    state: UnderlyingState,
+    tolerance: float,
+) -> tuple[str, Any, Any] | None:
+    """Classify one target's state against the expected desired state.
+
+    Guards and timed presets are legitimate VTherm behaviour and are not
+    reported as conflicts. The caller decides whether a conflict is exposed,
+    auto-resolved, reasserted, or adopted according to its policy.
+    """
+    if not state.available:
+        return ("target_unavailable", expected.hvac_mode, None)
+    if state.guard:
+        return None
+    if state.timed_preset_active:
+        return ("underlying_override", None, None)
+
+    if expected.hvac_mode in (HVAC_HEAT, HVAC_COOL) and state.hvac_mode != expected.hvac_mode:
+        return ("hvac_mode_mismatch", expected.hvac_mode, state.hvac_mode)
+
+    if expected.setpoint_kind is SetpointKind.TEMPERATURE:
+        if setpoint_differs(
+            expected.target_temperature, state.target_temperature, tolerance
+        ):
+            return (
+                "setpoint_mismatch",
+                expected.target_temperature,
+                state.target_temperature,
+            )
+    elif expected.setpoint_kind is SetpointKind.PRESET:
+        if expected.preset_mode != state.preset_mode:
+            return ("preset_mismatch", expected.preset_mode, state.preset_mode)
+
+    return None
 
 
 def normalize_manual_select(value: str | None) -> str | None:

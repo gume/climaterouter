@@ -5,14 +5,18 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from climaterouter.models import (
+    DesiredState,
     RouteInputs,
+    SetpointKind,
     Target,
     TargetCapability,
+    UnderlyingState,
 )
 from climaterouter.router import (
     choose_route,
     override_is_expired,
     setpoint_differs,
+    target_conflict,
 )
 
 
@@ -195,3 +199,84 @@ def test_setpoint_differs_tolerance() -> None:
     assert not setpoint_differs(21.0, 21.1, 0.2)
     assert setpoint_differs(21.0, 21.5, 0.2)
     assert setpoint_differs(21.0, None, 0.2)
+
+
+def _desired(**overrides) -> DesiredState:
+    values = {
+        "hvac_mode": "heat",
+        "setpoint_kind": SetpointKind.TEMPERATURE,
+        "target_temperature": 21.0,
+    }
+    values.update(overrides)
+    return DesiredState(**values)
+
+
+def test_conflict_within_tolerance_is_none() -> None:
+    state = UnderlyingState(
+        available=True,
+        hvac_mode="heat",
+        target_temperature=21.1,
+    )
+    assert target_conflict(_desired(), state, 0.2) is None
+
+
+def test_conflict_setpoint_mismatch() -> None:
+    state = UnderlyingState(
+        available=True,
+        hvac_mode="heat",
+        target_temperature=24.0,
+    )
+    result = target_conflict(_desired(), state, 0.2)
+    assert result == ("setpoint_mismatch", 21.0, 24.0)
+
+
+def test_conflict_preset_mismatch() -> None:
+    desired = _desired(
+        setpoint_kind=SetpointKind.PRESET,
+        preset_mode="comfort",
+        target_temperature=None,
+    )
+    state = UnderlyingState(available=True, hvac_mode="heat", preset_mode="eco")
+    assert target_conflict(desired, state, 0.2) == ("preset_mismatch", "comfort", "eco")
+
+
+def test_conflict_hvac_mode_mismatch() -> None:
+    state = UnderlyingState(available=True, hvac_mode="off", target_temperature=21.0)
+    assert target_conflict(_desired(), state, 0.2) == (
+        "hvac_mode_mismatch",
+        "heat",
+        "off",
+    )
+
+
+def test_conflict_guard_is_allowed() -> None:
+    state = UnderlyingState(
+        available=True,
+        hvac_mode="heat",
+        target_temperature=24.0,
+        guard="window",
+    )
+    assert target_conflict(_desired(), state, 0.2) is None
+
+
+def test_conflict_underlying_timed_preset() -> None:
+    state = UnderlyingState(
+        available=True,
+        hvac_mode="heat",
+        target_temperature=21.0,
+        timed_preset_active=True,
+    )
+    assert target_conflict(_desired(), state, 0.2) == (
+        "underlying_override",
+        None,
+        None,
+    )
+
+
+def test_conflict_target_unavailable() -> None:
+    state = UnderlyingState(available=False)
+    assert target_conflict(_desired(), state, 0.2) == (
+        "target_unavailable",
+        "heat",
+        None,
+    )
