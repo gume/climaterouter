@@ -31,9 +31,10 @@ Scheduler / User UI / Automations
 
 ## Status
 
-**Planning.** This repository currently contains the design, architecture, conflict-handling, testing, and
-delivery plan, plus a Docker-based test lab with simulated radiator/AC hardware. The integration package is added
-in milestone M1. See [`docs/PLAN.md`](docs/PLAN.md) and [`docs/TEST_ENVIRONMENT.md`](docs/TEST_ENVIRONMENT.md).
+**M1–M3 implemented, M4–M6 pending.** The integration package now provides the config flow, proxy climate entity,
+outdoor/manual routing, safe handover, status entities, services and diagnostics. Manual override, conflict
+handling and boost are not implemented yet. See [`docs/HANDOVER.md`](docs/HANDOVER.md) for the exact state, test
+results, known gaps and next steps.
 
 ## Why a proxy?
 
@@ -94,6 +95,7 @@ The proxy is deliberately thin:
 
 ## Documentation
 
+- [`docs/HANDOVER.md`](docs/HANDOVER.md) — current implementation state, verification, gaps and next steps.
 - [`docs/PLAN.md`](docs/PLAN.md) — scope, routing, handover, override, milestones, acceptance criteria, risks.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — component/state diagrams, module layout, data model.
 - [`docs/CONFLICTS.md`](docs/CONFLICTS.md) — conflict sources, detection, policies, resolution matrix.
@@ -104,7 +106,8 @@ The proxy is deliberately thin:
 
 ## Requirements
 
-- Home Assistant 2025.1 or newer (tested against current stable in CI).
+- Home Assistant 2026.11 or newer. The integration is developed and validated against 2026.11 (the `stable`
+  container at the time of writing); compatibility with older releases is not verified.
 - Two existing VTherm climate entities: one radiator (`over_switch`) and one AC (`over_climate`).
 - An outdoor temperature sensor.
 - Optional manual switch (`switch`, `input_boolean`, or `input_select`).
