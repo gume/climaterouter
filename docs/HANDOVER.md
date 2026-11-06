@@ -23,9 +23,11 @@
 | `a9be862` | `fix: interrupt the boosted spare target on an explicit cool command` |
 | `fa4899e` | `docs: record M6 boost behaviour and verification steps` |
 | `1719d3d` | `ci: add hassfest and HACS validation workflow` |
+| `2b9b300` | `fix: call async_extract_entity_ids with the 2026.11 signature` |
 
-The working tree is clean. Nothing after `95cb4cd` has been pushed (the assistant has no GitHub credentials); the
-owner must push the local commits and tag a release before the live test instance can be updated.
+Everything up to `c41bd4a` (tag `v0.4.0`) is pushed. `2b9b300` is local and must be pushed by the owner; the
+assistant has no GitHub credentials. The live instance is updated through the Marketplace, not by pushing directly
+from this checkout.
 
 ---
 
@@ -255,10 +257,20 @@ Defined in `test_environment/`; full instructions in [`TEST_ENVIRONMENT.md`](TES
 - Container: `climaterouter-ha` (Compose project `climaterouter-test`).
 - URL: <http://localhost:38123> (host port 38123 → container 8123).
 - HA image: `ghcr.io/home-assistant/home-assistant:stable`, currently **2026.11.0**, Python 3.14 inside.
-- The live instance is managed through **HACS**; the local `test_environment/` Compose lab is reference only and
+- The live instance runs Home Assistant **2026.11**, where the built-in **Marketplace** replaced HACS. ClimateRouter
+  was originally installed by bind-mounting the checkout into the container, so the Marketplace did not track it.
+  The mount has been removed and ClimateRouter is now a Marketplace-managed custom repository
+  (`gume/climaterouter`, repository id `1448098130`). The local `test_environment/` Compose lab is reference only and
   cannot be started from this host.
-- Installed ClimateRouter version when read back on 2026-11-06 was **0.1.0**, so M4–M6 are **not** installed in
-  the live instance yet.
+- The Marketplace installs from the default branch (`main`) because the repository has no GitHub release; `main` at
+  `c41bd4a` reported version **0.4.0** in the live instance.
+- Live-entering v0.4.0 exposed a real service bug: HA 2026.11 changed `async_extract_entity_ids()` to take only the
+  `ServiceCall`. The previous `(hass, call)` call made every `climaterouter.*` service fail with
+  `AttributeError: 'HomeAssistant' object has no attribute 'hass'`. Fixed in `2b9b300` (version 0.4.1); it still
+  needs to be pushed and installed before M4–M6 can be verified.
+- The config entry was recreated after the mount change. New entry id **`01M6SAYNX19FHJ5KQAEYMM3K9N`**; the device
+  was put back in area `living_room` and the entity ids were renamed back to the `living_room_climaterouter_*` form
+  (e.g. `climate.living_room_climaterouter`) so existing dashboards and Scheduler references keep working.
 - `fake_hvac` entries: one system, `Fake HVAC Lab`, exposing `climate.living_room_fake_ac`,
   `sensor.living_room_fake_room_temperature`, `sensor.living_room_fake_outdoor_temperature`,
   `switch.living_room_fake_radiator`, and the matching `number` controls.
@@ -380,7 +392,10 @@ persistence, event payloads.
 1. Owner: push `main` and tag/release **`v0.4.0`** (the manifest and `const.VERSION` are already bumped).
    `hacs.json` no longer sets `zip_release`, so HACS installs from the normal GitHub source archive; no release
    asset needs to be uploaded.
-2. Update ClimateRouter in the test HA through HACS and restart Home Assistant.
+2. Push `2b9b300` (version 0.4.1) and update ClimateRouter through the **Marketplace** in the test HA (custom
+   repository `gume/climaterouter`, repository id `1448098130`), then restart Home Assistant. Do not re-add the old
+   `custom_components/climaterouter` bind mount: it makes the folder a mount point (`EBUSY`) and the Marketplace
+   cannot back it up before replacing it.
 3. Read the actual VTherm entity IDs and the router entry configuration back through the REST API, then re-run the
    routing/handover scenarios with VTherm instead of the fake ACs.
 4. Exercise M4 in the live instance: start a short temperature override, confirm it reaches the active VTherm,
