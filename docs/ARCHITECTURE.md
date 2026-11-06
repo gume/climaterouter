@@ -57,7 +57,7 @@ class UnderlyingState:
     hvac_modes: tuple[str, ...]
     preset_modes: tuple[str, ...]
     last_updated: datetime | None
-    guard: str | None              # window / safety / power / presence / central / auto_start_stop
+    guard: str | None  # window / safety / power / presence / central / auto_start_stop
     timed_preset_active: bool
     raw: dict[str, Any]
 

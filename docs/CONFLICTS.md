@@ -199,7 +199,7 @@ The source guess is diagnostic only; it does not change the policy.
 ```python
 @dataclass(frozen=True)
 class Conflict:
-    key: str                 # stable: f"{type}:{target}"
+    key: str  # stable: f"{type}:{target}"
     type: str
     target: Target | None
     expected: Any

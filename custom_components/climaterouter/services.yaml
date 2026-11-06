@@ -1,0 +1,43 @@
+recalculate:
+  name: Recalculate route
+  description: Re-evaluate the route immediately, bypassing the dwell timer.
+  target:
+    entity:
+      integration: climaterouter
+      domain: climate
+
+set_route_override:
+  name: Set route override
+  description: Force routing to the radiator or the AC.
+  target:
+    entity:
+      integration: climaterouter
+      domain: climate
+  fields:
+    route:
+      name: Route
+      description: Target to force.
+      required: true
+      example: radiator
+      selector:
+        select:
+          options:
+            - auto
+            - radiator
+            - ac
+
+clear_route_override:
+  name: Clear route override
+  description: Return routing to automatic selection.
+  target:
+    entity:
+      integration: climaterouter
+      domain: climate
+
+clear_conflicts:
+  name: Clear conflicts
+  description: Acknowledge and clear the current conflict state.
+  target:
+    entity:
+      integration: climaterouter
+      domain: climate

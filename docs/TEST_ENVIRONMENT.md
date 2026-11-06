@@ -22,8 +22,8 @@ Scheduler Component is added last and should see only the proxy entity.
 - Docker Engine and Docker Compose v2 (`docker compose version`).
 - About 1 GB of free disk space for the Home Assistant image and configuration.
 - A GitHub account if you install VTherm and Scheduler through HACS (recommended).
-- Linux is assumed by `network_mode: host`. On macOS or Windows, replace it with a port mapping as described in
-  `test_environment/docker-compose.yml`.
+- Linux is assumed by the port mapping below. Change the host port in `test_environment/docker-compose.yml` if
+  `38123` is already in use.
 
 The repository must be checked out locally because the container bind-mounts both custom components:
 
@@ -43,7 +43,7 @@ docker compose up -d
 docker compose logs -f homeassistant
 ```
 
-Wait for `Home Assistant initialized` in the log, then open <http://localhost:8123>.
+Wait for `Home Assistant initialized` in the log, then open <http://localhost:38123>.
 
 On first start:
 
@@ -313,7 +313,8 @@ data:
 
 ## 6. Add ClimateRouter
 
-The main integration is still being implemented. Once its config flow is available (milestone M1):
+The integration implements milestones M1–M3: config flow, proxy routing and safe handover. It is mounted from this
+repository, so code changes only need a container restart.
 
 1. Ensure the container is running and the integration appears under **Settings → Devices & services → Add
    integration → ClimateRouter**. If it does not appear, check that the bind mount exists and restart the
@@ -337,8 +338,12 @@ The main integration is still being implemented. Once its config flow is availab
      - `max_override_minutes: 5`
 3. Finish and verify that `climate.climaterouter` and the diagnostic entities exist.
 
-The integration is not installed in this repository yet; until M1 the test environment is still useful for
-validating the fake hardware and the two VTherm entries.
+Until the two VTherms exist, the router can also be pointed directly at `climate.fake_ac` (radiator role) and a
+second fake system's AC (AC role). Services on `fake_hvac` then need a `name` field to say which system to change.
+
+If no command has been received yet, the proxy stays off even when an underlying thermostat is on: it adopts that
+thermostat's state without sending commands. A plain `set_temperature` while the proxy is off only records the
+setpoint; send `set_hvac_mode: heat` (or `cool`) to start a target.
 
 ---
 
@@ -595,7 +600,7 @@ docker compose down --rmi local
 | Routing never changes | The old target may still be heating. Check `binary_sensor.climaterouter_handover_pending`; make it idle or wait for the cycle to end. |
 | Override does not expire quickly | Override uses real time, not `time_scale`. Use `duration_minutes: 1` for tests. |
 | Entities disappear after restart | Check that the bind mounts still exist and that the container was not recreated with a different config path. |
-| Port 8123 already in use | Stop the other Home Assistant instance or change the port/network configuration. |
+| Port 38123 already in use | Stop the other Home Assistant instance or change the host port in `docker-compose.yml`. |
 
 ---
 

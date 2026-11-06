@@ -452,12 +452,12 @@ On startup or integration reload:
 ```python
 @dataclass
 class DesiredState:
-    hvac_mode: HVACMode | None          # off / heat / cool
+    hvac_mode: HVACMode | None  # off / heat / cool
     setpoint_kind: Literal["preset", "temperature", "none"]
     preset_mode: str | None
     target_temperature: float | None
-    fan_mode: str | None                # optional pass-through
-    swing_mode: str | None              # optional pass-through
+    fan_mode: str | None  # optional pass-through
+    swing_mode: str | None  # optional pass-through
 ```
 
 Rules:
@@ -1147,32 +1147,32 @@ See [`TESTING.md`](TESTING.md) for the full matrix. Summary:
 
 ### M1 — Integration skeleton and config flow
 
-- [ ] `custom_components/climaterouter` package with manifest, const, `__init__`.
-- [ ] Config flow, options flow, reconfigure flow.
-- [ ] Device and placeholder climate entity (available, reports basic state).
-- [ ] Services registered with schemas; diagnostics; translations.
-- [ ] Test harness and CI.
+- [x] `custom_components/climaterouter` package with manifest, const, `__init__`.
+- [x] Config flow, options flow, reconfigure flow.
+- [x] Device and placeholder climate entity (available, reports basic state).
+- [x] Services registered with schemas; diagnostics; translations.
+- [x] Test harness and CI.
 
 **Acceptance:** the integration loads, creates one device/entity, validates entities, reloads on options change,
 and passes lint/tests.
 
 ### M2 — Core proxy and routing
 
-- [ ] `models.py`/`router.py` pure routing with hysteresis, manual switch, route override, `off`/`cool`.
-- [ ] State mirroring from active target.
-- [ ] Forward `set_temperature`, `set_hvac_mode`, `set_preset_mode`, `turn_on`, `turn_off`.
-- [ ] Active/pending/route-reason sensors and active/heating/cooling binary sensors.
-- [ ] Unit tests for routing.
+- [x] `models.py`/`router.py` pure routing with hysteresis, manual switch, route override, `off`/`cool`.
+- [x] State mirroring from active target.
+- [x] Forward `set_temperature`, `set_hvac_mode`, `set_preset_mode`, `turn_on`, `turn_off`.
+- [x] Active/pending/route-reason sensors and active/heating/cooling binary sensors.
+- [x] Unit tests for routing.
 
 **Acceptance:** Scheduler can control the proxy; commands reach only the selected VTherm; routing tests pass.
 
 ### M3 — Safe handover
 
-- [ ] Handover state machine with idle detection, off confirmation, timeouts.
-- [ ] Pending command queue.
-- [ ] Never turn off an active target on route change.
-- [ ] Handover events and binary sensor.
-- [ ] Startup reconciliation.
+- [x] Handover state machine with idle detection, off confirmation, timeouts.
+- [x] Pending command queue.
+- [x] Never turn off an active target on route change.
+- [x] Handover events and binary sensor.
+- [x] Startup reconciliation.
 - [ ] Integration tests for handover.
 
 **Acceptance:** outdoor/manual route changes wait for idle; old target is off before new target starts; no

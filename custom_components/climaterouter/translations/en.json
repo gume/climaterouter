@@ -1,0 +1,132 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "ClimateRouter",
+        "description": "Choose the two underlying thermostats and the outdoor sensor. The radiator is used when it is cold, the AC when it is mild.",
+        "data": {
+          "name": "Name",
+          "radiator_entity_id": "Radiator thermostat (over_switch)",
+          "ac_entity_id": "AC thermostat (over_climate)",
+          "outdoor_sensor_entity_id": "Outdoor temperature sensor",
+          "manual_switch_entity_id": "Manual routing switch (optional)",
+          "manual_switch_on_target": "Target when the manual switch is on",
+          "cold_threshold": "Cold threshold",
+          "mild_threshold": "Mild threshold",
+          "min_route_dwell": "Minimum time between handovers",
+          "handover_idle_confirm": "Idle confirmation before handover",
+          "off_confirm_timeout": "Off confirmation timeout",
+          "startup_grace": "Startup grace period",
+          "settle_time": "Command settle time",
+          "conflict_policy": "Conflict policy",
+          "auto_resolve_idle_targets": "Turn off idle non-selected targets",
+          "auto_resolve_simultaneous": "Turn off idle targets when both are on",
+          "fallback_on_unavailable": "Fall back to the other target",
+          "outdoor_stale_after": "Outdoor sensor staleness",
+          "default_override_minutes": "Default override duration",
+          "max_override_minutes": "Maximum override duration",
+          "temperature_tolerance": "Setpoint tolerance",
+          "boost_enabled": "Enable boost (experimental)"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure ClimateRouter",
+        "description": "Change the underlying entities or the routing options.",
+        "data": {
+          "name": "Name",
+          "radiator_entity_id": "Radiator thermostat (over_switch)",
+          "ac_entity_id": "AC thermostat (over_climate)",
+          "outdoor_sensor_entity_id": "Outdoor temperature sensor",
+          "manual_switch_entity_id": "Manual routing switch (optional)",
+          "manual_switch_on_target": "Target when the manual switch is on",
+          "cold_threshold": "Cold threshold",
+          "mild_threshold": "Mild threshold",
+          "min_route_dwell": "Minimum time between handovers",
+          "handover_idle_confirm": "Idle confirmation before handover",
+          "off_confirm_timeout": "Off confirmation timeout",
+          "startup_grace": "Startup grace period",
+          "settle_time": "Command settle time",
+          "conflict_policy": "Conflict policy",
+          "auto_resolve_idle_targets": "Turn off idle non-selected targets",
+          "auto_resolve_simultaneous": "Turn off idle targets when both are on",
+          "fallback_on_unavailable": "Fall back to the other target",
+          "outdoor_stale_after": "Outdoor sensor staleness",
+          "default_override_minutes": "Default override duration",
+          "max_override_minutes": "Maximum override duration",
+          "temperature_tolerance": "Setpoint tolerance",
+          "boost_enabled": "Enable boost (experimental)"
+        }
+      }
+    },
+    "error": {
+      "same_entities": "The radiator and AC must be different entities.",
+      "entity_not_found": "The selected entity does not exist.",
+      "invalid_entity": "The selected entity has the wrong domain.",
+      "threshold_order": "The cold threshold must not be higher than the mild threshold.",
+      "override_order": "The default override duration must not exceed the maximum.",
+      "invalid_tolerance": "The temperature tolerance must be greater than zero.",
+      "invalid_duration": "Durations must be non-negative."
+    },
+    "abort": {
+      "already_configured": "This radiator/AC pair is already configured.",
+      "reconfigure_successful": "Reconfiguration saved.",
+      "unknown_entry": "The config entry no longer exists."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "ClimateRouter options",
+        "description": "Adjust routing thresholds, timings, and conflict handling.",
+        "data": {
+          "name": "Name",
+          "radiator_entity_id": "Radiator thermostat (over_switch)",
+          "ac_entity_id": "AC thermostat (over_climate)",
+          "outdoor_sensor_entity_id": "Outdoor temperature sensor",
+          "manual_switch_entity_id": "Manual routing switch (optional)",
+          "manual_switch_on_target": "Target when the manual switch is on",
+          "cold_threshold": "Cold threshold",
+          "mild_threshold": "Mild threshold",
+          "min_route_dwell": "Minimum time between handovers",
+          "handover_idle_confirm": "Idle confirmation before handover",
+          "off_confirm_timeout": "Off confirmation timeout",
+          "startup_grace": "Startup grace period",
+          "settle_time": "Command settle time",
+          "conflict_policy": "Conflict policy",
+          "auto_resolve_idle_targets": "Turn off idle non-selected targets",
+          "auto_resolve_simultaneous": "Turn off idle targets when both are on",
+          "fallback_on_unavailable": "Fall back to the other target",
+          "outdoor_stale_after": "Outdoor sensor staleness",
+          "default_override_minutes": "Default override duration",
+          "max_override_minutes": "Maximum override duration",
+          "temperature_tolerance": "Setpoint tolerance",
+          "boost_enabled": "Enable boost (experimental)"
+        }
+      }
+    }
+  },
+  "services": {
+    "recalculate": {
+      "name": "Recalculate route",
+      "description": "Re-evaluate the route immediately, bypassing the dwell timer."
+    },
+    "set_route_override": {
+      "name": "Set route override",
+      "description": "Force routing to the radiator or the AC.",
+      "fields": {
+        "route": {
+          "name": "Route",
+          "description": "Target to force."
+        }
+      }
+    },
+    "clear_route_override": {
+      "name": "Clear route override",
+      "description": "Return routing to automatic selection."
+    },
+    "clear_conflicts": {
+      "name": "Clear conflicts",
+      "description": "Acknowledge and clear the current conflict state."
+    }
+  }
+}
