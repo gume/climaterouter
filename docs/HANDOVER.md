@@ -18,6 +18,8 @@
 | `a461449` | `chore: let HACS install from the GitHub source archive` |
 | `2cfbb3c` | `feat: add pure conflict classification and conflict serialization` |
 | `d4815bc` | `feat: detect and expose target conflicts with monitor/reassert/adopt policies` |
+| `36a2465` | `docs: record M5 conflict handling and bump to 0.3.0` |
+| `90aefd5` | `feat: implement bounded both-target boost with safe single-target return` |
 
 The working tree is clean. Nothing after `95cb4cd` has been pushed (the assistant has no GitHub credentials); the
 owner must push the local commits and tag a release before the live test instance can be updated.
@@ -26,8 +28,8 @@ owner must push the local commits and tag a release before the live test instanc
 
 ## 1. Where things stand
 
-Milestones M1–M3 from [`PLAN.md`](PLAN.md) are implemented and validated manually in a real Home Assistant 2026.11
-container.
+Milestones M1–M6 from [`PLAN.md`](PLAN.md) are implemented. M1–M3 were validated manually in a real Home Assistant
+2026.11 container; M4–M6 still need live verification.
 
 | Milestone | State | Notes |
 |---|---|---|
@@ -36,7 +38,7 @@ container.
 | M3 — safe handover | Done | Idle detection, off confirmation, timeout, queued desired state, startup reconciliation, events. |
 | M4 — manual override | Implemented, not live-verified | Temperature/preset/mode override, absolute deadline, baseline capture/restore, persistence, handover forwarding, events, binary sensor, remaining sensor and cancel button. Unit coverage is limited to the pure model helpers. |
 | M5 — conflicts | Implemented, not live-verified | Setpoint/preset/mode mismatch, unavailable targets, underlying timed presets, stale manual switch, both-on and inactive-target-on detection; own-context and guard suppression; `monitor`/`reassert`/`adopt` policies, auto-resolve switches, events, history and clear button. Unit coverage is limited to the pure classifier. |
-| M6 — boost and release | Not started | `boost_enabled` config and `choose_route(boost_active=True)` exist; the coordinator cannot drive two targets yet. |
+| M6 — boost | Implemented, not live-verified | Feature-flagged both-target boost with heat-only/availability/handover interlocks, persistence, expiry, start/end events, active/remaining entities, and a handover back to single-target routing. |
 
 The next developer should start with section 8 (Next steps).
 
@@ -219,7 +221,27 @@ Events fired on the HA bus:
 - `button.<name>_clear_conflicts` / `climaterouter.clear_conflicts` acknowledges current conflicts, records them
   as resolved and publishes the cleared state; it does not change the underlying targets.
 - Exposed through `binary_sensor.<name>_conflict`, `sensor.<name>_conflict_count`, the proxy climate's conflict
-  attributes and diagnostics.
+  attributes and diagnostics. During boost each active target is compared; `adopt` is skipped because two targets
+  cannot define one baseline.
+
+### 3.8 Boost (M6)
+
+- Disabled by default. `boost_enabled` must be on, then `climaterouter.set_boost` activates both targets with the
+  current desired mode/setpoint/preset for `duration_minutes` (default 30, maximum 180).
+- Interlocks: the desired mode must be `heat`, both targets must be available, support heat, and not currently be
+  cooling; boost is rejected while a handover is `pending`/`stopping_old`/`starting_new`.
+- `set_boost` with boost already active replaces the episode (`cause=replaced`). `cancel_boost`, proxy `off` and
+  non-heat mode commands end it immediately. `off` also stops both targets through the normal path.
+- Boost is persisted as an absolute UTC deadline and restored after a restart if it has not expired. Expiry is
+  scheduled at the exact deadline and re-checked by the watchdog.
+- While boost is active, `_handover_state=BOOST`, commands fan out to both active targets, and the proxy reports
+  `active_target=both`. Both-on is not a conflict during boost.
+- Ending boost (expiry/cancel/off/mode change) returns to normal routing through the handover state machine: the
+  non-selected target is stopped after it becomes idle (immediately for an explicit `cool` command), then the
+  selected target is configured. This reuses `_handover_from` so a two-target active set can be reduced safely.
+- Events: `climaterouter_boost_started` and `climaterouter_boost_ended` (payloads include `until` and `targets`).
+- Exposed through `binary_sensor.<name>_boost_active`, `sensor.<name>_boost_remaining`, the proxy climate's
+  `boost_active`/`boost_until`/`boost_targets` attributes and diagnostics.
 
 ---
 
@@ -292,9 +314,10 @@ Run against the live container through the REST API, with the proxy wired to the
 | No prior command, underlying target already on | adopted, no commands sent |
 | Diagnostics endpoint | OK |
 
-The M4 override and M5 conflict implementations have **not** been exercised in the live instance yet: version
-`0.3.0` still needs to be pushed/released and installed there. Not yet covered by automated tests: config flow,
-coordinator, handover, override expiry/cancel/handover/restart, conflict policies, persistence, event payloads.
+The M4 override, M5 conflict and M6 boost implementations have **not** been exercised in the live instance yet:
+version `0.4.0` still needs to be pushed/released and installed there. Not yet covered by automated tests: config
+flow, coordinator, handover, override expiry/cancel/handover/restart, conflict policies, boost safety/expiry/return,
+persistence, event payloads.
 
 ---
 
@@ -314,9 +337,10 @@ coordinator, handover, override expiry/cancel/handover/restart, conflict policie
    suppression, settle windows, reassert grace, adopt, auto-resolve, history/clear) still needs integration tests
    and live verification. Detection deliberately pauses during handover and during the post-command settle window,
    so very short mismatches may never be reported. `_guess_source()` is heuristic.
-5. **Boost is not wired.** `boost_enabled` is a config option and `choose_route` can return both targets, but
-   `_single_target()` makes the coordinator treat that as “no target”. The route override deliberately offers only
-   `auto` / `radiator` / `ac`. Do not expose `both` until the set-based start/stop path exists.
+5. **Boost is feature-flagged and only supports `targets=both`.** It is implemented but has no coordinator
+   integration tests and no live verification. It requires heat mode, both targets available and no pending
+   handover. The return to single-target routing reuses the handover state machine, so the dropped target is only
+   stopped once idle; if it never becomes idle the normal off-confirm timeout applies.
 6. **`handover_max_wait` from the plan is not implemented.** `off_confirm_timeout` bounds the off confirmation;
    there is no forced interruption of an active old target.
 7. **`last_handover` is not persisted**, so `sensor.last_handover` is `unknown` after a restart.
@@ -334,7 +358,7 @@ coordinator, handover, override expiry/cancel/handover/restart, conflict policie
 
 ### 8.1 Immediate
 
-1. Owner: push `main` and tag/release **`v0.3.0`** (the manifest and `const.VERSION` are already bumped).
+1. Owner: push `main` and tag/release **`v0.4.0`** (the manifest and `const.VERSION` are already bumped).
    `hacs.json` no longer sets `zip_release`, so HACS installs from the normal GitHub source archive; no release
    asset needs to be uploaded.
 2. Update ClimateRouter in the test HA through HACS and restart Home Assistant.
@@ -346,7 +370,11 @@ coordinator, handover, override expiry/cancel/handover/restart, conflict policie
 5. Exercise M5 in the live instance: change the active VTherm setpoint externally with `conflict_policy: monitor`;
    confirm the conflict binary sensor/count/attributes and both events; repeat under `reassert` and `adopt`; turn
    the inactive VTherm on manually; make a target unavailable. Record the results here.
-6. Decide whether to keep the 2026.11 version floor or add an older-version import fallback (section 7.1).
+6. Exercise M6 in the live instance (enable `boost_enabled` first): start heat, call `set_boost` for a short
+   duration, confirm both VTherms run and `active_target=both`; cancel and let it expire; confirm the dropped
+   target stops only when idle and normal routing resumes. Also confirm boost is rejected before heat and while a
+   handover is pending. Record the results here.
+7. Decide whether to keep the 2026.11 version floor or add an older-version import fallback (section 7.1).
 
 ### 8.2 Automated tests
 
@@ -386,14 +414,18 @@ with a Python version matching the supported HA. Suggested coverage:
 - [ ] Integration tests for policy behaviour (needs the HA test harness).
 - [ ] Live verification in the 2026.11 test instance.
 
-### 8.5 M6 — boost and release
+### 8.5 M6 — boost and release (implemented in this checkout)
 
-- Convert the coordinator from single-target helpers (`_single_active`, `_single_target`) to set-based operations.
-- Implement feature-flagged `set_boost` / `cancel_boost` with a bounded deadline, heat-only interlock, capability
-  checks and no pending handover requirement.
-- Fan out commands to both targets only while boost is active; keep `off`/`cool` semantics safe.
-- Add `hassfest`, HACS validation, a release workflow and the `v0.1.0` tag.
-- Finish README/setup/dashboard examples.
+- [x] Support multiple active targets in routing, snapshots and conflict detection.
+- [x] Implement feature-flagged `set_boost` / `cancel_boost` with a bounded deadline, heat-only interlock,
+  capability checks and no pending handover requirement.
+- [x] Fan out commands to both targets only while boost is active; keep `off`/`cool` semantics safe.
+- [x] Persist boost across restart, expire it on the exact deadline, and emit start/end events.
+- [x] Return to single-target routing through the handover state machine.
+- [x] Unit tests for `BoostState` and pure boost routing.
+- [ ] Integration tests for boost start/expiry/cancel/restart and return handover.
+- [ ] Live verification in the test HA.
+- [ ] Add `hassfest`, HACS validation, a release workflow and the `v0.4.0` tag/release (owner action).
 
 ---
 

@@ -50,7 +50,7 @@ inhibit, and device-level regulation.
 - Implementing a scheduler UI or storing schedules.
 - Controlling the radiator/AC devices directly.
 - Cloud services, vendor APIs, or energy optimization.
-- Finalized boost logic. v1 only prepares the state model and a feature-flagged service.
+- Advanced boost strategies beyond the feature-flagged both-target v1 (per-target, delta/energy triggers).
 - Automatic adoption of arbitrary third-party automation changes. The default is detect-and-report, not fight.
 - Multi-room grouping. Multiple independent config entries are supported, but there is no group entity.
 
@@ -177,7 +177,7 @@ entries are allowed (e.g., living room, bedroom), each with its own device and e
 | `default_override_minutes` | int | `60` | yes | Default manual override duration. |
 | `max_override_minutes` | int | `1440` | yes | Maximum override duration (24 h). |
 | `temperature_tolerance` | float | `0.2` | yes | Setpoint mismatch tolerance. |
-| `boost_enabled` | bool | `false` | yes | Enables the boost scaffold. |
+| `boost_enabled` | bool | `false` | yes | Enables bounded both-target boost. |
 
 `cold_threshold` must be less than or equal to `mild_threshold`. Setting both to `8.0` reproduces the simple
 `> 8 °C → AC; ≤ 8 °C → radiator` rule. The default `7/9` creates a 2 °C deadband to avoid flapping.
@@ -353,7 +353,7 @@ immediately; this exception is logged and surfaced in the handover event.
 | `STARTING_NEW` | Old target is off; configuring the new target. |
 | `OFF` | Proxy desired mode is off; all targets off. |
 | `CONFLICT` | Handover or command failed; manual/automatic resolution required. |
-| `BOOST` | Both targets active (future; feature-flagged). |
+| `BOOST` | Both targets active (feature-flagged). |
 
 ### 8.3 Transition table
 
@@ -564,7 +564,7 @@ values separately so debugging is unambiguous.
 | `binary_sensor.climaterouter_cooling` | on/off | — | Active target `hvac_action == cooling`. |
 | `binary_sensor.climaterouter_handover_pending` | on/off | — | A route change is waiting for the old target to become idle. |
 | `binary_sensor.climaterouter_manual_override` | on/off | — | Timed manual override is active. |
-| `binary_sensor.climaterouter_boost_active` | on/off | — | Boost scaffold is active. |
+| `binary_sensor.climaterouter_boost_active` | on/off | — | Both targets are active during a bounded boost. |
 | `binary_sensor.climaterouter_conflict` | on/off | diagnostic | At least one unresolved conflict. |
 | `binary_sensor.climaterouter_outdoor_sensor_stale` | on/off | diagnostic | Outdoor value is unavailable or older than `outdoor_stale_after`. |
 | `binary_sensor.climaterouter_target_mismatch` | on/off | diagnostic | Radiator and AC target temperatures/presets differ beyond tolerance. |
