@@ -255,24 +255,36 @@ Defined in `test_environment/`; full instructions in [`TEST_ENVIRONMENT.md`](TES
 - Container: `climaterouter-ha` (Compose project `climaterouter-test`).
 - URL: <http://localhost:38123> (host port 38123 → container 8123).
 - HA image: `ghcr.io/home-assistant/home-assistant:stable`, currently **2026.11.0**, Python 3.14 inside.
-- The integration and `fake_hvac` are bind-mounted read-only, so code edits need only
-  `docker compose restart homeassistant`; config flows reload a changed entry automatically.
-- `fake_hvac` entries:
-  - `Fake HVAC Lab` from YAML — `climate.fake_ac`, `sensor.fake_room_temperature`,
-    `sensor.fake_outdoor_temperature`, radiator and simulation switches, temperature `number` entities;
-  - `Fake HVAC Lab 2` — a second system created through the UI during validation, exposing `climate.fake_ac_2`.
-- `fake_hvac` services require a `name` field once more than one system exists
-  (`"Fake HVAC Lab"` / `"Fake HVAC Lab 2"`).
-- Test router entry **`ClimateRouter Test`** (local `.storage` only, entry id
-  `01M6S30VNZAM426275PKQQ5G2Z`) points at `climate.fake_ac` (radiator role) and `climate.fake_ac_2` (AC role),
-  with `min_route_dwell=0`, `handover_idle_confirm=1`, `off_confirm_timeout=5`, `startup_grace=0`,
-  `settle_time=1`. It is currently **off**.
-- **Versatile Thermostat is now installed and configured** in the live test instance (the owner completed this
-  outside this checkout). The exact VTherm entity IDs and the router entry wiring must be read back through the HA
-  API; they are not in this repository.
+- The live instance is managed through **HACS**; the local `test_environment/` Compose lab is reference only and
+  cannot be started from this host.
+- Installed ClimateRouter version when read back on 2026-11-06 was **0.1.0**, so M4–M6 are **not** installed in
+  the live instance yet.
+- `fake_hvac` entries: one system, `Fake HVAC Lab`, exposing `climate.living_room_fake_ac`,
+  `sensor.living_room_fake_room_temperature`, `sensor.living_room_fake_outdoor_temperature`,
+  `switch.living_room_fake_radiator`, and the matching `number` controls.
+- Router entry **`ClimateRouter`** (entry id `01M6S67XQXRR48GVT3917H924P`), read from diagnostics:
+  - radiator `climate.living_room_room_radiator`, AC `climate.living_room_room_ac`;
+  - outdoor sensor `sensor.living_room_fake_outdoor_temperature`;
+  - manual switch `input_boolean.climaterouter_manul` (`on` targets the AC);
+  - `cold_threshold=-5`, `mild_threshold=0`, `min_route_dwell=600`, `handover_idle_confirm=30`,
+    `off_confirm_timeout=30`, `startup_grace=10`, `settle_time=10`;
+  - `conflict_policy=monitor`, `auto_resolve_idle_targets=true`, `auto_resolve_simultaneous=true`;
+  - `default_override_minutes=60`, `max_override_minutes=1440`, `temperature_tolerance=0.2`,
+    `boost_enabled=false`.
+- Live router entities use the `living_room_climaterouter` slug, e.g.
+  `climate.living_room_climaterouter`, `sensor.living_room_climaterouter_active_target`,
+  `binary_sensor.living_room_climaterouter_conflict`.
+- VTherm entities expose the common presets `none`/`frost`/`eco`/`comfort`/`boost`; both currently support
+  `heat` and the AC also supports `cool`.
+- Baseline state when read: both VTherms on (`active_target=both`), `route_reason=fallback_outdoor`, desired preset
+  `eco`, and the outdoor sensor stale despite a value of 5.0 °C (last update older than `outdoor_stale_after`).
+  This both-on/stale state must be cleaned up before feature verification.
 
 The `.storage` directory is git-ignored. `test_environment/reset.sh` removes it, so test entries are disposable; do
 not encode assumptions about them in code.
+
+The HA long-lived token is kept outside the repository at `~/.config/climaterouter/ha_token` (mode `600`) and is
+read by the verification commands; never copy it into the checkout or commit it.
 
 ---
 
@@ -302,7 +314,9 @@ brand assets yet).
 
 ## 6. What was verified manually
 
-Run against the live container through the REST API, with the proxy wired to the two fake ACs:
+Run against the live container through the REST API, with the proxy wired to the two fake ACs during M1–M3. The
+current live entry uses the two VTherm entities described in section 4 and is still on version 0.1.0; re-run these
+scenarios after the upgrade before claiming M4–M6 verification.
 
 | Scenario | Result |
 |---|---|
