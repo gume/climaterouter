@@ -32,9 +32,9 @@ Scheduler / User UI / Automations
 ## Status
 
 **M1–M6 implemented.** The integration package provides the config flow, proxy climate entity, outdoor/manual
-routing, safe handover, bounded manual override, conflict detection, feature-flagged boost, status entities,
-services and diagnostics. See [`docs/HANDOVER.md`](docs/HANDOVER.md) for the exact state, test results, known gaps
-and next steps.
+routing, safe handover, bounded manual override, conflict detection, feature-flagged boost, a native access lock,
+status entities, services and diagnostics. See [`docs/HANDOVER.md`](docs/HANDOVER.md) for the exact state, test
+results, known gaps and next steps.
 
 ## Why a proxy?
 
@@ -57,9 +57,12 @@ extras (for example Equinox) can show the radiator's power percentage, window/pr
 status. The AC is an `over_climate` thermostat and has no regulation percentage, so the power gauge only appears
 while the radiator is active.
 
-The Equinox **lock button is not supported** through the proxy. Equinox calls `versatile_thermostat.lock`/`unlock`
-on the card entity, and those services only work on real VTherm entities. Set `hide_lock_button: true` on the card
-when it targets `climate.climaterouter`; see [`docs/HANDOVER.md`](docs/HANDOVER.md) §3.9 for the alternatives.
+The Equinox **lock button still cannot drive the proxy's lock**: Equinox calls
+`versatile_thermostat.lock`/`unlock` on the card entity, and those services only work on real VTherm entities.
+Keep `hide_lock_button: true` on the card when it targets `climate.climaterouter` and use the native
+`lock.climaterouter_lock` entity (or `climaterouter.lock` / `climaterouter.unlock`) instead. The native lock is
+enabled in the integration options and optionally blocks user commands, automation commands, or both. See
+[`docs/HANDOVER.md`](docs/HANDOVER.md) §3.9 for the alternatives.
 
 ## Planned capabilities
 
@@ -72,6 +75,7 @@ when it targets `climate.climaterouter`; see [`docs/HANDOVER.md`](docs/HANDOVER.
 | Observability | Binary sensors and sensors for active target, pending handover, override, boost, stale inputs, conflicts, and last handover. |
 | Conflict detection | Detects direct changes to either VTherm, both-targets-on, unavailable targets, and stale inputs; `monitor` by default, with `reassert`/`adopt` policies and guarded states excluded. |
 | Boost | `climaterouter.set_boost` runs both targets for a bounded time when `boost_enabled` is on; heat-only, both targets must be available, and ending boost hands back to single-target routing. |
+| Native lock | Optional `lock.climaterouter_lock` with a 4–8 digit code, configurable user/automation blocking, auto-relock and persistence. |
 
 ## Planned entities
 
@@ -95,6 +99,7 @@ when it targets `climate.climaterouter`; see [`docs/HANDOVER.md`](docs/HANDOVER.
 - `sensor.climaterouter_conflict_count` — diagnostic conflict counter.
 - `select.climaterouter_route_override` — `auto` / `radiator` / `ac` (manual route override).
 - `button.climaterouter_cancel_override`, `_recalculate_route`, `_clear_conflicts`, `_force_handover`.
+- `lock.climaterouter_lock` — optional native access lock (only created when `lock_enabled` is on).
 
 ## Services
 
@@ -106,6 +111,7 @@ when it targets `climate.climaterouter`; see [`docs/HANDOVER.md`](docs/HANDOVER.
 - `climaterouter.recalculate`
 - `climaterouter.clear_conflicts`
 - `climaterouter.force_handover`
+- `climaterouter.lock` / `climaterouter.unlock` (optional `code`; requires `lock_enabled`)
 
 ## Documentation
 

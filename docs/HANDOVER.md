@@ -27,10 +27,12 @@
 | `081aa85` | `feat: add forced handover and forward commands during pending handover` |
 | `bf19c92` | `docs: record the forced-handover commit` |
 | `28fbf93` | `feat: expose read-only VTherm attributes for Lovelace cards` |
+| `e0634e2` | `docs: record the card attribute commit` |
+| `97c620e` | `feat: add native ClimateRouter lock` |
 
 Everything through `bf19c92` (version **0.5.0**) is pushed to `origin/main` and installed in the live test instance.
-The working tree now contains the read-only VTherm display attributes for Lovelace cards (version **0.6.0**), which
-still needs to be pushed and installed through the Marketplace. The assistant has no GitHub credentials.
+Local commits `28fbf93` (version **0.6.0**, read-only VTherm display attributes), `e0634e2` (docs) and `97c620e`
+(version **0.7.0**, native lock) are not pushed yet. The assistant has no GitHub credentials.
 
 ---
 
@@ -47,6 +49,9 @@ Milestones M1–M6 from [`PLAN.md`](PLAN.md) are implemented. M1–M3 were valid
 | M4 — manual override | Implemented, not live-verified | Temperature/preset/mode override, absolute deadline, baseline capture/restore, persistence, handover forwarding, events, binary sensor, remaining sensor and cancel button. Unit coverage is limited to the pure model helpers. |
 | M5 — conflicts | Implemented, not live-verified | Setpoint/preset/mode mismatch, unavailable targets, underlying timed presets, stale manual switch, both-on and inactive-target-on detection; own-context and guard suppression; `monitor`/`reassert`/`adopt` policies, auto-resolve switches, events, history and clear button. Unit coverage is limited to the pure classifier. |
 | M6 — boost | Implemented, not live-verified | Feature-flagged both-target boost with heat-only/availability/handover interlocks, persistence, expiry, start/end events, active/remaining entities, and a handover back to single-target routing. |
+
+The post-M6 **native lock** (0.7.0) is implemented and unit-tested at the source-matrix level; live verification is
+still outstanding (see §8).
 
 The next developer should start with section 8 (Next steps).
 
@@ -69,6 +74,7 @@ custom_components/climaterouter/
 ├── sensor.py            # active/pending/reason/outdoor/timestamps/counts
 ├── select.py            # route override (auto/radiator/ac)
 ├── button.py            # recalculate, clear conflicts
+├── lock.py              # optional native access lock
 ├── services.py          # service registration and entity resolution
 ├── diagnostics.py       # config-entry diagnostics
 ├── config_flow.py       # user/options/reconfigure flows and validation
@@ -79,7 +85,7 @@ custom_components/climaterouter/
 tests/
 ├── conftest.py          # stubs the `climaterouter` package; no HA needed
 ├── test_router.py       # routing precedence, hysteresis, fallback (pure)
-├── test_models.py       # config parsing, desired-state round-trip
+├── test_models.py       # config parsing, desired-state round-trip, lock source matrix
 └── test_vt_display.py   # card-facing VTherm attribute selection and lock exclusion
 
 .github/workflows/ci.yml # ruff + pytest on Python 3.13
@@ -282,7 +288,29 @@ Options are:
 1. Set `hide_lock_button: true` on the Equinox card when it targets the proxy.
 2. Lock the underlying VTherm entities with `lock_users=true` and `lock_automations=false`, so the VTherm UI is
    protected while ClimateRouter can still control them.
-3. Add native ClimateRouter lock services and upstream Equinox support for a configurable lock service/entity.
+3. Use the native ClimateRouter lock described in §3.10; Equinox upstream support for a configurable
+   lock service/entity is still needed before its lock button can drive it.
+
+### 3.10 Native lock
+
+The optional native lock protects the **proxy's command surface**, not the underlying VTherms:
+
+- Disabled by default. Enable `lock_enabled` in the options, optionally set a 4–8 digit `lock_code`, choose whether
+  to block `lock_users` and/or `lock_automations`, and set `auto_relock_sec` (0 disables auto-relock).
+- When enabled, the integration creates `lock.<name>_lock`. Standard `lock.lock`/`lock.unlock` and the
+  `climaterouter.lock`/`climaterouter.unlock` services are available. The `climaterouter` services accept an
+  optional `code`; `climaterouter.unlock` requires the configured code.
+- Locking does not require a code. Unlocking with a configured code requires the exact code; a wrong or missing
+  code raises `HomeAssistantError` and leaves the lock locked.
+- When locked, `set_temperature`, `set_hvac_mode`, `set_preset_mode`, `turn_on`, `turn_off`,
+  `set_manual_override` and `set_boost` are rejected for the configured sources. A source counts as a user when the
+  service-call context has a `user_id`, matching VTherm's `lock_users`/`lock_automations` semantics. The check runs
+  in the coordinator, so it applies to both the climate entity and the services.
+- The lock state is persisted. Unlocking schedules an exact auto-relock deadline, which is persisted as an
+  absolute UTC timestamp; after a restart the remaining delay is resumed (or the router locks immediately when the
+  deadline already passed). The lock is cleared from persisted state when the feature is disabled.
+- The proxy climate does **not** expose `is_lock_configured`, `lock_manager` or `is_locked`, so Equinox does not
+  render a lock button that cannot work. Diagnostics expose the lock flags and redact `lock_code`.
 
 ---
 
@@ -382,8 +410,10 @@ current live entry uses the two VTherm entities described in section 4 and runs 
 | Diagnostics endpoint | OK |
 
 The M4 override, M5 conflict and M6 boost implementations have **not** been exercised in the live instance yet.
-Not yet covered by automated tests: config flow, coordinator, handover, override expiry/cancel/handover/restart,
-conflict policies, boost safety/expiry/return, persistence, event payloads.
+The read-only VTherm display pass-through (**0.6.0**) and the native lock (**0.7.0**) also still need live
+verification. Not yet covered by automated tests: config flow, coordinator, handover, override
+expiry/cancel/handover/restart, conflict policies, boost safety/expiry/return, lock enforcement/persistence,
+persistence, event payloads.
 
 ---
 
@@ -418,11 +448,12 @@ conflict policies, boost safety/expiry/return, persistence, event payloads.
 10. **`strings.json` and `translations/en.json` are duplicated** and must be edited together.
 11. `binary_sensor.target_mismatch` only compares the two targets' setpoints; it is not the full M5 mismatch
     detector. Use `binary_sensor.<name>_conflict` for the desired-vs-actual comparison.
-12. **The Equinox lock is not available through the proxy.** Equinox hard-codes
+12. **Equinox's lock button still cannot drive the native lock.** Equinox hard-codes
     `versatile_thermostat.lock`/`unlock` on the card entity, and those are VTherm platform entity services, so a
     ClimateRouter proxy cannot receive them. `vt_display.py` therefore never forwards `is_lock_configured` or
-    `lock_manager`. Hide the button with `hide_lock_button: true`, or implement a native lock and request upstream
-    Equinox support for a configurable lock service/entity.
+    `lock_manager`. Use `hide_lock_button: true` with the native `lock.<name>_lock` entity (0.7.0) or the
+    `climaterouter.lock`/`unlock` services, and request upstream Equinox support for a configurable lock
+    service/entity.
 
 ---
 
@@ -430,26 +461,31 @@ conflict policies, boost safety/expiry/return, persistence, event payloads.
 
 ### 8.1 Immediate
 
-1. Owner: push the current working tree (version **0.6.0**, read-only VTherm display attributes), then update
-   ClimateRouter through the **Marketplace** in the test HA (custom repository `gume/climaterouter`, repository id
-   `1448098130`) and restart Home Assistant. Do not re-add the old `custom_components/climaterouter` bind mount: it
-   makes the folder a mount point (`EBUSY`) and the Marketplace cannot back it up before replacing it.
+1. Owner: push the current working tree (versions **0.6.0** and **0.7.0**: read-only VTherm display attributes and
+   the native lock), then update ClimateRouter through the **Marketplace** in the test HA (custom repository
+   `gume/climaterouter`, repository id `1448098130`) and restart Home Assistant. Do not re-add the old
+   `custom_components/climaterouter` bind mount: it makes the folder a mount point (`EBUSY`) and the Marketplace
+   cannot back it up before replacing it.
 2. Verify in the live instance that the proxy exposes `is_over_switch`/`power_percent` while the radiator is active
    and the Equinox gauge/status icons appear. Verify the lock button is absent (`hide_lock_button: true`) and that
    `is_lock_configured` is not exposed.
-3. Exercise M4 in the live instance: start a short temperature override, confirm it reaches the active VTherm,
+3. Enable the native lock in the options, set a short auto-relock delay and verify in the live instance: the
+   `lock.<name>_lock` entity appears, user/automation blocking matches the configured flags, the code is enforced
+   on unlock, auto-relock fires, restart keeps the remaining deadline, and disabling the lock removes the entity.
+   Record the results here.
+4. Exercise M4 in the live instance: start a short temperature override, confirm it reaches the active VTherm,
    cause a handover while it is active, let it expire, and confirm the baseline is restored. Repeat with
    `cancel_manual_override` and `hvac_mode: off`. Record the results here.
-4. Exercise M5 in the live instance: change the active VTherm setpoint externally with `conflict_policy: monitor`;
+5. Exercise M5 in the live instance: change the active VTherm setpoint externally with `conflict_policy: monitor`;
    confirm the conflict binary sensor/count/attributes and both events; repeat under `reassert` and `adopt`; turn
    the inactive VTherm on manually; make a target unavailable. Record the results here.
-5. Exercise M6 in the live instance (enable `boost_enabled` first): start heat, call `set_boost` for a short
+6. Exercise M6 in the live instance (enable `boost_enabled` first): start heat, call `set_boost` for a short
    duration, confirm both VTherms run and `active_target=both`; cancel and let it expire; confirm the dropped
    target stops only when idle and normal routing resumes. Also confirm boost is rejected before heat and while a
    handover is pending. Record the results here.
-6. Decide whether to keep the 2026.11 version floor or add an older-version import fallback (section 7.1).
-7. Decide whether ClimateRouter should get a native lock (services + enforcement) and, if so, request Equinox
-   support for a configurable lock service/entity; the current Equinox lock button cannot target the proxy.
+7. Decide whether to keep the 2026.11 version floor or add an older-version import fallback (section 7.1).
+8. Request upstream Equinox support for a configurable lock service/entity; the card button still cannot target the
+   proxy's native lock.
 
 ### 8.2 Automated tests
 

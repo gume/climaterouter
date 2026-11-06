@@ -260,6 +260,23 @@ class MockClimate(ClimateEntity):
    card still shows mode/preset/temperature.
 4. Verify the card has no lock button and no `is_lock_configured` attribute is exposed by the proxy.
 
+### 5.2c Native ClimateRouter lock
+
+1. Enable **native lock** in the integration options, set a 4–8 digit code and a short auto-relock delay
+   (for example 15 s), then reload the entry.
+2. Verify `lock.<name>_lock` exists and is unlocked.
+3. Call `climaterouter.lock` (or `lock.lock`) and verify the entity shows locked.
+4. Try `climate.set_temperature` from a dashboard user and from an automation/script. With **Block commands from
+   users** / **Block commands from automations** enabled, the blocked source gets an error and the target does not
+   change; the other source still works.
+5. Call `climaterouter.unlock` with a wrong or missing code; verify the call fails and the lock stays locked, then
+   unlock with the right code.
+6. Wait for the auto-relock delay; verify the entity locks itself and commands are blocked again.
+7. Unlock, restart HA before the delay expires; verify the lock comes back after the remaining delay (the deadline
+   is persisted).
+8. Verify the proxy climate does **not** expose `is_lock_configured`, `lock_manager` or `is_locked`.
+9. Disable the native lock in options; verify the lock entity disappears and commands are accepted again.
+
 ### 5.3 Manual override
 
 1. Start a 30-minute temperature override at 22.5 °C.
