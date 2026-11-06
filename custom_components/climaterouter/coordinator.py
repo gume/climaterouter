@@ -859,7 +859,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
                 return
 
             if len(self._active_targets) > 1:
-                await self._async_begin_boost_exit(target, decision.reason)
+                await self._async_begin_boost_exit(target, decision.reason, explicit=explicit)
                 self._publish()
                 return
 
@@ -913,7 +913,9 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         for target in sorted(targets, key=lambda item: item.value):
             await self._async_forward_desired(target)
 
-    async def _async_begin_boost_exit(self, target: Target, reason: str) -> None:
+    async def _async_begin_boost_exit(
+        self, target: Target, reason: str, *, explicit: bool = False
+    ) -> None:
         """Return from boost to ``target`` without interrupting an active cycle."""
         extras = [active for active in self._active_targets if active is not target]
         if not extras:
@@ -949,7 +951,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             await self._async_forward_desired(target)
             return
 
-        if extra_state.is_active:
+        if extra_state.is_active and not (explicit and self._desired.hvac_mode == HVAC_COOL):
             self._handover_state = HandoverState.PENDING
             self._idle_since = None
             return
