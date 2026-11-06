@@ -1,0 +1,22 @@
+# Home Assistant test instance for ClimateRouter.
+#
+# Linux: host networking gives Home Assistant direct access to port 8123.
+# macOS/Windows: replace `network_mode: host` with:
+#   ports:
+#     - "8123:8123"
+
+name: climaterouter-test
+
+services:
+  homeassistant:
+    container_name: climaterouter-ha
+    image: ghcr.io/home-assistant/home-assistant:stable
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./config:/config
+      - ../custom_components/climaterouter:/config/custom_components/climaterouter:ro
+      - ./custom_components/fake_hvac:/config/custom_components/fake_hvac:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      TZ: Europe/Amsterdam

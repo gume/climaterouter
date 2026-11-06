@@ -17,7 +17,7 @@ venv/
 env/
 
 # Home Assistant runtime / local test config
-config/
+/config/
 .storage/
 *.log
 home-assistant.log*

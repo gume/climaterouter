@@ -1,0 +1,119 @@
+set_outdoor_temperature:
+  name: Set outdoor temperature
+  description: Set the simulated outdoor temperature used by the fake HVAC lab.
+  fields:
+    temperature:
+      name: Temperature
+      description: New outdoor temperature in degrees Celsius.
+      required: true
+      example: 6.5
+      selector:
+        number:
+          min: -50
+          max: 60
+          step: 0.5
+          unit_of_measurement: "°C"
+          mode: box
+    name:
+      name: System
+      description: Fake HVAC system name or entry ID. Optional when only one exists.
+      required: false
+      selector:
+        text:
+
+set_room_temperature:
+  name: Set room temperature
+  description: Force the simulated room temperature to a value.
+  fields:
+    temperature:
+      name: Temperature
+      description: New room temperature in degrees Celsius.
+      required: true
+      example: 19.5
+      selector:
+        number:
+          min: -20
+          max: 50
+          step: 0.1
+          unit_of_measurement: "°C"
+          mode: box
+    name:
+      name: System
+      description: Fake HVAC system name or entry ID. Optional when only one exists.
+      required: false
+      selector:
+        text:
+
+set_simulation:
+  name: Set simulation
+  description: Enable or pause the thermal simulation ticker.
+  fields:
+    enabled:
+      name: Enabled
+      description: Whether the room temperature should keep evolving.
+      required: true
+      selector:
+        boolean:
+    name:
+      name: System
+      description: Fake HVAC system name or entry ID. Optional when only one exists.
+      required: false
+      selector:
+        text:
+
+set_availability:
+  name: Set sensor availability
+  description: Mark the fake room or outdoor sensor as available or unavailable.
+  fields:
+    room:
+      name: Room sensor available
+      description: Set to false to simulate a missing room temperature sensor.
+      required: false
+      selector:
+        boolean:
+    outdoor:
+      name: Outdoor sensor available
+      description: Set to false to simulate a missing outdoor temperature sensor.
+      required: false
+      selector:
+        boolean:
+    name:
+      name: System
+      description: Fake HVAC system name or entry ID. Optional when only one exists.
+      required: false
+      selector:
+        text:
+
+advance:
+  name: Advance simulation
+  description: Fast-forward the thermal simulation by a number of simulated minutes.
+  fields:
+    minutes:
+      name: Minutes
+      description: Simulated minutes to advance.
+      required: true
+      example: 30
+      selector:
+        number:
+          min: 1
+          max: 1440
+          step: 1
+          unit_of_measurement: min
+          mode: box
+    name:
+      name: System
+      description: Fake HVAC system name or entry ID. Optional when only one exists.
+      required: false
+      selector:
+        text:
+
+reset:
+  name: Reset simulation
+  description: Reset the fake system to its configured starting state.
+  fields:
+    name:
+      name: System
+      description: Fake HVAC system name or entry ID. Optional when only one exists.
+      required: false
+      selector:
+        text:

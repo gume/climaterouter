@@ -32,7 +32,8 @@ Scheduler / User UI / Automations
 ## Status
 
 **Planning.** This repository currently contains the design, architecture, conflict-handling, testing, and
-delivery plan. The integration package is added in milestone M1. See [`docs/PLAN.md`](docs/PLAN.md).
+delivery plan, plus a Docker-based test lab with simulated radiator/AC hardware. The integration package is added
+in milestone M1. See [`docs/PLAN.md`](docs/PLAN.md) and [`docs/TEST_ENVIRONMENT.md`](docs/TEST_ENVIRONMENT.md).
 
 ## Why a proxy?
 
@@ -98,6 +99,7 @@ The proxy is deliberately thin:
 - [`docs/CONFLICTS.md`](docs/CONFLICTS.md) — conflict sources, detection, policies, resolution matrix.
 - [`docs/TESTING.md`](docs/TESTING.md) — unit/integration/manual test plan.
 - [`docs/SETUP.md`](docs/SETUP.md) — VTherm, Scheduler, and dashboard configuration.
+- [`docs/TEST_ENVIRONMENT.md`](docs/TEST_ENVIRONMENT.md) — Docker-based fake-hardware lab and manual test scenarios.
 - [`docs/ADR/`](docs/ADR/) — key architecture decisions.
 
 ## Requirements

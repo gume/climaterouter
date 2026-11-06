@@ -1,0 +1,2 @@
+# Placeholder so the custom_components directory exists before Docker or HACS
+# creates subdirectories in it.

@@ -1,0 +1,7 @@
+# Keep the hand-written test configuration under version control, ignore
+# everything Home Assistant, HACS, VTherm and Scheduler generate at runtime.
+*
+!.gitignore
+!configuration.yaml
+!custom_components/
+!custom_components/.gitkeep

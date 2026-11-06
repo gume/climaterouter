@@ -1,0 +1,51 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Fake HVAC system",
+        "description": "Create a simulated room, outdoor sensor, radiator switch and air conditioner. The simulation is only used for ClimateRouter tests.",
+        "data": {
+          "name": "Name",
+          "room_temperature": "Initial room temperature",
+          "outdoor_temperature": "Initial outdoor temperature",
+          "radiator_power_kw": "Radiator power (kW)",
+          "ac_power_kw": "AC power (kW)",
+          "loss_coefficient": "Heat-loss coefficient",
+          "thermal_mass": "Thermal mass",
+          "update_interval": "Simulation update interval (seconds)",
+          "time_scale": "Simulated seconds per real second",
+          "simulation_enabled": "Run the simulation"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "A fake HVAC system with this name already exists."
+    }
+  },
+  "services": {
+    "set_outdoor_temperature": {
+      "name": "Set outdoor temperature",
+      "description": "Set the simulated outdoor temperature used by the fake HVAC lab."
+    },
+    "set_room_temperature": {
+      "name": "Set room temperature",
+      "description": "Force the simulated room temperature to a value."
+    },
+    "set_simulation": {
+      "name": "Set simulation",
+      "description": "Enable or pause the thermal simulation ticker."
+    },
+    "set_availability": {
+      "name": "Set sensor availability",
+      "description": "Mark the fake room or outdoor sensor as available or unavailable."
+    },
+    "advance": {
+      "name": "Advance simulation",
+      "description": "Fast-forward the thermal simulation by a number of simulated minutes."
+    },
+    "reset": {
+      "name": "Reset simulation",
+      "description": "Reset the fake system to its configured starting state."
+    }
+  }
+}
