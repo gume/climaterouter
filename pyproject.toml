@@ -1,0 +1,36 @@
+[project]
+name = "climaterouter"
+version = "0.1.0"
+description = "Home Assistant climate proxy that routes between a radiator and an AC VTherm"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+  "E",    # pycodestyle
+  "F",    # pyflakes
+  "I",    # isort
+  "UP",   # pyupgrade
+  "B",    # bugbear
+  "ASYNC",# async correctness
+  "RUF",  # ruff-specific
+]
+ignore = [
+  "E501", # line length handled by formatter
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-ra"
+filterwarnings = [
+  "ignore::DeprecationWarning:homeassistant.*",
+]
