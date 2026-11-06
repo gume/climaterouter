@@ -98,3 +98,39 @@ cancel_manual_override:
     entity:
       integration: climaterouter
       domain: climate
+
+set_boost:
+  name: Set boost
+  description: Activate both targets for a bounded time. Requires boost to be enabled and the proxy to be heating.
+  target:
+    entity:
+      integration: climaterouter
+      domain: climate
+  fields:
+    duration_minutes:
+      name: Duration
+      description: How long boost lasts.
+      required: false
+      example: 30
+      selector:
+        number:
+          min: 1
+          max: 180
+          unit_of_measurement: min
+          mode: box
+    targets:
+      name: Targets
+      description: Which targets to activate. Only both is supported in this release.
+      required: false
+      selector:
+        select:
+          options:
+            - both
+
+cancel_boost:
+  name: Cancel boost
+  description: End boost immediately and return to normal routing.
+  target:
+    entity:
+      integration: climaterouter
+      domain: climate

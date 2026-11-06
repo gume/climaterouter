@@ -38,6 +38,15 @@ def _override_remaining(snapshot: RouterSnapshot) -> int:
     return snapshot.override.remaining_minutes(dt_util.utcnow())
 
 
+def _boost_remaining(snapshot: RouterSnapshot) -> int:
+    if snapshot.boost_until is None:
+        return 0
+    seconds = (snapshot.boost_until - dt_util.utcnow()).total_seconds()
+    if seconds <= 0:
+        return 0
+    return int((seconds + 59.9) // 60)
+
+
 SENSOR_SPECS: tuple[
     tuple[
         str,
@@ -102,7 +111,7 @@ SENSOR_SPECS: tuple[
         None,
         None,
         "min",
-        lambda snapshot: 0,
+        _boost_remaining,
     ),
     (
         "last_handover",

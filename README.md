@@ -31,10 +31,10 @@ Scheduler / User UI / Automations
 
 ## Status
 
-**M1–M5 implemented, M6 pending.** The integration package provides the config flow, proxy climate entity,
-outdoor/manual routing, safe handover, bounded manual override, conflict detection, status entities, services and
-diagnostics. Boost is not implemented yet. See [`docs/HANDOVER.md`](docs/HANDOVER.md) for the exact state, test
-results, known gaps and next steps.
+**M1–M6 implemented.** The integration package provides the config flow, proxy climate entity, outdoor/manual
+routing, safe handover, bounded manual override, conflict detection, feature-flagged boost, status entities,
+services and diagnostics. See [`docs/HANDOVER.md`](docs/HANDOVER.md) for the exact state, test results, known gaps
+and next steps.
 
 ## Why a proxy?
 
@@ -60,7 +60,7 @@ The proxy is deliberately thin:
 | Manual override | `climaterouter.set_manual_override` applies a temperature or preset for a duration, then restores the latest schedule command. Implemented in the coordinator and survives handover/restart. |
 | Observability | Binary sensors and sensors for active target, pending handover, override, boost, stale inputs, conflicts, and last handover. |
 | Conflict detection | Detects direct changes to either VTherm, both-targets-on, unavailable targets, and stale inputs; `monitor` by default, with `reassert`/`adopt` policies and guarded states excluded. |
-| Boost preparation | Data model supports multiple active targets; logic is feature-flagged and intentionally not finalized. |
+| Boost | `climaterouter.set_boost` runs both targets for a bounded time when `boost_enabled` is on; heat-only, both targets must be available, and ending boost hands back to single-target routing. |
 
 ## Planned entities
 
@@ -69,7 +69,7 @@ The proxy is deliberately thin:
 - `binary_sensor.climaterouter_heating` / `_cooling` — actual action of the active target.
 - `binary_sensor.climaterouter_handover_pending` — route change waiting for the old target to become idle.
 - `binary_sensor.climaterouter_manual_override` — timed manual override is active.
-- `binary_sensor.climaterouter_boost_active` — boost scaffold is active (feature-flagged).
+- `binary_sensor.climaterouter_boost_active` — both targets are active for a bounded boost.
 - `binary_sensor.climaterouter_conflict` — an underlying VTherm or input is inconsistent with the proxy.
 - `binary_sensor.climaterouter_outdoor_sensor_stale` — outdoor temperature is unavailable or stale.
 - `binary_sensor.climaterouter_manual_switch_stale` — manual routing switch is unavailable.
@@ -79,18 +79,19 @@ The proxy is deliberately thin:
 - `sensor.climaterouter_route_reason` — why the current route was chosen.
 - `sensor.climaterouter_outdoor_temperature` — mirrored outdoor temperature for dashboards/history.
 - `sensor.climaterouter_override_remaining` — minutes left in the manual override.
+- `sensor.climaterouter_boost_remaining` — minutes left in boost.
 - `sensor.climaterouter_last_handover` — timestamp of the last completed handover.
 - `sensor.climaterouter_conflict_count` — diagnostic conflict counter.
 - `select.climaterouter_route_override` — `auto` / `radiator` / `ac` (manual route override).
 - `button.climaterouter_cancel_override`, `_recalculate_route`, `_clear_conflicts`.
 
-## Planned services
+## Services
 
 - `climaterouter.set_manual_override`
 - `climaterouter.cancel_manual_override`
 - `climaterouter.set_route_override`
 - `climaterouter.clear_route_override`
-- `climaterouter.set_boost` / `climaterouter.cancel_boost` (feature-flagged)
+- `climaterouter.set_boost` / `climaterouter.cancel_boost` (requires `boost_enabled`)
 - `climaterouter.recalculate`
 - `climaterouter.clear_conflicts`
 
@@ -119,7 +120,7 @@ The proxy is deliberately thin:
 - Replacing VTherm's TPI, valve regulation, or device control.
 - Implementing a scheduler UI.
 - Cloud connectivity or vendor-specific device control.
-- Finalized boost/dual-target optimization logic in v1.
+- Per-target boost strategies beyond activating both targets for a bounded time.
 - Automatic arbitration with arbitrary third-party automations; the proxy detects and reports conflicts rather than
   silently fighting them.
 

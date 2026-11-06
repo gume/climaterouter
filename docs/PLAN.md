@@ -827,7 +827,8 @@ Additional independent switches:
 
 ## 13. Boost preparation
 
-Boost means activating both targets at the same time. The logic is intentionally not finalized in v1.
+Boost means activating both targets at the same time. The v1 logic is implemented and feature-flagged; more
+advanced strategies remain future work.
 
 ### 13.1 Data model
 
@@ -840,9 +841,9 @@ Boost means activating both targets at the same time. The logic is intentionally
 ### 13.2 Feature flag and service
 
 - `boost_enabled` defaults to `false`.
-- `climaterouter.set_boost` is registered but returns a clear `ServiceValidationError` when disabled.
-- Fields: `duration_minutes`, `targets` (`both` default, or `radiator`/`ac` for future partial boost),
-  `temperature`, `preset_mode`.
+- `climaterouter.set_boost` is registered but raises a clear error when disabled.
+- Fields: `duration_minutes`, `targets` (`both`; partial boost is future work). The desired temperature/preset
+  already on the proxy is forwarded to both targets.
 - `climaterouter.cancel_boost` ends it immediately.
 - `binary_sensor.boost_active` and `sensor.boost_remaining` are always present.
 
@@ -1206,12 +1207,17 @@ interrupted heating in tests.
 
 ### M6 — Boost preparation and release hardening
 
-- [ ] Set-based target model and boost state.
-- [ ] Feature-flagged `set_boost`/`cancel_boost`, binary/remaining sensors.
-- [ ] Safety interlock (heat-only, both capable, no pending handover).
+- [x] Set-based target model and boost state.
+- [x] Feature-flagged `set_boost`/`cancel_boost`, binary/remaining sensors.
+- [x] Safety interlock (heat-only, both capable, no pending handover).
+- [x] Persistence, expiry and boost start/end events.
+- [x] Safe return from boost to single-target routing through the handover state machine.
+- [x] Unit tests for the boost model and pure routing.
+- [x] README/setup/dashboard examples updated for boost.
+- [ ] Integration tests for boost start/expiry/cancel/resume (needs the HA test harness).
+- [ ] Live verification in the test HA.
 - [ ] HACS validation, hassfest, release workflow.
-- [ ] README/setup/dashboard examples complete.
-- [ ] `v0.1.0` tag/release.
+- [ ] `v0.4.0` tag/release (owner action).
 
 **Acceptance:** boost is safely disabled by default; enabling it activates both targets for a bounded time; HACS
 and hassfest pass.

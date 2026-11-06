@@ -12,10 +12,12 @@ from homeassistant.helpers.service import async_extract_entity_ids
 
 from .const import (
     DOMAIN,
+    SERVICE_CANCEL_BOOST,
     SERVICE_CANCEL_MANUAL_OVERRIDE,
     SERVICE_CLEAR_CONFLICTS,
     SERVICE_CLEAR_ROUTE_OVERRIDE,
     SERVICE_RECALCULATE,
+    SERVICE_SET_BOOST,
     SERVICE_SET_MANUAL_OVERRIDE,
     SERVICE_SET_ROUTE_OVERRIDE,
 )
@@ -34,6 +36,12 @@ SET_MANUAL_OVERRIDE_SCHEMA = cv.make_entity_service_schema(
         vol.Optional("temperature"): vol.Coerce(float),
         vol.Optional("preset_mode"): cv.string,
         vol.Optional("hvac_mode"): vol.In([HVAC_OFF, HVAC_HEAT, HVAC_COOL]),
+    }
+)
+SET_BOOST_SCHEMA = cv.make_entity_service_schema(
+    {
+        vol.Optional("duration_minutes"): vol.All(vol.Coerce(int), vol.Range(min=1)),
+        vol.Optional("targets", default="both"): vol.In(["both"]),
     }
 )
 
@@ -99,6 +107,19 @@ def async_register_services(hass: HomeAssistant) -> None:
         for coordinator in await _async_coordinators(hass, call):
             await coordinator.async_cancel_manual_override()
 
+    async def handle_set_boost(call: ServiceCall) -> None:
+        duration = call.data.get("duration_minutes")
+        targets = str(call.data.get("targets", "both"))
+        for coordinator in await _async_coordinators(hass, call):
+            await coordinator.async_set_boost(
+                duration_minutes=duration,
+                targets=targets,
+            )
+
+    async def handle_cancel_boost(call: ServiceCall) -> None:
+        for coordinator in await _async_coordinators(hass, call):
+            await coordinator.async_cancel_boost()
+
     hass.services.async_register(
         DOMAIN, SERVICE_RECALCULATE, handle_recalculate, schema=EMPTY_ENTITY_SCHEMA
     )
@@ -130,5 +151,14 @@ def async_register_services(hass: HomeAssistant) -> None:
         DOMAIN,
         SERVICE_CANCEL_MANUAL_OVERRIDE,
         handle_cancel_manual_override,
+        schema=EMPTY_ENTITY_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_SET_BOOST, handle_set_boost, schema=SET_BOOST_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_CANCEL_BOOST,
+        handle_cancel_boost,
         schema=EMPTY_ENTITY_SCHEMA,
     )

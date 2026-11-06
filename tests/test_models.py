@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from climaterouter.models import (
+    BoostState,
     Conflict,
     DesiredState,
     OverrideState,
@@ -143,6 +144,45 @@ def test_override_from_dict_rejects_invalid_data() -> None:
         )
         is None
     )
+
+
+def test_boost_state_roundtrip_and_expiry() -> None:
+    now = datetime.now(timezone.utc)
+    boost = BoostState(
+        until=now + timedelta(minutes=30),
+        started_at=now,
+        targets=frozenset({Target.RADIATOR, Target.AC}),
+    )
+    restored = BoostState.from_dict(boost.to_dict())
+    assert restored == boost
+    assert restored is not None
+    assert not restored.is_expired(now)
+    assert restored.is_expired(now + timedelta(minutes=31))
+    assert restored.remaining_minutes(now) == 30
+    assert restored.remaining_minutes(now + timedelta(minutes=31)) == 0
+
+
+def test_boost_state_from_dict_tolerates_bad_data() -> None:
+    assert BoostState.from_dict({}) is None
+    assert BoostState.from_dict({"until": "not-a-date", "started_at": "x"}) is None
+    assert (
+        BoostState.from_dict(
+            {
+                "until": "2026-11-06T18:00:00",
+                "started_at": "2026-11-06T17:00:00",
+            }
+        )
+        is None
+    )
+    partial = BoostState.from_dict(
+        {
+            "until": "2026-11-06T18:00:00+00:00",
+            "started_at": "2026-11-06T17:00:00+00:00",
+            "targets": ["ac", "bogus"],
+        }
+    )
+    assert partial is not None
+    assert partial.targets == frozenset({Target.AC})
 
 
 def test_conflict_serialization_is_json_safe() -> None:

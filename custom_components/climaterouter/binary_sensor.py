@@ -86,7 +86,13 @@ SENSOR_SPECS: tuple[
         None,
         lambda snapshot: snapshot.override is not None,
     ),
-    ("boost_active", "Boost active", None, None, lambda _snapshot: False),
+    (
+        "boost_active",
+        "Boost active",
+        None,
+        None,
+        lambda snapshot: snapshot.boost_until is not None,
+    ),
     (
         "conflict",
         "Conflict",

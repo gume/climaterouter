@@ -46,6 +46,8 @@ from .const import (
     CONFLICT_REASSERT_GRACE,
     CONTEXT_TTL,
     DOMAIN,
+    EVENT_BOOST_ENDED,
+    EVENT_BOOST_STARTED,
     EVENT_CONFLICT_CLEARED,
     EVENT_CONFLICT_DETECTED,
     EVENT_HANDOVER_ABORTED,
@@ -59,6 +61,8 @@ from .const import (
     WATCHDOG_INTERVAL,
 )
 from .models import (
+    DEFAULT_BOOST_MINUTES,
+    DEFAULT_MAX_BOOST_MINUTES,
     DEFAULT_TEMPERATURE_TOLERANCE,
     HVAC_COOL,
     HVAC_HEAT,
@@ -67,6 +71,7 @@ from .models import (
     ROUTE_AC,
     ROUTE_AUTO,
     ROUTE_RADIATOR,
+    BoostState,
     Conflict,
     DesiredState,
     HandoverState,
@@ -114,6 +119,8 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._desired = DesiredState()
         self._override: OverrideState | None = None
         self._override_unsub: Any | None = None
+        self._boost: BoostState | None = None
+        self._boost_unsub: Any | None = None
         self._active_targets: frozenset[Target] = frozenset()
         self._pending_target: Target | None = None
         self._handover_state = HandoverState.OFF
@@ -158,6 +165,8 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self.data = self._build_snapshot()
         if self._override is not None:
             self._schedule_override_expiry()
+        if self._boost is not None:
+            self._schedule_boost_expiry()
 
         entity_ids = [
             self.config.radiator_entity_id,
@@ -198,6 +207,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._unsubs.clear()
         self._timers.clear()
         self._cancel_override_timer()
+        self._cancel_boost_timer()
         await self._store.async_save(self._data_to_save())
 
     # ------------------------------------------------------------------
@@ -446,6 +456,122 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             self._override_unsub = None
 
     # ------------------------------------------------------------------
+    # Boost
+    # ------------------------------------------------------------------
+    async def async_set_boost(
+        self,
+        *,
+        duration_minutes: int | None = None,
+        targets: str = "both",
+    ) -> None:
+        """Activate both targets for a bounded time (heat only)."""
+        if not self.config.boost_enabled:
+            raise HomeAssistantError("Boost is disabled in the ClimateRouter options")
+        if targets != "both":
+            raise HomeAssistantError("Only targets=both is supported")
+
+        duration = DEFAULT_BOOST_MINUTES if duration_minutes is None else int(duration_minutes)
+        if duration < 1 or duration > DEFAULT_MAX_BOOST_MINUTES:
+            raise HomeAssistantError(
+                f"Boost duration must be between 1 and {DEFAULT_MAX_BOOST_MINUTES} minutes"
+            )
+
+        self._refresh_inputs()
+        if self._desired.hvac_mode != HVAC_HEAT:
+            raise HomeAssistantError("Boost requires the proxy to be heating")
+        if self._handover_state in (
+            HandoverState.PENDING,
+            HandoverState.STOPPING_OLD,
+            HandoverState.STARTING_NEW,
+        ):
+            raise HomeAssistantError("Cannot start boost while a handover is pending")
+
+        for target in Target:
+            state = self._states[target]
+            if not state.available:
+                raise HomeAssistantError(f"{target.value} is unavailable")
+            if state.hvac_mode == HVAC_COOL:
+                raise HomeAssistantError(f"{target.value} is currently cooling")
+            if not state.capability.can_handle(HVAC_HEAT):
+                raise HomeAssistantError(f"{target.value} cannot heat")
+
+        if self._boost is not None:
+            self._end_boost("replaced")
+
+        now = dt_util.utcnow()
+        self._boost = BoostState(
+            until=now + timedelta(minutes=duration),
+            started_at=now,
+            targets=frozenset(Target),
+        )
+        self._last_command = now
+        self._schedule_boost_expiry()
+        self._store.async_delay_save(self._data_to_save, 1)
+        self.hass.bus.async_fire(
+            EVENT_BOOST_STARTED,
+            {
+                "entry_id": self.entry.entry_id,
+                "until": self._boost.until.isoformat(),
+                "duration_minutes": duration,
+                "targets": sorted(target.value for target in self._boost.targets),
+            },
+        )
+        await self.async_evaluate(explicit=True)
+
+    async def async_cancel_boost(self, cause: str = "cancelled") -> None:
+        """End an active boost and return to normal routing."""
+        if self._boost is None:
+            return
+        self._end_boost(cause)
+        self._store.async_delay_save(self._data_to_save, 1)
+        await self.async_evaluate()
+
+    def _end_boost(self, cause: str) -> None:
+        """Clear the boost state without forwarding; callers evaluate afterwards."""
+        if self._boost is None:
+            return
+        boost = self._boost
+        self._cancel_boost_timer()
+        self._boost = None
+        if self._handover_state is HandoverState.BOOST:
+            self._handover_state = HandoverState.STEADY
+        self.hass.bus.async_fire(
+            EVENT_BOOST_ENDED,
+            {
+                "entry_id": self.entry.entry_id,
+                "until": boost.until.isoformat(),
+                "cause": cause,
+                "targets": sorted(target.value for target in boost.targets),
+            },
+        )
+
+    async def _async_boost_expired(self, _now: datetime) -> None:
+        self._boost_unsub = None
+        if self._boost is None:
+            return
+        if not self._boost.is_expired(dt_util.utcnow()):
+            self._schedule_boost_expiry()
+            return
+        self._end_boost("expired")
+        self._store.async_delay_save(self._data_to_save, 1)
+        await self.async_evaluate()
+
+    def _schedule_boost_expiry(self) -> None:
+        """Schedule the exact deadline in addition to the watchdog check."""
+        self._cancel_boost_timer()
+        if self._boost is None:
+            return
+        delay = (self._boost.until - dt_util.utcnow()).total_seconds()
+        self._boost_unsub = async_call_later(
+            self.hass, max(delay, 0), self._async_boost_expired
+        )
+
+    def _cancel_boost_timer(self) -> None:
+        if self._boost_unsub is not None:
+            self._boost_unsub()
+            self._boost_unsub = None
+
+    # ------------------------------------------------------------------
     # Conflict detection
     # ------------------------------------------------------------------
     async def _async_refresh_conflicts(self) -> None:
@@ -468,34 +594,40 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         boost = self._handover_state is HandoverState.BOOST
         detected: dict[str, Conflict] = {}
 
-        if (
-            active is not None
-            and not self._desired.is_empty
-            and self._desired.hvac_mode in (HVAC_HEAT, HVAC_COOL)
-        ):
-            state = self._states[active]
-            result = target_conflict(self._desired, state, tolerance)
-            if result is not None:
+        if boost:
+            compare_targets = self._active_targets
+        elif active is not None:
+            compare_targets = frozenset({active})
+        else:
+            compare_targets = frozenset()
+
+        if not self._desired.is_empty and self._desired.hvac_mode in (HVAC_HEAT, HVAC_COOL):
+            for compare_target in compare_targets:
+                state = self._states[compare_target]
+                result = target_conflict(self._desired, state, tolerance)
+                if result is None:
+                    continue
                 ctype, expected, actual = result
                 if (
                     self.config.conflict_policy == "adopt"
+                    and not boost
                     and ctype
                     in ("setpoint_mismatch", "preset_mismatch", "hvac_mode_mismatch")
                     and not state.guard
                 ):
-                    self._adopt_external_state(active)
+                    self._adopt_external_state(compare_target)
                 else:
-                    key = f"{ctype}:{active.value}"
+                    key = f"{ctype}:{compare_target.value}"
                     existing = self._conflicts.get(key)
                     detected[key] = Conflict(
                         key=key,
                         type=ctype,
-                        target=active,
+                        target=compare_target,
                         expected=expected,
                         actual=actual,
                         first_seen=existing.first_seen if existing else now,
                         last_seen=now,
-                        source_guess=self._guess_source(active),
+                        source_guess=self._guess_source(compare_target),
                     )
                     if (
                         self.config.conflict_policy == "reassert"
@@ -506,7 +638,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
                         >= CONFLICT_REASSERT_GRACE
                     ):
                         self._conflict_reasserted.add(key)
-                        await self._async_forward_desired(active)
+                        await self._async_forward_desired(compare_target)
 
         if not boost:
             on_targets = [
@@ -667,6 +799,10 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
                 self._publish()
                 return
 
+            if self._boost is not None and self._desired.hvac_mode != HVAC_HEAT:
+                self._end_boost("off" if self._desired.hvac_mode == HVAC_OFF else "mode_changed")
+                self._store.async_delay_save(self._data_to_save, 1)
+
             if self._desired.hvac_mode == HVAC_OFF:
                 await self._async_stop_all()
                 self._active_targets = frozenset()
@@ -686,6 +822,13 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
                 self._publish()
                 return
 
+            if self._boost is not None:
+                decision = self._route_decision()
+                await self._async_apply_boost(decision)
+                await self._async_refresh_conflicts()
+                self._publish()
+                return
+
             if self._desired.hvac_mode not in (HVAC_HEAT, HVAC_COOL):
                 # A setpoint without a mode command must not start a target or
                 # trigger a route change; forward it only to an active one.
@@ -695,8 +838,6 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
                 self._route_reason = self._route_decision().reason
                 self._publish()
                 return
-
-            await self._async_refresh_conflicts()
 
             decision = self._route_decision()
 
@@ -716,6 +857,13 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
                 self._route_reason = decision.reason
                 self._publish()
                 return
+
+            if len(self._active_targets) > 1:
+                await self._async_begin_boost_exit(target, decision.reason)
+                self._publish()
+                return
+
+            await self._async_refresh_conflicts()
 
             if (
                 not explicit
@@ -740,6 +888,73 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
                 await self._async_begin_handover(target, decision.reason, explicit=explicit)
 
             self._publish()
+
+    async def _async_apply_boost(self, decision: RouteDecision) -> None:
+        """Start and configure every target that can serve boost."""
+        targets = frozenset(
+            target
+            for target in decision.targets
+            if self._states[target].available
+            and self._states[target].capability.can_handle(HVAC_HEAT)
+        )
+        if not targets:
+            self._end_boost("unavailable")
+            self._active_targets = frozenset()
+            self._pending_target = None
+            self._handover_state = HandoverState.CONFLICT
+            self._route_reason = "boost_unavailable"
+            self._store.async_delay_save(self._data_to_save, 1)
+            return
+
+        self._active_targets = targets
+        self._pending_target = None
+        self._handover_state = HandoverState.BOOST
+        self._route_reason = decision.reason
+        for target in sorted(targets, key=lambda item: item.value):
+            await self._async_forward_desired(target)
+
+    async def _async_begin_boost_exit(self, target: Target, reason: str) -> None:
+        """Return from boost to ``target`` without interrupting an active cycle."""
+        extras = [active for active in self._active_targets if active is not target]
+        if not extras:
+            self._active_targets = frozenset({target})
+            self._handover_state = HandoverState.STEADY
+            self._route_reason = reason
+            await self._async_forward_desired(target)
+            return
+
+        extra = extras[0]
+        self._route_reason = reason
+        self._pending_target = target
+        self._handover_from = extra
+        self._handover_started_at = dt_util.utcnow()
+        self.hass.bus.async_fire(
+            EVENT_HANDOVER_STARTED,
+            {
+                "entry_id": self.entry.entry_id,
+                "from_target": extra.value,
+                "to_target": target.value,
+                "reason": "boost_end",
+                "old_action": self._states[extra].hvac_action,
+            },
+        )
+
+        extra_state = self._states[extra]
+        if not extra_state.available or extra_state.is_off:
+            self._active_targets = frozenset({target})
+            self._pending_target = None
+            self._handover_state = HandoverState.STEADY
+            self._handover_from = None
+            self._handover_started_at = None
+            await self._async_forward_desired(target)
+            return
+
+        if extra_state.is_active:
+            self._handover_state = HandoverState.PENDING
+            self._idle_since = None
+            return
+
+        await self._async_stop_old(extra, target)
 
     # ------------------------------------------------------------------
     # Handover state machine
@@ -791,19 +1006,36 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
     async def _async_advance_handover(self, decision: RouteDecision) -> None:
         route_target = self._single_target(decision) or self._pending_target
         old_target = self._single_active()
+        if old_target is None and self._handover_from in self._active_targets:
+            # Boost leaves two targets active; the handover still stops one.
+            old_target = self._handover_from
         now = dt_util.utcnow()
 
         if self._handover_state is HandoverState.PENDING:
             if route_target is None:
                 return
-            if old_target is None or route_target in self._active_targets:
+            if old_target is None:
                 # The route reverted before the handover completed.
                 self._pending_target = None
                 self._handover_state = HandoverState.STEADY
-                if self._active_targets:
-                    await self._async_forward_desired(old_target)
                 self._route_reason = decision.reason
                 return
+            if route_target == old_target:
+                other = next(
+                    (active for active in self._active_targets if active is not old_target),
+                    None,
+                )
+                if other is None:
+                    self._pending_target = None
+                    self._handover_state = HandoverState.STEADY
+                    await self._async_forward_desired(old_target)
+                    self._route_reason = decision.reason
+                    return
+                # The route reverted to the target we were about to stop; swap
+                # which target is stopped and which one is kept.
+                self._handover_from = other
+                self._pending_target = old_target
+                old_target = other
 
             old_state = self._states[old_target]
             if not old_state.available or old_state.is_off:
@@ -1132,6 +1364,8 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             return
         if self._override is not None and self._override.is_expired(dt_util.utcnow()):
             await self._async_override_expired(dt_util.utcnow())
+        if self._boost is not None and self._boost.is_expired(dt_util.utcnow()):
+            await self._async_boost_expired(dt_util.utcnow())
         now = time.monotonic()
         for context_id in [key for key, expiry in self._contexts.items() if expiry < now]:
             self._contexts.pop(context_id, None)
@@ -1253,7 +1487,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             cold_threshold=self.config.cold_threshold,
             mild_threshold=self.config.mild_threshold,
             fallback_on_unavailable=self.config.fallback_on_unavailable,
-            boost_active=False,
+            boost_active=self._boost is not None,
         )
         return choose_route(inputs)
 
@@ -1304,7 +1538,8 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             handover_state=self._handover_state,
             desired=self._desired,
             override=self._override,
-            boost_until=None,
+            boost_until=self._boost.until if self._boost is not None else None,
+            boost_targets=self._boost.targets if self._boost is not None else frozenset(),
             conflicts=tuple(self._conflicts.values()),
             conflict_count=self._conflict_count,
             outdoor_temperature=self._outdoor_temperature,
@@ -1393,6 +1628,11 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             override = OverrideState.from_dict(override_data)
             if override is not None and not override.is_expired(dt_util.utcnow()):
                 self._override = override
+        boost_data = data.get("boost")
+        if isinstance(boost_data, dict):
+            boost = BoostState.from_dict(boost_data)
+            if boost is not None and not boost.is_expired(dt_util.utcnow()):
+                self._boost = boost
         self._sync_desired()
         last_route = data.get("last_route")
         if last_route in (Target.RADIATOR.value, Target.AC.value):
@@ -1403,6 +1643,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             "version": STORAGE_VERSION,
             "desired": self._baseline.to_dict(),
             "override": self._override.to_dict() if self._override is not None else None,
+            "boost": self._boost.to_dict() if self._boost is not None else None,
             "last_route": self._last_route.value if self._last_route else None,
         }
 

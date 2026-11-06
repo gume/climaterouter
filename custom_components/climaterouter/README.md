@@ -15,9 +15,8 @@ Implemented milestones (see [`docs/PLAN.md`](../../docs/PLAN.md)):
 - **M5** — conflict detection: own-context suppression, guard classification, setpoint/preset/mode mismatch,
   inactive/both-on targets, unavailable targets, underlying timed presets, monitor/reassert/adopt policies,
   auto-resolve switches, conflict events/history, attributes and the clear button.
-
-Boost (M6) is not implemented yet; the related entities exist as placeholders so dashboards and tests have stable
-IDs.
+- **M6** — feature-flagged boost: bounded both-target operation with heat-only and availability interlocks,
+  persistence, boost events, active/remaining entities, and a safe handover back to single-target routing.
 
 ## Entities
 
@@ -29,9 +28,11 @@ IDs.
 | `sensor.<name>_route_reason` | Why the current route was chosen. |
 | `binary_sensor.<name>_handover_pending` | A route change is waiting for an idle target. |
 | `binary_sensor.<name>_manual_override` | A bounded manual override is active. |
+| `binary_sensor.<name>_boost_active` | Both targets are active during a bounded boost. |
 | `binary_sensor.<name>_conflict` | An underlying VTherm differs from the expected state. |
 | `sensor.<name>_conflict_count` | Total conflicts detected since startup. |
 | `sensor.<name>_override_remaining` | Whole minutes left in the override. |
+| `sensor.<name>_boost_remaining` | Whole minutes left in boost. |
 | `select.<name>_route_override` | Force `auto`, `radiator` or `ac`. |
 | `button.<name>_recalculate_route` | Re-evaluate immediately. |
 | `button.<name>_cancel_override` | Cancel the override and restore the baseline. |
@@ -44,7 +45,9 @@ IDs.
 - `climaterouter.clear_route_override`
 - `climaterouter.set_manual_override` (`temperature`, `preset_mode`, or `hvac_mode` + optional `duration_minutes`)
 - `climaterouter.cancel_manual_override`
-- `climaterouter.clear_conflicts` (placeholder until M5)
+- `climaterouter.set_boost` (`duration_minutes`, `targets: both`; requires `boost_enabled` and heat mode)
+- `climaterouter.cancel_boost`
+- `climaterouter.clear_conflicts`
 
 All services target the proxy climate entity.
 

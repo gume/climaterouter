@@ -189,6 +189,39 @@ def test_boost_targets_both() -> None:
     assert decision.reason == "boost"
 
 
+def test_boost_beats_route_override_but_not_cool() -> None:
+    decision = choose_route(_inputs(boost_active=True, route_override="radiator"))
+    assert _targets(decision) == {Target.RADIATOR, Target.AC}
+    assert decision.reason == "boost"
+
+    decision = choose_route(_inputs(boost_active=True, hvac_mode="cool"))
+    assert _targets(decision) == {Target.AC}
+    assert decision.reason == "hvac_mode_cool"
+
+
+def test_boost_falls_back_when_one_target_unavailable() -> None:
+    decision = choose_route(
+        _inputs(
+            boost_active=True,
+            capabilities=_capabilities(radiator_available=False),
+        )
+    )
+    assert _targets(decision) == {Target.AC}
+    assert decision.reason == "fallback_unavailable"
+
+
+def test_boost_unsupported_when_capabilities_missing() -> None:
+    decision = choose_route(
+        _inputs(
+            boost_active=True,
+            capabilities=_capabilities(radiator_available=False, ac_available=False),
+            fallback_on_unavailable=False,
+        )
+    )
+    assert _targets(decision) == set()
+    assert decision.reason == "unavailable"
+
+
 def test_override_expiry_helper() -> None:
     now = datetime(2026, 11, 6, 12, 0, tzinfo=timezone.utc)  # noqa: UP017
     assert override_is_expired(now - timedelta(seconds=1), now)

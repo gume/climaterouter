@@ -153,6 +153,24 @@
     "cancel_manual_override": {
       "name": "Cancel manual override",
       "description": "Cancel the active override and restore the latest schedule command."
+    },
+    "set_boost": {
+      "name": "Set boost",
+      "description": "Activate both targets for a bounded time. Requires boost to be enabled and the proxy to be heating.",
+      "fields": {
+        "duration_minutes": {
+          "name": "Duration",
+          "description": "How long boost lasts."
+        },
+        "targets": {
+          "name": "Targets",
+          "description": "Which targets to activate. Only both is supported in this release."
+        }
+      }
+    },
+    "cancel_boost": {
+      "name": "Cancel boost",
+      "description": "End boost immediately and return to normal routing."
     }
   }
 }

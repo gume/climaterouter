@@ -251,6 +251,55 @@ class OverrideState:
 
 
 @dataclass(frozen=True)
+class BoostState:
+    """A bounded period with both targets active."""
+
+    until: datetime
+    started_at: datetime
+    targets: frozenset[Target] = field(default_factory=lambda: frozenset(Target))
+
+    def is_expired(self, now: datetime) -> bool:
+        """Return whether the absolute deadline has passed."""
+        return now >= self.until
+
+    def remaining_minutes(self, now: datetime) -> int:
+        """Return the whole minutes left, rounded up for a useful countdown."""
+        seconds = (self.until - now).total_seconds()
+        if seconds <= 0:
+            return 0
+        return int((seconds + 59.9) // 60)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for the store."""
+        return {
+            "until": self.until.isoformat(),
+            "started_at": self.started_at.isoformat(),
+            "targets": sorted(target.value for target in self.targets),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> BoostState | None:
+        """Deserialize a boost from the store, tolerating bad data."""
+        try:
+            until = datetime.fromisoformat(str(data["until"]))
+            started_at = datetime.fromisoformat(str(data["started_at"]))
+        except (KeyError, TypeError, ValueError):
+            return None
+        if until.tzinfo is None or started_at.tzinfo is None:
+            return None
+
+        raw_targets = data.get("targets") or [target.value for target in Target]
+        targets = frozenset(
+            Target(value) for value in raw_targets if value in {target.value for target in Target}
+        )
+        return cls(
+            until=until,
+            started_at=started_at,
+            targets=targets or frozenset(Target),
+        )
+
+
+@dataclass(frozen=True)
 class Conflict:
     """One detected divergence from the expected state."""
 
@@ -292,6 +341,7 @@ class RouterSnapshot:
     desired: DesiredState = field(default_factory=DesiredState)
     override: OverrideState | None = None
     boost_until: datetime | None = None
+    boost_targets: frozenset[Target] = frozenset()
     conflicts: tuple[Conflict, ...] = ()
     conflict_count: int = 0
     outdoor_temperature: float | None = None
@@ -362,6 +412,8 @@ DEFAULT_CONFLICT_POLICY = "monitor"
 DEFAULT_OUTDOOR_STALE_AFTER = 3600
 DEFAULT_OVERRIDE_MINUTES = 60
 DEFAULT_MAX_OVERRIDE_MINUTES = 1440
+DEFAULT_BOOST_MINUTES = 30
+DEFAULT_MAX_BOOST_MINUTES = 180
 DEFAULT_TEMPERATURE_TOLERANCE = 0.2
 
 
