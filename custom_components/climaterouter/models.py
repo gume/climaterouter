@@ -22,6 +22,8 @@ ROUTE_RADIATOR = "radiator"
 ROUTE_AC = "ac"
 ROUTE_BOTH = "both"
 
+DEFAULT_AUTO_RELOCK_SEC = 30
+
 
 class Target(str, Enum):  # noqa: UP042
     """One of the two underlying climate entities."""
@@ -351,6 +353,12 @@ class RouterSnapshot:
     route_override: str = ROUTE_AUTO
     last_handover: datetime | None = None
     last_command: datetime | None = None
+    lock_enabled: bool = False
+    locked: bool = False
+    lock_has_code: bool = False
+    lock_users: bool = True
+    lock_automations: bool = True
+    auto_relock_sec: int = DEFAULT_AUTO_RELOCK_SEC
     targets: dict[Target, UnderlyingState] = field(default_factory=dict)
     hvac_modes: tuple[str, ...] = (HVAC_OFF, HVAC_HEAT)
     preset_modes: tuple[str, ...] = ("none",)
@@ -443,6 +451,11 @@ class RouterConfig:
     max_override_minutes: int = DEFAULT_MAX_OVERRIDE_MINUTES
     temperature_tolerance: float = DEFAULT_TEMPERATURE_TOLERANCE
     boost_enabled: bool = False
+    lock_enabled: bool = False
+    lock_code: str = ""
+    lock_users: bool = True
+    lock_automations: bool = True
+    auto_relock_sec: int = DEFAULT_AUTO_RELOCK_SEC
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> RouterConfig:
@@ -493,4 +506,24 @@ class RouterConfig:
             max_override_minutes=_int("max_override_minutes", DEFAULT_MAX_OVERRIDE_MINUTES),
             temperature_tolerance=_float("temperature_tolerance", DEFAULT_TEMPERATURE_TOLERANCE),
             boost_enabled=_bool("boost_enabled", False),
+            lock_enabled=_bool("lock_enabled", False),
+            lock_code=str(data.get("lock_code") or ""),
+            lock_users=_bool("lock_users", True),
+            lock_automations=_bool("lock_automations", True),
+            auto_relock_sec=_int("auto_relock_sec", DEFAULT_AUTO_RELOCK_SEC),
         )
+
+
+def lock_blocks_context(
+    *,
+    enabled: bool,
+    locked: bool,
+    lock_users: bool,
+    lock_automations: bool,
+    user_id: str | None,
+) -> bool:
+    """Return whether a command from this context is blocked by the lock."""
+    if not (enabled and locked):
+        return False
+    source_is_user = user_id is not None
+    return (lock_users and source_is_user) or (lock_automations and not source_is_user)

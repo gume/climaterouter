@@ -17,10 +17,12 @@ from .const import (
     SERVICE_CLEAR_CONFLICTS,
     SERVICE_CLEAR_ROUTE_OVERRIDE,
     SERVICE_FORCE_HANDOVER,
+    SERVICE_LOCK,
     SERVICE_RECALCULATE,
     SERVICE_SET_BOOST,
     SERVICE_SET_MANUAL_OVERRIDE,
     SERVICE_SET_ROUTE_OVERRIDE,
+    SERVICE_UNLOCK,
 )
 from .coordinator import ClimateRouterCoordinator
 from .models import HVAC_COOL, HVAC_HEAT, HVAC_OFF, ROUTE_AC, ROUTE_AUTO, ROUTE_RADIATOR
@@ -45,6 +47,7 @@ SET_BOOST_SCHEMA = cv.make_entity_service_schema(
         vol.Optional("targets", default="both"): vol.In(["both"]),
     }
 )
+LOCK_SCHEMA = cv.make_entity_service_schema({vol.Optional("code"): cv.string})
 
 
 async def _async_coordinators(
@@ -59,9 +62,10 @@ async def _async_coordinators(
         coordinator
         for coordinator in hass.data.get(DOMAIN, {}).values()
         if coordinator.climate_entity_id in entity_ids
+        or coordinator.lock_entity_id in entity_ids
     ]
     if not coordinators:
-        raise ServiceValidationError("The target is not a ClimateRouter climate entity")
+        raise ServiceValidationError("The target is not a ClimateRouter entity")
     return coordinators
 
 
@@ -106,6 +110,7 @@ def async_register_services(hass: HomeAssistant) -> None:
                 preset_mode=preset_mode,
                 hvac_mode=hvac_mode,
                 duration_minutes=duration,
+                context=call.context,
             )
 
     async def handle_cancel_manual_override(call: ServiceCall) -> None:
@@ -119,11 +124,21 @@ def async_register_services(hass: HomeAssistant) -> None:
             await coordinator.async_set_boost(
                 duration_minutes=duration,
                 targets=targets,
+                context=call.context,
             )
 
     async def handle_cancel_boost(call: ServiceCall) -> None:
         for coordinator in await _async_coordinators(hass, call):
             await coordinator.async_cancel_boost()
+
+    async def handle_lock(call: ServiceCall) -> None:
+        for coordinator in await _async_coordinators(hass, call):
+            await coordinator.async_lock()
+
+    async def handle_unlock(call: ServiceCall) -> None:
+        code = call.data.get("code")
+        for coordinator in await _async_coordinators(hass, call):
+            await coordinator.async_unlock(code=code)
 
     hass.services.async_register(
         DOMAIN, SERVICE_RECALCULATE, handle_recalculate, schema=EMPTY_ENTITY_SCHEMA
@@ -173,3 +188,5 @@ def async_register_services(hass: HomeAssistant) -> None:
         handle_cancel_boost,
         schema=EMPTY_ENTITY_SCHEMA,
     )
+    hass.services.async_register(DOMAIN, SERVICE_LOCK, handle_lock, schema=LOCK_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_UNLOCK, handle_unlock, schema=LOCK_SCHEMA)

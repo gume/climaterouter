@@ -20,6 +20,14 @@ def _serialize_state(state: Any) -> dict[str, Any]:
     return data
 
 
+def _redact(data: dict[str, Any]) -> dict[str, Any]:
+    """Remove secrets before diagnostics are written."""
+    redacted = dict(data)
+    if redacted.get("lock_code"):
+        redacted["lock_code"] = "**REDACTED**"
+    return redacted
+
+
 def _serialize_snapshot(snapshot: RouterSnapshot) -> dict[str, Any]:
     return {
         "ready": snapshot.ready,
@@ -39,6 +47,12 @@ def _serialize_snapshot(snapshot: RouterSnapshot) -> dict[str, Any]:
         "route_override": snapshot.route_override,
         "last_handover": snapshot.last_handover.isoformat() if snapshot.last_handover else None,
         "last_command": snapshot.last_command.isoformat() if snapshot.last_command else None,
+        "lock_enabled": snapshot.lock_enabled,
+        "locked": snapshot.locked,
+        "lock_has_code": snapshot.lock_has_code,
+        "lock_users": snapshot.lock_users,
+        "lock_automations": snapshot.lock_automations,
+        "auto_relock_sec": snapshot.auto_relock_sec,
         "hvac_modes": list(snapshot.hvac_modes),
         "preset_modes": list(snapshot.preset_modes),
         "targets": {
@@ -59,14 +73,15 @@ async def async_get_config_entry_diagnostics(
 
     config = asdict(coordinator.config)
     config["manual_switch_on_target"] = coordinator.config.manual_switch_on_target.value
+    config = _redact(config)
 
     return {
         "version": VERSION,
         "entry": {
             "entry_id": entry.entry_id,
             "title": entry.title,
-            "data": dict(entry.data),
-            "options": dict(entry.options),
+            "data": _redact(dict(entry.data)),
+            "options": _redact(dict(entry.options)),
         },
         "config": config,
         "snapshot": _serialize_snapshot(coordinator.data),

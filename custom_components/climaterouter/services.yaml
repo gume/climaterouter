@@ -142,3 +142,31 @@ cancel_boost:
     entity:
       integration: climaterouter
       domain: climate
+
+lock:
+  name: Lock
+  description: Lock the router so user and automation commands are rejected.
+  target:
+    entity:
+      integration: climaterouter
+      domain:
+        - climate
+        - lock
+
+unlock:
+  name: Unlock
+  description: Unlock the router. A code is required when one is configured.
+  target:
+    entity:
+      integration: climaterouter
+      domain:
+        - climate
+        - lock
+  fields:
+    code:
+      name: Code
+      description: The configured lock code, if any.
+      required: false
+      example: "1234"
+      selector:
+        text:

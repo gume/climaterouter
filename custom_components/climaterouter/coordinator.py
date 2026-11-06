@@ -83,6 +83,7 @@ from .models import (
     SetpointKind,
     Target,
     UnderlyingState,
+    lock_blocks_context,
 )
 from .router import choose_route, normalize_manual_select, target_conflict
 
@@ -130,6 +131,10 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._last_handover: datetime | None = None
         self._last_command: datetime | None = None
 
+        self._locked = False
+        self._auto_relock_unsub: Any | None = None
+        self._auto_relock_at: datetime | None = None
+
         self._ready = False
         self._idle_since: datetime | None = None
         self._off_sent_at: datetime | None = None
@@ -152,6 +157,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._last_state_source: dict[Target, str] = {}
 
         self.climate_entity_id: str | None = None
+        self.lock_entity_id: str | None = None
 
         self.data = self._build_snapshot()
 
@@ -162,11 +168,19 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         """Load persisted state, subscribe to inputs, and start the watchdog."""
         await self._async_load_store()
         self._refresh_inputs()
-        self.data = self._build_snapshot()
         if self._override is not None:
             self._schedule_override_expiry()
         if self._boost is not None:
             self._schedule_boost_expiry()
+        if self._auto_relock_at is not None:
+            remaining = (self._auto_relock_at - dt_util.utcnow()).total_seconds()
+            if remaining <= 0:
+                self._locked = True
+                self._auto_relock_at = None
+                self._store.async_delay_save(self._data_to_save, 1)
+            else:
+                self._schedule_auto_relock(remaining)
+        self.data = self._build_snapshot()
 
         entity_ids = [
             self.config.radiator_entity_id,
@@ -208,6 +222,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._timers.clear()
         self._cancel_override_timer()
         self._cancel_boost_timer()
+        self._cancel_auto_relock()
         await self._store.async_save(self._data_to_save())
 
     # ------------------------------------------------------------------
@@ -218,8 +233,10 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         temperature: float | None = None,
         hvac_mode: str | None = None,
         preset_mode: str | None = None,
+        context: Context | None = None,
     ) -> None:
         """Handle a set_temperature-style command."""
+        self._ensure_unlocked(context)
         if temperature is None and hvac_mode is None and preset_mode is None:
             raise HomeAssistantError("No temperature, preset, or mode supplied")
 
@@ -236,26 +253,32 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
 
         await self._async_command_received()
 
-    async def async_set_hvac_mode(self, hvac_mode: str) -> None:
+    async def async_set_hvac_mode(self, hvac_mode: str, context: Context | None = None) -> None:
         """Handle an explicit HVAC mode change."""
+        self._ensure_unlocked(context)
         self._apply_mode(hvac_mode)
         await self._async_command_received()
 
-    async def async_set_preset_mode(self, preset_mode: str) -> None:
+    async def async_set_preset_mode(
+        self, preset_mode: str, context: Context | None = None
+    ) -> None:
         """Handle a preset change."""
+        self._ensure_unlocked(context)
         self._baseline.setpoint_kind = SetpointKind.PRESET
         self._baseline.preset_mode = preset_mode
         self._baseline.target_temperature = None
         await self._async_command_received()
 
-    async def async_turn_on(self) -> None:
+    async def async_turn_on(self, context: Context | None = None) -> None:
         """Turn the proxy on in the last known (or heat) mode."""
+        self._ensure_unlocked(context)
         if self._baseline.hvac_mode in (None, HVAC_OFF):
             self._baseline.hvac_mode = HVAC_HEAT
         await self._async_command_received()
 
-    async def async_turn_off(self) -> None:
+    async def async_turn_off(self, context: Context | None = None) -> None:
         """Turn everything off immediately."""
+        self._ensure_unlocked(context)
         self._baseline.hvac_mode = HVAC_OFF
         await self._async_command_received()
 
@@ -361,8 +384,10 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         preset_mode: str | None = None,
         hvac_mode: str | None = None,
         duration_minutes: int | None = None,
+        context: Context | None = None,
     ) -> None:
         """Start or replace a bounded manual override."""
+        self._ensure_unlocked(context)
         supplied = [value is not None for value in (temperature, preset_mode, hvac_mode)]
         if sum(supplied) != 1:
             raise HomeAssistantError(
@@ -495,8 +520,10 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         *,
         duration_minutes: int | None = None,
         targets: str = "both",
+        context: Context | None = None,
     ) -> None:
         """Activate both targets for a bounded time (heat only)."""
+        self._ensure_unlocked(context)
         if not self.config.boost_enabled:
             raise HomeAssistantError("Boost is disabled in the ClimateRouter options")
         if targets != "both":
@@ -602,6 +629,84 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         if self._boost_unsub is not None:
             self._boost_unsub()
             self._boost_unsub = None
+
+    # ------------------------------------------------------------------
+    # Lock
+    # ------------------------------------------------------------------
+    @property
+    def lock_enabled(self) -> bool:
+        """Return whether the native lock is enabled."""
+        return self.config.lock_enabled
+
+    @property
+    def locked(self) -> bool:
+        """Return whether the router currently rejects user/automation commands."""
+        return self._locked
+
+    async def async_lock(self) -> None:
+        """Lock the router so user and automation commands are rejected."""
+        if not self.config.lock_enabled:
+            raise HomeAssistantError("The ClimateRouter lock is disabled")
+        self._cancel_auto_relock()
+        self._auto_relock_at = None
+        if not self._locked:
+            self._locked = True
+            self._store.async_delay_save(self._data_to_save, 1)
+            self._publish()
+
+    async def async_unlock(self, code: str | None = None) -> None:
+        """Unlock the router, optionally validating a configured code."""
+        if not self.config.lock_enabled:
+            raise HomeAssistantError("The ClimateRouter lock is disabled")
+        if self.config.lock_code and (code or "") != self.config.lock_code:
+            raise HomeAssistantError("Invalid ClimateRouter lock code")
+        if self._locked:
+            self._locked = False
+            self._store.async_delay_save(self._data_to_save, 1)
+            self._publish()
+        self._schedule_auto_relock()
+
+    def _ensure_unlocked(self, context: Context | None) -> None:
+        """Reject a command when the lock covers its source and mode."""
+        if lock_blocks_context(
+            enabled=self.config.lock_enabled,
+            locked=self._locked,
+            lock_users=self.config.lock_users,
+            lock_automations=self.config.lock_automations,
+            user_id=context.user_id if context is not None else None,
+        ):
+            raise HomeAssistantError(
+                "ClimateRouter is locked; unlock it before sending commands"
+            )
+
+    def _schedule_auto_relock(self, delay: float | None = None) -> None:
+        """Lock the router again after the configured delay."""
+        self._cancel_auto_relock()
+        if not self.config.lock_enabled or self.config.auto_relock_sec <= 0:
+            self._auto_relock_at = None
+            return
+        seconds = self.config.auto_relock_sec if delay is None else delay
+        self._auto_relock_at = dt_util.utcnow() + timedelta(seconds=seconds)
+        self._store.async_delay_save(self._data_to_save, 1)
+        self._auto_relock_unsub = async_call_later(
+            self.hass,
+            max(seconds, 0),
+            self._async_auto_relock,
+        )
+
+    def _cancel_auto_relock(self) -> None:
+        if self._auto_relock_unsub is not None:
+            self._auto_relock_unsub()
+            self._auto_relock_unsub = None
+
+    async def _async_auto_relock(self, _now: datetime) -> None:
+        self._auto_relock_unsub = None
+        self._auto_relock_at = None
+        if not self.config.lock_enabled or self._locked:
+            return
+        self._locked = True
+        self._store.async_delay_save(self._data_to_save, 1)
+        self._publish()
 
     # ------------------------------------------------------------------
     # Conflict detection
@@ -1591,6 +1696,12 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             route_override=self._route_override_value(),
             last_handover=self._last_handover,
             last_command=self._last_command,
+            lock_enabled=self.config.lock_enabled,
+            locked=self._locked,
+            lock_has_code=bool(self.config.lock_code),
+            lock_users=self.config.lock_users,
+            lock_automations=self.config.lock_automations,
+            auto_relock_sec=self.config.auto_relock_sec,
             targets=dict(self._states),
             hvac_modes=tuple(hvac_modes),
             preset_modes=tuple(sorted(presets)),
@@ -1679,6 +1790,17 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         last_route = data.get("last_route")
         if last_route in (Target.RADIATOR.value, Target.AC.value):
             self._last_route = Target(last_route)
+        locked = data.get("locked")
+        if isinstance(locked, bool):
+            self._locked = locked
+        auto_relock_at = data.get("auto_relock_at")
+        if isinstance(auto_relock_at, str):
+            parsed = dt_util.parse_datetime(auto_relock_at)
+            if parsed is not None and not self._locked:
+                self._auto_relock_at = parsed
+        if not self.config.lock_enabled:
+            self._locked = False
+            self._auto_relock_at = None
 
     def _data_to_save(self) -> dict[str, Any]:
         return {
@@ -1687,6 +1809,10 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             "override": self._override.to_dict() if self._override is not None else None,
             "boost": self._boost.to_dict() if self._boost is not None else None,
             "last_route": self._last_route.value if self._last_route else None,
+            "locked": self._locked,
+            "auto_relock_at": (
+                self._auto_relock_at.isoformat() if self._auto_relock_at else None
+            ),
         }
 
 

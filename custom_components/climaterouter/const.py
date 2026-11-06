@@ -8,7 +8,7 @@ from homeassistant.const import Platform
 
 DOMAIN: Final = "climaterouter"
 NAME: Final = "ClimateRouter"
-VERSION: Final = "0.6.0"
+VERSION: Final = "0.7.0"
 
 PLATFORMS: Final = [
     Platform.CLIMATE,
@@ -16,6 +16,7 @@ PLATFORMS: Final = [
     Platform.SENSOR,
     Platform.SELECT,
     Platform.BUTTON,
+    Platform.LOCK,
 ]
 
 # Configuration keys.
@@ -41,6 +42,11 @@ CONF_DEFAULT_OVERRIDE_MINUTES: Final = "default_override_minutes"
 CONF_MAX_OVERRIDE_MINUTES: Final = "max_override_minutes"
 CONF_TEMPERATURE_TOLERANCE: Final = "temperature_tolerance"
 CONF_BOOST_ENABLED: Final = "boost_enabled"
+CONF_LOCK_ENABLED: Final = "lock_enabled"
+CONF_LOCK_CODE: Final = "lock_code"
+CONF_LOCK_USERS: Final = "lock_users"
+CONF_LOCK_AUTOMATIONS: Final = "lock_automations"
+CONF_AUTO_RELOCK_SEC: Final = "auto_relock_sec"
 
 CONFLICT_POLICIES: Final = ["monitor", "reassert", "adopt"]
 
@@ -54,6 +60,8 @@ SERVICE_SET_MANUAL_OVERRIDE: Final = "set_manual_override"
 SERVICE_CANCEL_MANUAL_OVERRIDE: Final = "cancel_manual_override"
 SERVICE_SET_BOOST: Final = "set_boost"
 SERVICE_CANCEL_BOOST: Final = "cancel_boost"
+SERVICE_LOCK: Final = "lock"
+SERVICE_UNLOCK: Final = "unlock"
 
 # Events.
 EVENT_ROUTE_CHANGED: Final = f"{DOMAIN}_route_changed"

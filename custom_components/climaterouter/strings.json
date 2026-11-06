@@ -26,7 +26,12 @@
           "default_override_minutes": "Default override duration",
           "max_override_minutes": "Maximum override duration",
           "temperature_tolerance": "Setpoint tolerance",
-          "boost_enabled": "Enable boost (experimental)"
+          "boost_enabled": "Enable boost (experimental)",
+          "lock_enabled": "Enable native lock",
+          "lock_code": "Lock code (4-8 digits, optional)",
+          "lock_users": "Block commands from users",
+          "lock_automations": "Block commands from automations",
+          "auto_relock_sec": "Auto-relock delay"
         }
       },
       "reconfigure": {
@@ -65,7 +70,8 @@
       "threshold_order": "The cold threshold must not be higher than the mild threshold.",
       "override_order": "The default override duration must not exceed the maximum.",
       "invalid_tolerance": "The temperature tolerance must be greater than zero.",
-      "invalid_duration": "Durations must be non-negative."
+      "invalid_duration": "Durations must be non-negative.",
+      "invalid_lock_code": "The lock code must contain 4 to 8 digits."
     },
     "abort": {
       "already_configured": "This radiator/AC pair is already configured.",
@@ -100,9 +106,24 @@
           "default_override_minutes": "Default override duration",
           "max_override_minutes": "Maximum override duration",
           "temperature_tolerance": "Setpoint tolerance",
-          "boost_enabled": "Enable boost (experimental)"
+          "boost_enabled": "Enable boost (experimental)",
+          "lock_enabled": "Enable native lock",
+          "lock_code": "Lock code (4-8 digits, optional)",
+          "lock_users": "Block commands from users",
+          "lock_automations": "Block commands from automations",
+          "auto_relock_sec": "Auto-relock delay"
         }
       }
+    },
+    "error": {
+      "same_entities": "The radiator and AC must be different entities.",
+      "entity_not_found": "The selected entity does not exist.",
+      "invalid_entity": "The selected entity has the wrong domain.",
+      "threshold_order": "The cold threshold must not be higher than the mild threshold.",
+      "override_order": "The default override duration must not exceed the maximum.",
+      "invalid_tolerance": "The temperature tolerance must be greater than zero.",
+      "invalid_duration": "Durations must be non-negative.",
+      "invalid_lock_code": "The lock code must contain 4 to 8 digits."
     }
   },
   "services": {
@@ -175,6 +196,20 @@
     "cancel_boost": {
       "name": "Cancel boost",
       "description": "End boost immediately and return to normal routing."
+    },
+    "lock": {
+      "name": "Lock",
+      "description": "Lock the router so user and automation commands are rejected."
+    },
+    "unlock": {
+      "name": "Unlock",
+      "description": "Unlock the router. A code is required when one is configured.",
+      "fields": {
+        "code": {
+          "name": "Code",
+          "description": "The configured lock code, if any."
+        }
+      }
     }
   }
 }

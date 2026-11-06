@@ -240,16 +240,17 @@ class RouterClimate(RouterEntity, ClimateEntity):
         await self.coordinator.async_set_temperature(
             temperature=kwargs.get(ATTR_TEMPERATURE),
             hvac_mode=kwargs.get(ATTR_HVAC_MODE),
+            context=self._context,
         )
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
-        await self.coordinator.async_set_hvac_mode(hvac_mode.value)
+        await self.coordinator.async_set_hvac_mode(hvac_mode.value, context=self._context)
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
-        await self.coordinator.async_set_preset_mode(preset_mode)
+        await self.coordinator.async_set_preset_mode(preset_mode, context=self._context)
 
     async def async_turn_on(self) -> None:
-        await self.coordinator.async_turn_on()
+        await self.coordinator.async_turn_on(context=self._context)
 
     async def async_turn_off(self) -> None:
-        await self.coordinator.async_turn_off()
+        await self.coordinator.async_turn_off(context=self._context)

@@ -13,6 +13,7 @@ from climaterouter.models import (
     SetpointKind,
     Target,
     UnderlyingState,
+    lock_blocks_context,
 )
 
 
@@ -212,3 +213,55 @@ def test_underlying_state_active_semantics() -> None:
     assert UnderlyingState(hvac_mode="heat", hvac_action=None).is_active
     # An unavailable entity reports no mode.
     assert not UnderlyingState(available=False).is_active
+
+
+def test_router_config_parses_lock_settings() -> None:
+    config = RouterConfig.from_mapping(
+        {
+            "lock_enabled": "on",
+            "lock_code": 1234,
+            "lock_users": False,
+            "lock_automations": "false",
+            "auto_relock_sec": "60",
+        }
+    )
+    assert config.lock_enabled is True
+    assert config.lock_code == "1234"
+    assert config.lock_users is False
+    assert config.lock_automations is False
+    assert config.auto_relock_sec == 60
+
+
+def test_router_config_lock_defaults() -> None:
+    config = RouterConfig.from_mapping({})
+    assert config.lock_enabled is False
+    assert config.lock_code == ""
+    assert config.lock_users is True
+    assert config.lock_automations is True
+    assert config.auto_relock_sec == 30
+
+
+def test_lock_blocks_context() -> None:
+    base = {
+        "enabled": True,
+        "locked": True,
+        "lock_users": True,
+        "lock_automations": True,
+    }
+    assert lock_blocks_context(**base, user_id="user-1") is True
+    assert lock_blocks_context(**base, user_id=None) is True
+    assert lock_blocks_context(**base, user_id="") is True
+    assert lock_blocks_context(**{**base, "locked": False}, user_id="user-1") is False
+    assert lock_blocks_context(**{**base, "enabled": False}, user_id=None) is False
+    assert (
+        lock_blocks_context(
+            **{**base, "lock_users": False}, user_id="user-1"
+        )
+        is False
+    )
+    assert (
+        lock_blocks_context(
+            **{**base, "lock_automations": False}, user_id=None
+        )
+        is False
+    )

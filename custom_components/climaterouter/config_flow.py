@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -19,10 +20,14 @@ from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
 )
 
 from .const import (
     CONF_AC_ENTITY_ID,
+    CONF_AUTO_RELOCK_SEC,
     CONF_AUTO_RESOLVE_IDLE_TARGETS,
     CONF_AUTO_RESOLVE_SIMULTANEOUS,
     CONF_BOOST_ENABLED,
@@ -31,6 +36,10 @@ from .const import (
     CONF_DEFAULT_OVERRIDE_MINUTES,
     CONF_FALLBACK_ON_UNAVAILABLE,
     CONF_HANDOVER_IDLE_CONFIRM,
+    CONF_LOCK_AUTOMATIONS,
+    CONF_LOCK_CODE,
+    CONF_LOCK_ENABLED,
+    CONF_LOCK_USERS,
     CONF_MANUAL_SWITCH_ENTITY_ID,
     CONF_MANUAL_SWITCH_ON_TARGET,
     CONF_MAX_OVERRIDE_MINUTES,
@@ -48,6 +57,7 @@ from .const import (
     DOMAIN,
 )
 from .models import (
+    DEFAULT_AUTO_RELOCK_SEC,
     DEFAULT_COLD_THRESHOLD,
     DEFAULT_CONFLICT_POLICY,
     DEFAULT_HANDOVER_IDLE_CONFIRM,
@@ -103,6 +113,11 @@ def _defaults(current: Mapping[str, Any] | None = None) -> dict[str, Any]:
             CONF_TEMPERATURE_TOLERANCE, DEFAULT_TEMPERATURE_TOLERANCE
         ),
         CONF_BOOST_ENABLED: current.get(CONF_BOOST_ENABLED, False),
+        CONF_LOCK_ENABLED: current.get(CONF_LOCK_ENABLED, False),
+        CONF_LOCK_CODE: current.get(CONF_LOCK_CODE, ""),
+        CONF_LOCK_USERS: current.get(CONF_LOCK_USERS, True),
+        CONF_LOCK_AUTOMATIONS: current.get(CONF_LOCK_AUTOMATIONS, True),
+        CONF_AUTO_RELOCK_SEC: current.get(CONF_AUTO_RELOCK_SEC, DEFAULT_AUTO_RELOCK_SEC),
     }
 
 
@@ -210,6 +225,21 @@ def _schema(current: Mapping[str, Any] | None = None) -> vol.Schema:
             vol.Required(
                 CONF_BOOST_ENABLED, default=defaults[CONF_BOOST_ENABLED]
             ): BooleanSelector(),
+            vol.Required(
+                CONF_LOCK_ENABLED, default=defaults[CONF_LOCK_ENABLED]
+            ): BooleanSelector(),
+            vol.Optional(
+                CONF_LOCK_CODE, default=defaults[CONF_LOCK_CODE]
+            ): TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD)),
+            vol.Required(
+                CONF_LOCK_USERS, default=defaults[CONF_LOCK_USERS]
+            ): BooleanSelector(),
+            vol.Required(
+                CONF_LOCK_AUTOMATIONS, default=defaults[CONF_LOCK_AUTOMATIONS]
+            ): BooleanSelector(),
+            vol.Required(
+                CONF_AUTO_RELOCK_SEC, default=defaults[CONF_AUTO_RELOCK_SEC]
+            ): _number(0, 3600, 1, "s"),
         }
     )
 
@@ -257,6 +287,14 @@ def _validate_input(hass: HomeAssistant, data: Mapping[str, Any]) -> dict[str, s
 
     if float(data.get(CONF_MIN_ROUTE_DWELL, 0)) < 0:
         errors[CONF_MIN_ROUTE_DWELL] = "invalid_duration"
+
+    lock_code = str(data.get(CONF_LOCK_CODE) or "")
+    if lock_code and not re.fullmatch(r"\d{4,8}", lock_code):
+        errors[CONF_LOCK_CODE] = "invalid_lock_code"
+
+    auto_relock = int(data.get(CONF_AUTO_RELOCK_SEC, DEFAULT_AUTO_RELOCK_SEC))
+    if auto_relock < 0:
+        errors[CONF_AUTO_RELOCK_SEC] = "invalid_duration"
 
     return errors
 
