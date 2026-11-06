@@ -22,6 +22,9 @@ env/
 *.log
 home-assistant.log*
 
+# Local tooling config
+opencode.json
+
 # Editors / OS
 .idea/
 .vscode/
