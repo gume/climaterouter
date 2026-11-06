@@ -13,6 +13,11 @@
 | `0279d7a` | `feat: add override model helpers and serialization` |
 | `0589679` | `feat: implement coordinator-level manual override with persistence` |
 | `b9ff8d2` | `feat: expose manual override entities, services, and translations` |
+| `a9e59a8` | `fix: end the previous override episode before replacing it` |
+| `ce0d040` | `docs: mark M4 implemented and record remaining verification work` |
+| `a461449` | `chore: let HACS install from the GitHub source archive` |
+| `2cfbb3c` | `feat: add pure conflict classification and conflict serialization` |
+| `d4815bc` | `feat: detect and expose target conflicts with monitor/reassert/adopt policies` |
 
 The working tree is clean. Nothing after `95cb4cd` has been pushed (the assistant has no GitHub credentials); the
 owner must push the local commits and tag a release before the live test instance can be updated.
@@ -30,7 +35,7 @@ container.
 | M2 — proxy and routing | Done | Hysteresis, manual switch, route override, `off`/`cool`, command forwarding, status entities. |
 | M3 — safe handover | Done | Idle detection, off confirmation, timeout, queued desired state, startup reconciliation, events. |
 | M4 — manual override | Implemented, not live-verified | Temperature/preset/mode override, absolute deadline, baseline capture/restore, persistence, handover forwarding, events, binary sensor, remaining sensor and cancel button. Unit coverage is limited to the pure model helpers. |
-| M5 — conflicts | Not started | `Conflict` model, guard extraction and own-context registry exist but are unused; `conflicts` is always empty. |
+| M5 — conflicts | Implemented, not live-verified | Setpoint/preset/mode mismatch, unavailable targets, underlying timed presets, stale manual switch, both-on and inactive-target-on detection; own-context and guard suppression; `monitor`/`reassert`/`adopt` policies, auto-resolve switches, events, history and clear button. Unit coverage is limited to the pure classifier. |
 | M6 — boost and release | Not started | `boost_enabled` config and `choose_route(boost_active=True)` exist; the coordinator cannot drive two targets yet. |
 
 The next developer should start with section 8 (Next steps).
@@ -106,8 +111,8 @@ The proxy entity (`climate.py`) delegates to coordinator methods. Important edge
 - With a `heat`/`cool` mode command, the coordinator starts/adopts a target, or begins a handover.
 - Explicit commands raise `HomeAssistantError` if no target can serve the requested mode. Non-explicit evaluation
   (state changes, watchdog, startup) only publishes `route_reason=unavailable`.
-- Commands are sent with `blocking=True` and a per-call `Context`; the context id is stored in `_contexts` for
-  M5 conflict suppression (currently unused).
+- Commands are sent with `blocking=True` and a per-call `Context`; the context id is stored in `_contexts` so the
+  coordinator can ignore state changes caused by its own commands during conflict detection.
 
 ### 3.3 Handover state machine
 
@@ -147,7 +152,7 @@ Events fired on the HA bus:
 
 - `startup_grace` delays reconciliation; with `0` it runs immediately.
 - `_async_reconcile()` adopts one on-target without commanding it. Two active targets produce
-  `handover_state=conflict` (full conflict handling is M5).
+  `handover_state=conflict`, which the M5 conflict detector also reports.
 - Reconciliation calls `async_evaluate()` **non-explicitly**: at startup the underlying platforms may not be
   loaded yet, and an explicit call would raise and fail entry setup.
 - Desired state and last route are persisted in `homeassistant.helpers.storage.Store` under
@@ -190,6 +195,31 @@ Events fired on the HA bus:
   `replaced`, `off`).
 - The climate entity exposes the active override in its `override` attribute; `binary_sensor.<name>_manual_override`
   is on while it is active and `sensor.<name>_override_remaining` counts whole minutes rounded up.
+
+### 3.7 Conflict detection (M5)
+
+- Detection runs only in `STEADY`, `OFF` and `BOOST`, after startup reconciliation, and is skipped while a
+  handover/reconciliation settle window is active. Changes caused by the router's own service calls are ignored
+  through `_contexts` (bounded by `CONTEXT_TTL`).
+- `router.target_conflict()` compares the effective desired state with the active target. Guards, unavailable
+  targets and underlying timed presets are classified separately; guarded targets never produce a conflict.
+- Reported types: `target_unavailable`, `hvac_mode_mismatch`, `setpoint_mismatch`, `preset_mismatch`,
+  `underlying_override`, `both_targets_on`, `inactive_target_on`. Setpoint comparison uses
+  `temperature_tolerance`.
+- `conflict_policy`:
+  - `monitor` (default) reports only;
+  - `reassert` re-sends the desired setpoint/preset once after `CONFLICT_REASSERT_GRACE` seconds while the mode
+    still matches;
+  - `adopt` replaces the baseline with the externally observed state instead of reporting it.
+- `auto_resolve_simultaneous` turns off non-active targets when both are on; `auto_resolve_idle_targets` turns off
+  an idle inactive target. A running target is never interrupted by these switches.
+- Each active conflict keeps its `first_seen`; resolved conflicts are retained in a bounded 50-entry history.
+  Events: `climaterouter_conflict_detected` and `climaterouter_conflict_cleared` (payload includes
+  `conflict.to_dict()`).
+- `button.<name>_clear_conflicts` / `climaterouter.clear_conflicts` acknowledges current conflicts, records them
+  as resolved and publishes the cleared state; it does not change the underlying targets.
+- Exposed through `binary_sensor.<name>_conflict`, `sensor.<name>_conflict_count`, the proxy climate's conflict
+  attributes and diagnostics.
 
 ---
 
@@ -262,9 +292,9 @@ Run against the live container through the REST API, with the proxy wired to the
 | No prior command, underlying target already on | adopted, no commands sent |
 | Diagnostics endpoint | OK |
 
-The M4 override implementation has **not** been exercised in the live instance yet: version `0.2.0` still needs to
-be pushed/released and installed there. Not yet covered by automated tests: config flow, coordinator, handover,
-override expiry/cancel/handover/restart, persistence, event payloads.
+The M4 override and M5 conflict implementations have **not** been exercised in the live instance yet: version
+`0.3.0` still needs to be pushed/released and installed there. Not yet covered by automated tests: config flow,
+coordinator, handover, override expiry/cancel/handover/restart, conflict policies, persistence, event payloads.
 
 ---
 
@@ -280,10 +310,10 @@ override expiry/cancel/handover/restart, persistence, event payloads.
    behaviour still needs live verification and integration tests. A temperature/preset override started while the
    proxy has no mode/active target is stored and counted down but does not by itself start heating; start the proxy
    (`heat`/`cool`) first. The `hvac_mode` override variant is implemented but not part of the normal dashboard flow.
-4. **M5 is a skeleton.** `Conflict` and `_extract_guard()` exist; `_contexts` records outbound call contexts but is
-   never consulted; `RouterSnapshot.conflicts` is always empty, `conflict_count` always `0`, and
-   `clear_conflicts` only republishes. Config fields `conflict_policy`, `auto_resolve_idle_targets`,
-   `auto_resolve_simultaneous` are parsed but unused.
+4. **M5 is implemented but only unit-tested at the classifier layer.** Coordinator policy behaviour (context
+   suppression, settle windows, reassert grace, adopt, auto-resolve, history/clear) still needs integration tests
+   and live verification. Detection deliberately pauses during handover and during the post-command settle window,
+   so very short mismatches may never be reported. `_guess_source()` is heuristic.
 5. **Boost is not wired.** `boost_enabled` is a config option and `choose_route` can return both targets, but
    `_single_target()` makes the coordinator treat that as “no target”. The route override deliberately offers only
    `auto` / `radiator` / `ac`. Do not expose `both` until the set-based start/stop path exists.
@@ -296,7 +326,7 @@ override expiry/cancel/handover/restart, persistence, event payloads.
    options. This works but is inconsistent; simplify when touching the flow.
 10. **`strings.json` and `translations/en.json` are duplicated** and must be edited together.
 11. `binary_sensor.target_mismatch` only compares the two targets' setpoints; it is not the full M5 mismatch
-    detector.
+    detector. Use `binary_sensor.<name>_conflict` for the desired-vs-actual comparison.
 
 ---
 
@@ -304,7 +334,7 @@ override expiry/cancel/handover/restart, persistence, event payloads.
 
 ### 8.1 Immediate
 
-1. Owner: push `main` and tag/release **`v0.2.0`** (the manifest and `const.VERSION` are already bumped).
+1. Owner: push `main` and tag/release **`v0.3.0`** (the manifest and `const.VERSION` are already bumped).
    `hacs.json` no longer sets `zip_release`, so HACS installs from the normal GitHub source archive; no release
    asset needs to be uploaded.
 2. Update ClimateRouter in the test HA through HACS and restart Home Assistant.
@@ -313,7 +343,10 @@ override expiry/cancel/handover/restart, persistence, event payloads.
 4. Exercise M4 in the live instance: start a short temperature override, confirm it reaches the active VTherm,
    cause a handover while it is active, let it expire, and confirm the baseline is restored. Repeat with
    `cancel_manual_override` and `hvac_mode: off`. Record the results here.
-5. Decide whether to keep the 2026.11 version floor or add an older-version import fallback (section 7.1).
+5. Exercise M5 in the live instance: change the active VTherm setpoint externally with `conflict_policy: monitor`;
+   confirm the conflict binary sensor/count/attributes and both events; repeat under `reassert` and `adopt`; turn
+   the inactive VTherm on manually; make a target unavailable. Record the results here.
+6. Decide whether to keep the 2026.11 version floor or add an older-version import fallback (section 7.1).
 
 ### 8.2 Automated tests
 
@@ -340,15 +373,18 @@ with a Python version matching the supported HA. Suggested coverage:
 - [ ] Integration tests for expiry, cancel, off, restart and handover (needs HA test harness).
 - [ ] Live verification in the 2026.11 test instance.
 
-### 8.4 M5 — conflict handling
+### 8.4 M5 — conflict handling (implemented in this checkout)
 
-- Compare desired state with the active target on every state change; ignore state changes caused by our own
-  contexts (`_contexts`, `CONTEXT_TTL`).
-- Populate `RouterSnapshot.conflicts`, `conflict_count`, attributes and the conflict binary sensor.
-- Classify VTherm guards with `_extract_guard()`; guarded/idle states are not conflicts.
-- Implement `monitor` / `reassert` / `adopt` policies and the configured auto-resolve switches.
-- Fire `climaterouter_conflict_detected` / `climaterouter_conflict_cleared`; make `clear_conflicts` real.
-- Handle both-targets-on, unavailable target, stale outdoor sensor and target mismatch.
+- [x] Compare desired state with the active target; ignore state changes caused by our own contexts
+      (`_contexts`, `CONTEXT_TTL`) and settle windows.
+- [x] Populate `RouterSnapshot.conflicts`, `conflict_count`, attributes and the conflict binary sensor.
+- [x] Classify VTherm guards with `_extract_guard()`; guarded/idle states are not conflicts.
+- [x] Implement `monitor` / `reassert` / `adopt` policies and the configured auto-resolve switches.
+- [x] Fire `climaterouter_conflict_detected` / `climaterouter_conflict_cleared`; make `clear_conflicts` real.
+- [x] Handle both-targets-on, unavailable targets, stale outdoor sensor and target mismatch.
+- [x] Unit tests for the pure classifier (`target_conflict`) and `Conflict.to_dict()`.
+- [ ] Integration tests for policy behaviour (needs the HA test harness).
+- [ ] Live verification in the 2026.11 test instance.
 
 ### 8.5 M6 — boost and release
 

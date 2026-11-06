@@ -31,10 +31,10 @@ Scheduler / User UI / Automations
 
 ## Status
 
-**M1–M4 implemented, M5–M6 pending.** The integration package provides the config flow, proxy climate entity,
-outdoor/manual routing, safe handover, bounded manual override, status entities, services and diagnostics.
-Conflict handling and boost are not implemented yet. See [`docs/HANDOVER.md`](docs/HANDOVER.md) for the exact
-state, test results, known gaps and next steps.
+**M1–M5 implemented, M6 pending.** The integration package provides the config flow, proxy climate entity,
+outdoor/manual routing, safe handover, bounded manual override, conflict detection, status entities, services and
+diagnostics. Boost is not implemented yet. See [`docs/HANDOVER.md`](docs/HANDOVER.md) for the exact state, test
+results, known gaps and next steps.
 
 ## Why a proxy?
 
@@ -59,7 +59,7 @@ The proxy is deliberately thin:
 | Safe handover | Route change is deferred until the old target is idle; old target is turned off before the new one starts. |
 | Manual override | `climaterouter.set_manual_override` applies a temperature or preset for a duration, then restores the latest schedule command. Implemented in the coordinator and survives handover/restart. |
 | Observability | Binary sensors and sensors for active target, pending handover, override, boost, stale inputs, conflicts, and last handover. |
-| Conflict detection | Detects direct changes to either VTherm, both-targets-on, unavailable targets, and stale outdoor data. |
+| Conflict detection | Detects direct changes to either VTherm, both-targets-on, unavailable targets, and stale inputs; `monitor` by default, with `reassert`/`adopt` policies and guarded states excluded. |
 | Boost preparation | Data model supports multiple active targets; logic is feature-flagged and intentionally not finalized. |
 
 ## Planned entities
@@ -72,6 +72,7 @@ The proxy is deliberately thin:
 - `binary_sensor.climaterouter_boost_active` — boost scaffold is active (feature-flagged).
 - `binary_sensor.climaterouter_conflict` — an underlying VTherm or input is inconsistent with the proxy.
 - `binary_sensor.climaterouter_outdoor_sensor_stale` — outdoor temperature is unavailable or stale.
+- `binary_sensor.climaterouter_manual_switch_stale` — manual routing switch is unavailable.
 - `binary_sensor.climaterouter_ready` — startup reconciliation is complete.
 - `sensor.climaterouter_active_target` — `radiator`, `ac`, `both`, or `none`.
 - `sensor.climaterouter_pending_target` — pending handover target.

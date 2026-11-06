@@ -1192,13 +1192,15 @@ interrupted heating in tests.
 
 ### M5 — Observability and conflict handling
 
-- [ ] Conflict detection with own-context suppression and guard classification.
-- [ ] Conflict binary sensor, count, attributes, events, clear button.
-- [ ] Stale outdoor/manual switch sensors.
-- [ ] Target mismatch diagnostic.
-- [ ] Conflict policies (`monitor`, `reassert`, `adopt`).
-- [ ] Diagnostics and documentation.
-- [ ] Tests for external changes, guards, both-on, unavailable.
+- [x] Conflict detection with own-context suppression and guard classification.
+- [x] Conflict binary sensor, count, attributes, events, clear button.
+- [x] Stale outdoor/manual switch sensors.
+- [x] Target mismatch diagnostic.
+- [x] Conflict policies (`monitor`, `reassert`, `adopt`).
+- [x] Diagnostics and documentation.
+- [x] Tests for external changes, guards, both-on, unavailable (pure classifier).
+- [ ] Integration tests for policy behaviour and conflict lifecycle (needs the HA test harness).
+- [ ] Live verification in the test HA.
 
 **Acceptance:** direct VTherm changes are visible and logged, not silently fought; guards are allowed; no loops.
 

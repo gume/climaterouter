@@ -12,9 +12,12 @@ Implemented milestones (see [`docs/PLAN.md`](../../docs/PLAN.md)):
   reconciliation, handover events and the handover-pending binary sensor.
 - **M4** — bounded manual override: temperature/preset/mode service, baseline capture/restore, absolute deadline,
   persistence, handover forwarding, override events, override binary sensor, remaining sensor and cancel button.
+- **M5** — conflict detection: own-context suppression, guard classification, setpoint/preset/mode mismatch,
+  inactive/both-on targets, unavailable targets, underlying timed presets, monitor/reassert/adopt policies,
+  auto-resolve switches, conflict events/history, attributes and the clear button.
 
-Conflict detection (M5) and boost (M6) are not implemented yet; the related entities exist as placeholders so
-dashboards and tests have stable IDs.
+Boost (M6) is not implemented yet; the related entities exist as placeholders so dashboards and tests have stable
+IDs.
 
 ## Entities
 
@@ -26,6 +29,8 @@ dashboards and tests have stable IDs.
 | `sensor.<name>_route_reason` | Why the current route was chosen. |
 | `binary_sensor.<name>_handover_pending` | A route change is waiting for an idle target. |
 | `binary_sensor.<name>_manual_override` | A bounded manual override is active. |
+| `binary_sensor.<name>_conflict` | An underlying VTherm differs from the expected state. |
+| `sensor.<name>_conflict_count` | Total conflicts detected since startup. |
 | `sensor.<name>_override_remaining` | Whole minutes left in the override. |
 | `select.<name>_route_override` | Force `auto`, `radiator` or `ac`. |
 | `button.<name>_recalculate_route` | Re-evaluate immediately. |
