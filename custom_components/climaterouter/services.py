@@ -50,7 +50,7 @@ async def _async_coordinators(
     hass: HomeAssistant, call: ServiceCall
 ) -> list[ClimateRouterCoordinator]:
     """Resolve the router coordinators targeted by a service call."""
-    entity_ids = await async_extract_entity_ids(hass, call)
+    entity_ids = await async_extract_entity_ids(call)
     if not entity_ids:
         raise ServiceValidationError("Target at least one ClimateRouter entity")
 
