@@ -43,7 +43,7 @@ class FakeAcClimate(FakeHvacEntity, ClimateEntity):
     """A small thermostat-like fake AC used as an over_climate target."""
 
     _attr_name = "AC"
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_target_temperature_step = 0.5
     _attr_min_temp = MIN_TEMP
     _attr_max_temp = MAX_TEMP
@@ -59,12 +59,12 @@ class FakeAcClimate(FakeHvacEntity, ClimateEntity):
         self._attr_unique_id = f"{entry_id}_ac"
 
     @property
-    def current_temperature(self) -> float:
+    def native_current_temperature(self) -> float:
         """Return the simulated room temperature."""
         return round(self._system.room_temperature, 2)
 
     @property
-    def target_temperature(self) -> float:
+    def native_target_temperature(self) -> float:
         """Return the AC setpoint."""
         return self._system.ac_target_temperature
 
