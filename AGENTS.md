@@ -59,7 +59,8 @@ visible in the test instance:
    - `custom_components/climaterouter/const.py` (`VERSION`)
 3. Commit the change (no push).
 4. The owner pushes `main` and creates/pushes the matching tag/release
-   (for example `v0.2.0`).
+   (for example `v0.2.0`). HACS uses the normal GitHub source archive; `hacs.json`
+   deliberately does not enable `zip_release`, so no release asset is required.
 5. In the test HA, update the repository through HACS and restart Home Assistant.
 6. Verify through the REST API and record the result in `docs/HANDOVER.md`.
 

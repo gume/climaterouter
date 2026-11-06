@@ -305,6 +305,8 @@ override expiry/cancel/handover/restart, persistence, event payloads.
 ### 8.1 Immediate
 
 1. Owner: push `main` and tag/release **`v0.2.0`** (the manifest and `const.VERSION` are already bumped).
+   `hacs.json` no longer sets `zip_release`, so HACS installs from the normal GitHub source archive; no release
+   asset needs to be uploaded.
 2. Update ClimateRouter in the test HA through HACS and restart Home Assistant.
 3. Read the actual VTherm entity IDs and the router entry configuration back through the REST API, then re-run the
    routing/handover scenarios with VTherm instead of the fake ACs.
