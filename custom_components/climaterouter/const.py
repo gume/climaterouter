@@ -71,6 +71,8 @@ STORAGE_KEY: Final = f"{DOMAIN}.{{entry_id}}"
 # Internal timings that are not user-configurable.
 WATCHDOG_INTERVAL: Final = 30
 CONTEXT_TTL: Final = 30
+CONFLICT_CLEAR_AFTER: Final = 60
+CONFLICT_REASSERT_GRACE: Final = 15
 
 ATTR_ACTIVE_TARGET: Final = "active_target"
 ATTR_PENDING_TARGET: Final = "pending_target"

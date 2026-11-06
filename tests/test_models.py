@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from climaterouter.models import (
+    Conflict,
     DesiredState,
     OverrideState,
     RouterConfig,
@@ -142,6 +143,24 @@ def test_override_from_dict_rejects_invalid_data() -> None:
         )
         is None
     )
+
+
+def test_conflict_serialization_is_json_safe() -> None:
+    now = datetime.now(timezone.utc)
+    conflict = Conflict(
+        key="setpoint_mismatch:ac",
+        type="setpoint_mismatch",
+        target=Target.AC,
+        expected=21.0,
+        actual=24.0,
+        first_seen=now,
+        last_seen=now,
+        source_guess="user",
+    )
+    data = conflict.to_dict()
+    assert data["target"] == "ac"
+    assert data["expected"] == 21.0
+    assert isinstance(data["first_seen"], str)
 
 
 def test_underlying_state_active_semantics() -> None:

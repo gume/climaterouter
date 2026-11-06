@@ -129,7 +129,7 @@ SENSOR_SPECS: tuple[
         SensorStateClass.MEASUREMENT,
         EntityCategory.DIAGNOSTIC,
         None,
-        lambda snapshot: len(snapshot.conflicts),
+        lambda snapshot: snapshot.conflict_count,
     ),
 )
 

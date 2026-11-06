@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -41,8 +42,12 @@ from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import TemperatureConverter
 
 from .const import (
+    CONFLICT_CLEAR_AFTER,
+    CONFLICT_REASSERT_GRACE,
     CONTEXT_TTL,
     DOMAIN,
+    EVENT_CONFLICT_CLEARED,
+    EVENT_CONFLICT_DETECTED,
     EVENT_HANDOVER_ABORTED,
     EVENT_HANDOVER_COMPLETED,
     EVENT_HANDOVER_STARTED,
@@ -62,6 +67,7 @@ from .models import (
     ROUTE_AC,
     ROUTE_AUTO,
     ROUTE_RADIATOR,
+    Conflict,
     DesiredState,
     HandoverState,
     OverrideState,
@@ -73,7 +79,7 @@ from .models import (
     Target,
     UnderlyingState,
 )
-from .router import choose_route, normalize_manual_select
+from .router import choose_route, normalize_manual_select, target_conflict
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -129,6 +135,14 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._unsubs: list[Any] = []
         self._timers: list[Any] = []
         self._update_scheduled = False
+
+        self._conflicts: dict[str, Conflict] = {}
+        self._conflict_history: list[Conflict] = []
+        self._conflict_count = 0
+        self._conflict_cleared_since: dict[str, datetime] = {}
+        self._conflict_reasserted: set[str] = set()
+        self._suppress_conflicts_until: datetime | None = None
+        self._last_state_source: dict[Target, str] = {}
 
         self.climate_entity_id: str | None = None
 
@@ -257,8 +271,20 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         await self.async_evaluate(explicit=True)
 
     async def async_clear_conflicts(self) -> None:
-        """Acknowledge conflicts (no conflict tracking before M5)."""
+        """Acknowledge and clear the current conflict state."""
+        now = dt_util.utcnow()
+        for conflict in list(self._conflicts.values()):
+            self._record_conflict_history(replace(conflict, resolved=True, last_seen=now))
+            self._fire_conflict_cleared(conflict, now)
+        self._conflicts.clear()
+        self._conflict_cleared_since.clear()
+        self._conflict_reasserted.clear()
         self._publish()
+
+    @property
+    def conflict_history(self) -> tuple[Conflict, ...]:
+        """Return the bounded recent conflict history for diagnostics."""
+        return tuple(self._conflict_history)
 
     def _apply_mode(self, hvac_mode: str) -> None:
         """Update the desired HVAC mode with validation."""
@@ -420,6 +446,216 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             self._override_unsub = None
 
     # ------------------------------------------------------------------
+    # Conflict detection
+    # ------------------------------------------------------------------
+    async def _async_refresh_conflicts(self) -> None:
+        """Compare target state with the expected state and apply the policy."""
+        if not self._ready:
+            return
+        if self._handover_state not in (
+            HandoverState.STEADY,
+            HandoverState.OFF,
+            HandoverState.BOOST,
+        ):
+            return
+
+        now = dt_util.utcnow()
+        if self._conflicts_suppressed(now):
+            return
+
+        tolerance = self.config.temperature_tolerance or DEFAULT_TEMPERATURE_TOLERANCE
+        active = self._single_active()
+        boost = self._handover_state is HandoverState.BOOST
+        detected: dict[str, Conflict] = {}
+
+        if (
+            active is not None
+            and not self._desired.is_empty
+            and self._desired.hvac_mode in (HVAC_HEAT, HVAC_COOL)
+        ):
+            state = self._states[active]
+            result = target_conflict(self._desired, state, tolerance)
+            if result is not None:
+                ctype, expected, actual = result
+                if (
+                    self.config.conflict_policy == "adopt"
+                    and ctype
+                    in ("setpoint_mismatch", "preset_mismatch", "hvac_mode_mismatch")
+                    and not state.guard
+                ):
+                    self._adopt_external_state(active)
+                else:
+                    key = f"{ctype}:{active.value}"
+                    existing = self._conflicts.get(key)
+                    detected[key] = Conflict(
+                        key=key,
+                        type=ctype,
+                        target=active,
+                        expected=expected,
+                        actual=actual,
+                        first_seen=existing.first_seen if existing else now,
+                        last_seen=now,
+                        source_guess=self._guess_source(active),
+                    )
+                    if (
+                        self.config.conflict_policy == "reassert"
+                        and ctype in ("setpoint_mismatch", "preset_mismatch")
+                        and state.hvac_mode == self._desired.hvac_mode
+                        and key not in self._conflict_reasserted
+                        and (now - detected[key].first_seen).total_seconds()
+                        >= CONFLICT_REASSERT_GRACE
+                    ):
+                        self._conflict_reasserted.add(key)
+                        await self._async_forward_desired(active)
+
+        if not boost:
+            on_targets = [
+                target
+                for target in Target
+                if self._states[target].available
+                and self._states[target].hvac_mode not in (None, HVAC_OFF)
+            ]
+            if len(on_targets) > 1:
+                key = "both_targets_on"
+                existing = self._conflicts.get(key)
+                detected[key] = Conflict(
+                    key=key,
+                    type="both_targets_on",
+                    target=None,
+                    expected=active.value if active else "one_target",
+                    actual=sorted(target.value for target in on_targets),
+                    first_seen=existing.first_seen if existing else now,
+                    last_seen=now,
+                    source_guess="unknown",
+                )
+                if self.config.auto_resolve_simultaneous:
+                    for target in on_targets:
+                        if target is not active and not self._states[target].is_active:
+                            await self._async_turn_off_target(target)
+            elif active is not None:
+                for other in Target:
+                    if other is active:
+                        continue
+                    state = self._states[other]
+                    if not state.available or state.hvac_mode in (None, HVAC_OFF):
+                        continue
+                    key = f"inactive_target_on:{other.value}"
+                    existing = self._conflicts.get(key)
+                    detected[key] = Conflict(
+                        key=key,
+                        type="inactive_target_on",
+                        target=other,
+                        expected=HVAC_OFF,
+                        actual=state.hvac_mode,
+                        first_seen=existing.first_seen if existing else now,
+                        last_seen=now,
+                        source_guess=self._guess_source(other),
+                    )
+                    if self.config.auto_resolve_idle_targets and not state.is_active:
+                        await self._async_turn_off_target(other)
+
+        self._reconcile_conflict_records(detected, now)
+        if detected:
+            self._publish()
+
+    def _reconcile_conflict_records(
+        self, detected: dict[str, Conflict], now: datetime
+    ) -> None:
+        """Keep new conflicts, age out resolved ones, and emit events."""
+        for key, conflict in detected.items():
+            self._conflict_cleared_since.pop(key, None)
+            if key not in self._conflicts:
+                self._conflict_count += 1
+                self._record_conflict_history(conflict)
+                self.hass.bus.async_fire(
+                    EVENT_CONFLICT_DETECTED,
+                    {"entry_id": self.entry.entry_id, "conflict": conflict.to_dict()},
+                )
+                _LOGGER.warning(
+                    "Conflict detected on %s: %s expected=%s actual=%s",
+                    conflict.target.value if conflict.target else "router",
+                    conflict.type,
+                    conflict.expected,
+                    conflict.actual,
+                )
+            self._conflicts[key] = conflict
+
+        for key in list(self._conflicts):
+            if key in detected:
+                continue
+            since = self._conflict_cleared_since.setdefault(key, now)
+            if (now - since).total_seconds() < CONFLICT_CLEAR_AFTER:
+                continue
+            conflict = self._conflicts.pop(key)
+            self._conflict_cleared_since.pop(key, None)
+            self._conflict_reasserted.discard(key)
+            self._record_conflict_history(replace(conflict, resolved=True, last_seen=now))
+            self._fire_conflict_cleared(conflict, now)
+
+    def _conflicts_suppressed(self, now: datetime) -> bool:
+        """Return whether own calls or the settle window suppress comparison."""
+        if self._suppress_conflicts_until is not None and now < self._suppress_conflicts_until:
+            return True
+        if self._last_command is not None:
+            settle = max(self.config.settle_time, 0)
+            if (now - self._last_command).total_seconds() < settle:
+                return True
+        return False
+
+    def _has_target_conflict(self, target: Target) -> bool:
+        """Return whether a target has an active conflict we should not fight."""
+        types = {
+            "setpoint_mismatch",
+            "preset_mismatch",
+            "hvac_mode_mismatch",
+            "underlying_override",
+            "target_unavailable",
+        }
+        return any(
+            conflict.target is target and conflict.type in types
+            for conflict in self._conflicts.values()
+        )
+
+    def _adopt_external_state(self, target: Target) -> None:
+        """Adopt a direct change on the active target as the new baseline."""
+        self._baseline = self._adopt_desired(target)
+        self._sync_desired()
+        self._store.async_delay_save(self._data_to_save, 1)
+        _LOGGER.info(
+            "Adopted external state from %s as the new baseline (conflict_policy=adopt)",
+            target.value,
+        )
+
+    def _guess_source(self, target: Target) -> str:
+        state = self._states.get(target)
+        if state is not None and state.timed_preset_active:
+            return "vtherm_timed_preset"
+        if state is not None and state.guard:
+            return "vtherm_guard"
+        return self._last_state_source.get(target, "unknown")
+
+    async def _async_turn_off_target(self, target: Target) -> None:
+        """Turn off an idle target during automatic conflict resolution."""
+        try:
+            await self._async_climate_call(target, "set_hvac_mode", {"hvac_mode": HVAC_OFF})
+        except HomeAssistantError as err:
+            _LOGGER.warning("Failed to auto-resolve %s: %s", target.value, err)
+        self._states[target] = self._read_target(target)
+
+    def _record_conflict_history(self, conflict: Conflict) -> None:
+        self._conflict_history.append(conflict)
+        if len(self._conflict_history) > 50:
+            del self._conflict_history[:-50]
+
+    def _fire_conflict_cleared(self, conflict: Conflict, now: datetime) -> None:
+        data = conflict.to_dict()
+        data["resolved_at"] = now.isoformat()
+        self.hass.bus.async_fire(
+            EVENT_CONFLICT_CLEARED,
+            {"entry_id": self.entry.entry_id, "conflict": data},
+        )
+
+    # ------------------------------------------------------------------
     # Evaluation
     # ------------------------------------------------------------------
     async def async_evaluate(self, *, explicit: bool = False) -> None:
@@ -460,6 +696,8 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
                 self._publish()
                 return
 
+            await self._async_refresh_conflicts()
+
             decision = self._route_decision()
 
             if self._handover_state in (
@@ -493,7 +731,11 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             if self._active_targets and target in self._active_targets:
                 self._route_reason = decision.reason
                 self._handover_state = HandoverState.STEADY
-                await self._async_forward_desired(target)
+                if explicit or (
+                    not self._conflicts_suppressed(dt_util.utcnow())
+                    and not self._has_target_conflict(target)
+                ):
+                    await self._async_forward_desired(target)
             else:
                 await self._async_begin_handover(target, decision.reason, explicit=explicit)
 
@@ -527,8 +769,10 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             return
 
         old_state = self._states[old_target]
-        if old_state.is_off:
-            await self._async_stop_old(old_target, new_target)
+        if not old_state.available or old_state.is_off:
+            # An unavailable target cannot confirm an off command; start the new
+            # one and let conflict detection catch it if it reappears on.
+            await self._async_start_new(new_target)
             return
 
         interrupt = explicit and self._desired.hvac_mode == HVAC_COOL
@@ -562,7 +806,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
                 return
 
             old_state = self._states[old_target]
-            if old_state.is_off:
+            if not old_state.available or old_state.is_off:
                 await self._async_start_new(route_target)
                 return
             if not old_state.is_active:
@@ -581,7 +825,11 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             return
 
         if self._handover_state is HandoverState.STOPPING_OLD:
-            if old_target is None or self._states[old_target].is_off:
+            if (
+                old_target is None
+                or not self._states[old_target].available
+                or self._states[old_target].is_off
+            ):
                 if route_target is not None:
                     await self._async_start_new(route_target)
                 return
@@ -812,9 +1060,10 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
     # Inputs and snapshot
     # ------------------------------------------------------------------
     @callback
-    def _handle_state_change(self, _event: Event) -> None:
+    def _handle_state_change(self, event: Event) -> None:
         """Schedule evaluation, coalescing bursts of state changes."""
         self._refresh_inputs()
+        self._remember_event_source(event)
         if not self._ready:
             self._publish()
             return
@@ -822,6 +1071,55 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             return
         self._update_scheduled = True
         self.hass.async_create_task(self._async_run_scheduled_update())
+
+    def _remember_event_source(self, event: Event) -> None:
+        """Track who changed a target and suppress our own calls."""
+        new_state = event.data.get("new_state")
+        entity_id = event.data.get("entity_id")
+        if entity_id is None and new_state is not None:
+            entity_id = new_state.entity_id
+        target = self._target_for_entity(entity_id)
+        if target is None:
+            return
+
+        if self._event_is_own(event):
+            self._last_state_source[target] = "proxy"
+            settle = max(self.config.settle_time, 1)
+            until = dt_util.utcnow() + timedelta(seconds=settle)
+            if self._suppress_conflicts_until is None or until > self._suppress_conflicts_until:
+                self._suppress_conflicts_until = until
+        else:
+            self._last_state_source[target] = self._source_from_event(event)
+
+    def _event_is_own(self, event: Event) -> bool:
+        context = getattr(event, "context", None)
+        ids = [
+            getattr(context, "id", None) if context is not None else None,
+            getattr(context, "parent_id", None) if context is not None else None,
+        ]
+        new_state = event.data.get("new_state")
+        state_context = getattr(new_state, "context", None) if new_state is not None else None
+        if state_context is not None:
+            ids.extend([state_context.id, state_context.parent_id])
+        return any(context_id and context_id in self._contexts for context_id in ids)
+
+    @staticmethod
+    def _source_from_event(event: Event) -> str:
+        context = getattr(event, "context", None)
+        if context is None:
+            return "unknown"
+        if context.user_id:
+            return "user"
+        if context.parent_id:
+            return "automation"
+        return "unknown"
+
+    def _target_for_entity(self, entity_id: str | None) -> Target | None:
+        if entity_id == self.config.radiator_entity_id:
+            return Target.RADIATOR
+        if entity_id == self.config.ac_entity_id:
+            return Target.AC
+        return None
 
     async def _async_run_scheduled_update(self) -> None:
         try:
@@ -1007,7 +1305,8 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             desired=self._desired,
             override=self._override,
             boost_until=None,
-            conflicts=(),
+            conflicts=tuple(self._conflicts.values()),
+            conflict_count=self._conflict_count,
             outdoor_temperature=self._outdoor_temperature,
             outdoor_stale=self._outdoor_stale,
             manual_switch_state=self._manual_switch_state,
@@ -1040,6 +1339,10 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         state = self._states[target]
         context = Context()
         self._contexts[context.id] = time.monotonic() + CONTEXT_TTL
+        settle = max(self.config.settle_time, 1)
+        until = dt_util.utcnow() + timedelta(seconds=settle)
+        if self._suppress_conflicts_until is None or until > self._suppress_conflicts_until:
+            self._suppress_conflicts_until = until
         _LOGGER.debug("Calling climate.%s on %s: %s", service, state.entity_id, data)
         await self.hass.services.async_call(
             "climate",

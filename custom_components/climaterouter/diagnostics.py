@@ -29,6 +29,7 @@ def _serialize_snapshot(snapshot: RouterSnapshot) -> dict[str, Any]:
         "route_reason": snapshot.route_reason,
         "handover_state": snapshot.handover_state.value,
         "desired": snapshot.desired.to_dict(),
+        "override": snapshot.override.to_dict() if snapshot.override else None,
         "outdoor_temperature": snapshot.outdoor_temperature,
         "outdoor_stale": snapshot.outdoor_stale,
         "manual_switch_state": snapshot.manual_switch_state,
@@ -41,7 +42,8 @@ def _serialize_snapshot(snapshot: RouterSnapshot) -> dict[str, Any]:
         "targets": {
             target.value: _serialize_state(state) for target, state in snapshot.targets.items()
         },
-        "conflicts": [],
+        "conflicts": [conflict.to_dict() for conflict in snapshot.conflicts],
+        "conflict_count": snapshot.conflict_count,
     }
 
 
@@ -68,5 +70,8 @@ async def async_get_config_entry_diagnostics(
         "snapshot": _serialize_snapshot(coordinator.data),
         "targets_present": sorted(target.value for target in coordinator.data.targets),
         "active_targets": sorted(target.value for target in coordinator.data.active_targets),
-        "conflict_count": len(coordinator.data.conflicts),
+        "conflict_count": coordinator.data.conflict_count,
+        "conflict_history": [
+            conflict.to_dict() for conflict in coordinator.conflict_history
+        ],
     }
