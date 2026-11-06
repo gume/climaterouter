@@ -26,6 +26,7 @@
 | `2b9b300` | `fix: call async_extract_entity_ids with the 2026.11 signature` |
 | `081aa85` | `feat: add forced handover and forward commands during pending handover` |
 | `bf19c92` | `docs: record the forced-handover commit` |
+| `28fbf93` | `feat: expose read-only VTherm attributes for Lovelace cards` |
 
 Everything through `bf19c92` (version **0.5.0**) is pushed to `origin/main` and installed in the live test instance.
 The working tree now contains the read-only VTherm display attributes for Lovelace cards (version **0.6.0**), which
