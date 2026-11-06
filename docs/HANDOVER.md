@@ -24,7 +24,7 @@
 | `fa4899e` | `docs: record M6 boost behaviour and verification steps` |
 | `1719d3d` | `ci: add hassfest and HACS validation workflow` |
 | `2b9b300` | `fix: call async_extract_entity_ids with the 2026.11 signature` |
-| `e6190ec` | `feat: add forced handover and forward commands during pending handover` |
+| `081aa85` | `feat: add forced handover and forward commands during pending handover` |
 
 Everything up to `c41bd4a` (tag `v0.4.0`) is pushed. `2b9b300` is local and must be pushed by the owner; the
 assistant has no GitHub credentials. The live instance is updated through the Marketplace, not by pushing directly
