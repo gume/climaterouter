@@ -10,9 +10,12 @@
 | `1e14b3f` | `test: use native temperature properties in fake_ac` |
 | `95cb4cd` | `test: expose HA on port 38123 instead of host networking` |
 | `f4dfcaa` | `test: add room/outdoor temperature controls to fake_hvac` |
+| `0279d7a` | `feat: add override model helpers and serialization` |
+| `0589679` | `feat: implement coordinator-level manual override with persistence` |
+| `b9ff8d2` | `feat: expose manual override entities, services, and translations` |
 
-The working tree is clean. Nothing after `95cb4cd` has been pushed (the assistant had no GitHub credentials); push
-the local commits before starting new work.
+The working tree is clean. Nothing after `95cb4cd` has been pushed (the assistant has no GitHub credentials); the
+owner must push the local commits and tag a release before the live test instance can be updated.
 
 ---
 
@@ -26,7 +29,7 @@ container.
 | M1 — skeleton and config flow | Done | Config/options/reconfigure flows, device, proxy entity, services, diagnostics, translations, CI. |
 | M2 — proxy and routing | Done | Hysteresis, manual switch, route override, `off`/`cool`, command forwarding, status entities. |
 | M3 — safe handover | Done | Idle detection, off confirmation, timeout, queued desired state, startup reconciliation, events. |
-| M4 — manual override | Not started | `OverrideState` model and placeholder sensor/entity exist; no service or timer yet. |
+| M4 — manual override | Implemented, not live-verified | Temperature/preset/mode override, absolute deadline, baseline capture/restore, persistence, handover forwarding, events, binary sensor, remaining sensor and cancel button. Unit coverage is limited to the pure model helpers. |
 | M5 — conflicts | Not started | `Conflict` model, guard extraction and own-context registry exist but are unused; `conflicts` is always empty. |
 | M6 — boost and release | Not started | `boost_enabled` config and `choose_route(boost_active=True)` exist; the coordinator cannot drive two targets yet. |
 
@@ -164,6 +167,30 @@ Events fired on the HA bus:
 - Presets are the intersection of both targets' presets, or the union when the intersection is empty, plus `none`.
 - `min_temp`, `max_temp` and `target_temperature_step` come from the active target (or the AC/first available one).
 
+### 3.6 Manual override (M4)
+
+- Services: `climaterouter.set_manual_override` and `climaterouter.cancel_manual_override`, plus
+  `button.<name>_cancel_override`.
+- `set_manual_override` requires exactly one of `temperature`, `preset_mode`, or `hvac_mode`. `hvac_mode: off`
+  cancels the override and turns the proxy off. `duration_minutes` defaults to `default_override_minutes` and is
+  capped by `max_override_minutes`.
+- The coordinator keeps a **baseline** desired state (the latest schedule/proxy command) and a separate
+  `OverrideState` (kind, value, absolute UTC deadline, baseline snapshot, start time). The effective desired state
+  is the baseline with the override applied.
+- Starting an override when the baseline is empty snapshots the active target's actual state. Starting a second
+  override keeps the original baseline and replaces the value/deadline.
+- Schedule commands received during an override update the baseline but do **not** replace the override value.
+  An explicit `off` cancels the override (`cause=off`).
+- Handovers use the effective desired state, so the override is automatically applied to the new target after a
+  handover. Expiry/cancel restores the baseline and forwards it to the active target (or queues it while a
+  handover is pending).
+- Expiry is scheduled exactly at the deadline and is also checked by the 30 s watchdog. The override is stored in
+  the existing `Store` as an absolute UTC timestamp plus baseline; expired overrides are discarded on startup.
+- Events: `climaterouter_override_started` and `climaterouter_override_ended` (causes: `expired`, `cancelled`,
+  `replaced`, `off`).
+- The climate entity exposes the active override in its `override` attribute; `binary_sensor.<name>_manual_override`
+  is on while it is active and `sensor.<name>_override_remaining` counts whole minutes rounded up.
+
 ---
 
 ## 4. Test lab state
@@ -185,7 +212,9 @@ Defined in `test_environment/`; full instructions in [`TEST_ENVIRONMENT.md`](TES
   `01M6S30VNZAM426275PKQQ5G2Z`) points at `climate.fake_ac` (radiator role) and `climate.fake_ac_2` (AC role),
   with `min_route_dwell=0`, `handover_idle_confirm=1`, `off_confirm_timeout=5`, `startup_grace=0`,
   `settle_time=1`. It is currently **off**.
-- **Versatile Thermostat is not installed yet.** The two real VTherm entries are the main outstanding setup task.
+- **Versatile Thermostat is now installed and configured** in the live test instance (the owner completed this
+  outside this checkout). The exact VTherm entity IDs and the router entry wiring must be read back through the HA
+  API; they are not in this repository.
 
 The `.storage` directory is git-ignored. `test_environment/reset.sh` removes it, so test entries are disposable; do
 not encode assumptions about them in code.
@@ -233,7 +262,9 @@ Run against the live container through the REST API, with the proxy wired to the
 | No prior command, underlying target already on | adopted, no commands sent |
 | Diagnostics endpoint | OK |
 
-Not yet covered by automated tests: config flow, coordinator, handover, persistence, event payloads.
+The M4 override implementation has **not** been exercised in the live instance yet: version `0.2.0` still needs to
+be pushed/released and installed there. Not yet covered by automated tests: config flow, coordinator, handover,
+override expiry/cancel/handover/restart, persistence, event payloads.
 
 ---
 
@@ -245,9 +276,10 @@ Not yet covered by automated tests: config flow, coordinator, handover, persiste
    before lowering the floor.
 2. **No automated integration tests.** `tests/` covers only the pure domain/routing layer. CI deliberately does not
    install HA to stay fast.
-3. **M4 is a skeleton.** `OverrideState` exists; `sensor.override_remaining` is always `0`,
-   `binary_sensor.manual_override` is always `off`, and `set_manual_override` / `cancel_manual_override` services and
-   the cancel button do not exist.
+3. **M4 is implemented but only unit-tested at the model layer.** Coordinator expiry/cancel/handover/restart
+   behaviour still needs live verification and integration tests. A temperature/preset override started while the
+   proxy has no mode/active target is stored and counted down but does not by itself start heating; start the proxy
+   (`heat`/`cool`) first. The `hvac_mode` override variant is implemented but not part of the normal dashboard flow.
 4. **M5 is a skeleton.** `Conflict` and `_extract_guard()` exist; `_contexts` records outbound call contexts but is
    never consulted; `RouterSnapshot.conflicts` is always empty, `conflict_count` always `0`, and
    `clear_conflicts` only republishes. Config fields `conflict_policy`, `auto_resolve_idle_targets`,
@@ -272,16 +304,14 @@ Not yet covered by automated tests: config flow, coordinator, handover, persiste
 
 ### 8.1 Immediate
 
-1. Push the four commits above.
-2. Install **Versatile Thermostat** through HACS and create two entries once in the UI:
-   - `over_switch` radiator using `switch.fake_radiator`;
-   - `over_climate` AC using `climate.fake_ac`;
-   - both with `sensor.fake_room_temperature` and `sensor.fake_outdoor_temperature`.
-   Follow `TEST_ENVIRONMENT.md` §5. Config entries persist across restarts, so this is a one-time step.
-3. Reconfigure `ClimateRouter Test` to use `climate.vtherm_radiator` / `climate.vtherm_ac` (or delete it and create
-   a fresh entry named `ClimateRouter`). Repeat the scenarios in §8 of `TEST_ENVIRONMENT.md` with VTherm.
-4. Decide whether to keep the new 2026.11 version floor or add an older-version import fallback
-   (section 7.1).
+1. Owner: push `main` and tag/release **`v0.2.0`** (the manifest and `const.VERSION` are already bumped).
+2. Update ClimateRouter in the test HA through HACS and restart Home Assistant.
+3. Read the actual VTherm entity IDs and the router entry configuration back through the REST API, then re-run the
+   routing/handover scenarios with VTherm instead of the fake ACs.
+4. Exercise M4 in the live instance: start a short temperature override, confirm it reaches the active VTherm,
+   cause a handover while it is active, let it expire, and confirm the baseline is restored. Repeat with
+   `cancel_manual_override` and `hvac_mode: off`. Record the results here.
+5. Decide whether to keep the 2026.11 version floor or add an older-version import fallback (section 7.1).
 
 ### 8.2 Automated tests
 
@@ -296,16 +326,17 @@ with a Python version matching the supported HA. Suggested coverage:
 - services: target resolution, route override, clear override;
 - entity state: optimistic window, mirroring, attributes.
 
-### 8.3 M4 — manual override
+### 8.3 M4 — manual override (implemented in this checkout)
 
-- Implement `climaterouter.set_manual_override` and `cancel_manual_override` in `services.py` with the schema from
-  `PLAN.md` §11.
-- Add coordinator state: capture baseline `DesiredState`, absolute deadline using `dt_util.utcnow()`, persistence
-  alongside desired state, restore on expiry/cancel.
-- Route schedule commands into the baseline while an override is active; keep the override across handovers.
-- Wire `binary_sensor.manual_override`, `sensor.override_remaining`, and the cancel button.
-- Emit `climaterouter_override_started` / `climaterouter_override_ended`.
-- Add expiry tests with `freezegun` (already in `requirements_test.txt`).
+- [x] `climaterouter.set_manual_override` / `cancel_manual_override` with the schema from `PLAN.md` §11.
+- [x] Baseline `DesiredState`, absolute UTC deadline, persistence, restore on expiry/cancel.
+- [x] Schedule commands update the baseline while the override keeps winning.
+- [x] Override is re-applied after a handover and persisted across restart (expired deadlines are discarded).
+- [x] `binary_sensor.manual_override`, `sensor.override_remaining`, cancel button.
+- [x] `climaterouter_override_started` / `climaterouter_override_ended` events.
+- [x] Unit tests for the model helpers (`with_override`, serialization, expiry/remaining).
+- [ ] Integration tests for expiry, cancel, off, restart and handover (needs HA test harness).
+- [ ] Live verification in the 2026.11 test instance.
 
 ### 8.4 M5 — conflict handling
 

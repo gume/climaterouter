@@ -10,9 +10,11 @@ Implemented milestones (see [`docs/PLAN.md`](../../docs/PLAN.md)):
   state mirroring, status sensors and override/route buttons.
 - **M3** — handover state machine: idle detection, off confirmation, timeout, pending command carriage, startup
   reconciliation, handover events and the handover-pending binary sensor.
+- **M4** — bounded manual override: temperature/preset/mode service, baseline capture/restore, absolute deadline,
+  persistence, handover forwarding, override events, override binary sensor, remaining sensor and cancel button.
 
-Manual override (M4), conflict detection (M5) and boost (M6) are not implemented yet; the related entities exist as
-placeholders so dashboards and tests have stable IDs.
+Conflict detection (M5) and boost (M6) are not implemented yet; the related entities exist as placeholders so
+dashboards and tests have stable IDs.
 
 ## Entities
 
@@ -23,8 +25,11 @@ placeholders so dashboards and tests have stable IDs.
 | `sensor.<name>_pending_target` | Target waiting for the old one to become idle. |
 | `sensor.<name>_route_reason` | Why the current route was chosen. |
 | `binary_sensor.<name>_handover_pending` | A route change is waiting for an idle target. |
+| `binary_sensor.<name>_manual_override` | A bounded manual override is active. |
+| `sensor.<name>_override_remaining` | Whole minutes left in the override. |
 | `select.<name>_route_override` | Force `auto`, `radiator` or `ac`. |
 | `button.<name>_recalculate_route` | Re-evaluate immediately. |
+| `button.<name>_cancel_override` | Cancel the override and restore the baseline. |
 | `sensor.<name>_outdoor_temperature` | Outdoor value the router used. |
 
 ## Services
@@ -32,6 +37,8 @@ placeholders so dashboards and tests have stable IDs.
 - `climaterouter.recalculate`
 - `climaterouter.set_route_override` (`route: auto|radiator|ac`)
 - `climaterouter.clear_route_override`
+- `climaterouter.set_manual_override` (`temperature`, `preset_mode`, or `hvac_mode` + optional `duration_minutes`)
+- `climaterouter.cancel_manual_override`
 - `climaterouter.clear_conflicts` (placeholder until M5)
 
 All services target the proxy climate entity.

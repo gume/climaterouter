@@ -31,10 +31,10 @@ Scheduler / User UI / Automations
 
 ## Status
 
-**M1–M3 implemented, M4–M6 pending.** The integration package now provides the config flow, proxy climate entity,
-outdoor/manual routing, safe handover, status entities, services and diagnostics. Manual override, conflict
-handling and boost are not implemented yet. See [`docs/HANDOVER.md`](docs/HANDOVER.md) for the exact state, test
-results, known gaps and next steps.
+**M1–M4 implemented, M5–M6 pending.** The integration package provides the config flow, proxy climate entity,
+outdoor/manual routing, safe handover, bounded manual override, status entities, services and diagnostics.
+Conflict handling and boost are not implemented yet. See [`docs/HANDOVER.md`](docs/HANDOVER.md) for the exact
+state, test results, known gaps and next steps.
 
 ## Why a proxy?
 
@@ -57,7 +57,7 @@ The proxy is deliberately thin:
 | One climate entity | Scheduler/UI see `climate.climaterouter`; no scheduler changes required. |
 | Temperature/manual routing | Outdoor sensor plus optional manual switch; hysteresis and minimum dwell time. |
 | Safe handover | Route change is deferred until the old target is idle; old target is turned off before the new one starts. |
-| Manual override | `climaterouter.set_manual_override` applies a temperature or preset for a duration, then restores the latest schedule command. |
+| Manual override | `climaterouter.set_manual_override` applies a temperature or preset for a duration, then restores the latest schedule command. Implemented in the coordinator and survives handover/restart. |
 | Observability | Binary sensors and sensors for active target, pending handover, override, boost, stale inputs, conflicts, and last handover. |
 | Conflict detection | Detects direct changes to either VTherm, both-targets-on, unavailable targets, and stale outdoor data. |
 | Boost preparation | Data model supports multiple active targets; logic is feature-flagged and intentionally not finalized. |

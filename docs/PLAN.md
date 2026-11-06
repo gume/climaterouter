@@ -1180,12 +1180,13 @@ interrupted heating in tests.
 
 ### M4 — Manual override
 
-- [ ] `set_manual_override` / `cancel_manual_override`.
-- [ ] Baseline capture/restore, absolute deadline, persistence.
-- [ ] Override survives handover and restart.
-- [ ] Schedule commands update baseline while override holds.
-- [ ] Override binary sensor and remaining sensor.
-- [ ] Tests for expiry, cancel, off, restart, handover.
+- [x] `set_manual_override` / `cancel_manual_override`.
+- [x] Baseline capture/restore, absolute deadline, persistence.
+- [x] Override survives handover and restart.
+- [x] Schedule commands update baseline while override holds.
+- [x] Override binary sensor and remaining sensor.
+- [ ] Integration tests for expiry, cancel, off, restart, handover.
+- [ ] Live verification in the test HA.
 
 **Acceptance:** a 45-minute override returns to the latest schedule command; `off` cancels immediately.
 
