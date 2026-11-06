@@ -132,6 +132,39 @@ class DesiredState:
         """Return whether no command has been received yet."""
         return self.hvac_mode is None and self.setpoint_kind == SetpointKind.NONE
 
+    def copy(self) -> DesiredState:
+        """Return an independent copy of this desired state."""
+        return DesiredState(
+            hvac_mode=self.hvac_mode,
+            setpoint_kind=self.setpoint_kind,
+            preset_mode=self.preset_mode,
+            target_temperature=self.target_temperature,
+            fan_mode=self.fan_mode,
+            swing_mode=self.swing_mode,
+        )
+
+    def with_override(self, override: OverrideState | None) -> DesiredState:
+        """Return a copy with an active manual override applied.
+
+        The override value wins over the stored baseline. ``hvac_mode``
+        overrides only change the mode and keep the baseline setpoint.
+        """
+        result = self.copy()
+        if override is None:
+            return result
+
+        if override.kind == "temperature":
+            result.setpoint_kind = SetpointKind.TEMPERATURE
+            result.target_temperature = float(override.value)
+            result.preset_mode = None
+        elif override.kind == "preset":
+            result.setpoint_kind = SetpointKind.PRESET
+            result.preset_mode = str(override.value)
+            result.target_temperature = None
+        elif override.kind == "hvac_mode":
+            result.hvac_mode = str(override.value)
+        return result
+
     def to_dict(self) -> dict[str, Any]:
         """Serialize for the store."""
         return {
@@ -163,13 +196,58 @@ class DesiredState:
 
 @dataclass
 class OverrideState:
-    """A bounded manual override (used from M4 onwards)."""
+    """A bounded manual override."""
 
     kind: Literal["temperature", "preset", "hvac_mode"]
     value: Any
     until: datetime
     baseline: DesiredState
     started_at: datetime
+
+    def is_expired(self, now: datetime) -> bool:
+        """Return whether the absolute deadline has passed."""
+        return now >= self.until
+
+    def remaining_minutes(self, now: datetime) -> int:
+        """Return the whole minutes left, rounded up for a useful countdown."""
+        seconds = (self.until - now).total_seconds()
+        if seconds <= 0:
+            return 0
+        return int((seconds + 59.9) // 60)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for the store."""
+        return {
+            "kind": self.kind,
+            "value": self.value,
+            "until": self.until.isoformat(),
+            "started_at": self.started_at.isoformat(),
+            "baseline": self.baseline.to_dict(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> OverrideState | None:
+        """Deserialize an override from the store, tolerating bad data."""
+        kind = data.get("kind")
+        if kind not in ("temperature", "preset", "hvac_mode"):
+            return None
+        try:
+            until = datetime.fromisoformat(str(data["until"]))
+            started_at = datetime.fromisoformat(str(data["started_at"]))
+        except (KeyError, TypeError, ValueError):
+            return None
+        if until.tzinfo is None or started_at.tzinfo is None:
+            return None
+        baseline = data.get("baseline")
+        return cls(
+            kind=kind,
+            value=data.get("value"),
+            until=until,
+            baseline=DesiredState.from_dict(baseline)
+            if isinstance(baseline, dict)
+            else DesiredState(),
+            started_at=started_at,
+        )
 
 
 @dataclass(frozen=True)

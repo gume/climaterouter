@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 from climaterouter.models import (
     DesiredState,
+    OverrideState,
     RouterConfig,
     SetpointKind,
     Target,
@@ -46,6 +49,99 @@ def test_desired_state_roundtrip() -> None:
     )
     restored = DesiredState.from_dict(desired.to_dict())
     assert restored == desired
+
+
+def test_desired_state_copy_is_independent() -> None:
+    desired = DesiredState(
+        hvac_mode="heat",
+        setpoint_kind=SetpointKind.TEMPERATURE,
+        target_temperature=21.5,
+    )
+    copied = desired.copy()
+    copied.target_temperature = 25.0
+    assert desired.target_temperature == 21.5
+
+
+def test_override_applies_to_desired_state() -> None:
+    now = datetime.now(timezone.utc)
+    baseline = DesiredState(
+        hvac_mode="heat",
+        setpoint_kind=SetpointKind.PRESET,
+        preset_mode="comfort",
+    )
+
+    temperature_override = OverrideState(
+        kind="temperature",
+        value=22.5,
+        until=now + timedelta(minutes=45),
+        baseline=baseline,
+        started_at=now,
+    )
+    effective = baseline.with_override(temperature_override)
+    assert effective.hvac_mode == "heat"
+    assert effective.setpoint_kind == SetpointKind.TEMPERATURE
+    assert effective.target_temperature == 22.5
+    assert effective.preset_mode is None
+    # The baseline itself must stay untouched.
+    assert baseline.preset_mode == "comfort"
+
+    preset_override = OverrideState(
+        kind="preset",
+        value="eco",
+        until=now + timedelta(minutes=45),
+        baseline=baseline,
+        started_at=now,
+    )
+    effective = baseline.with_override(preset_override)
+    assert effective.setpoint_kind == SetpointKind.PRESET
+    assert effective.preset_mode == "eco"
+    assert effective.target_temperature is None
+
+    mode_override = OverrideState(
+        kind="hvac_mode",
+        value="cool",
+        until=now + timedelta(minutes=45),
+        baseline=baseline,
+        started_at=now,
+    )
+    effective = baseline.with_override(mode_override)
+    assert effective.hvac_mode == "cool"
+    assert effective.preset_mode == "comfort"
+
+
+def test_override_roundtrip_and_expiry() -> None:
+    now = datetime.now(timezone.utc)
+    override = OverrideState(
+        kind="temperature",
+        value=22.5,
+        until=now + timedelta(minutes=45),
+        baseline=DesiredState(hvac_mode="heat", setpoint_kind=SetpointKind.NONE),
+        started_at=now,
+    )
+    restored = OverrideState.from_dict(override.to_dict())
+    assert restored == override
+    assert restored is not None
+    assert not restored.is_expired(now)
+    assert restored.is_expired(now + timedelta(minutes=46))
+    assert restored.remaining_minutes(now) == 45
+    assert restored.remaining_minutes(now + timedelta(minutes=46)) == 0
+
+
+def test_override_from_dict_rejects_invalid_data() -> None:
+    assert OverrideState.from_dict({}) is None
+    assert OverrideState.from_dict({"kind": "temperature", "until": "not-a-date"}) is None
+    assert (
+        OverrideState.from_dict(
+            {
+                "kind": "temperature",
+                "value": 20,
+                "until": "2026-11-06T18:00:00",
+                "started_at": "2026-11-06T17:00:00",
+                "baseline": {},
+            }
+        )
+        is None
+    )
 
 
 def test_underlying_state_active_semantics() -> None:
