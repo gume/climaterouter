@@ -13,6 +13,12 @@
               "radiator_entity_id": "Radiator thermostat (over_switch)",
               "ac_entity_id": "AC thermostat (over_climate)",
               "outdoor_sensor_entity_id": "Outdoor temperature sensor"
+            },
+            "data_description": {
+              "name": "Name shown on the device and its entities.",
+              "radiator_entity_id": "Versatile Thermostat that controls the radiator.",
+              "ac_entity_id": "Versatile Thermostat that controls the AC.",
+              "outdoor_sensor_entity_id": "Temperature sensor used to choose the route."
             }
           },
           "routing": {
@@ -27,6 +33,16 @@
               "startup_grace": "Startup grace period",
               "settle_time": "Command settle time",
               "fallback_on_unavailable": "Fall back to the other target"
+            },
+            "data_description": {
+              "cold_threshold": "At or below this outdoor temperature, prefer the radiator.",
+              "mild_threshold": "Above this outdoor temperature, prefer the AC. Must not be below the cold threshold.",
+              "min_route_dwell": "Minimum time after a handover before automatic routing can switch again.",
+              "handover_idle_confirm": "How long the old target must stay idle before it is switched off.",
+              "off_confirm_timeout": "How long to wait for the old target to confirm it is off.",
+              "startup_grace": "Delay before state is reconciled after Home Assistant starts.",
+              "settle_time": "Ignore state changes caused by the router's own commands for this long.",
+              "fallback_on_unavailable": "Use the other target when the selected one is unavailable or cannot serve the mode."
             }
           },
           "manual": {
@@ -36,6 +52,11 @@
               "default_manual_minutes": "Default manual timer (0 = no timer)",
               "max_manual_minutes": "Maximum manual timer",
               "manual_blocks_schedule": "Block schedule/automation commands while manual"
+            },
+            "data_description": {
+              "default_manual_minutes": "Timer for a new manual session. 0 keeps manual mode active until ended.",
+              "max_manual_minutes": "Upper limit for the manual timer.",
+              "manual_blocks_schedule": "Reject schedule and automation commands while manual mode is active. User commands still work."
             }
           },
           "conflicts": {
@@ -47,6 +68,13 @@
               "auto_resolve_simultaneous": "Turn off idle targets when both are on",
               "outdoor_stale_after": "Outdoor sensor staleness",
               "temperature_tolerance": "Setpoint tolerance"
+            },
+            "data_description": {
+              "conflict_policy": "Monitor reports conflicts, reassert resends the desired state once, adopt accepts the external change.",
+              "auto_resolve_idle_targets": "Turn off a non-selected target when it is idle.",
+              "auto_resolve_simultaneous": "When both targets are on, turn off the idle one.",
+              "outdoor_stale_after": "Outdoor values older than this are stale; routing then holds the last target.",
+              "temperature_tolerance": "Setpoint difference that counts as a mismatch."
             }
           },
           "boost": {
@@ -54,6 +82,9 @@
             "description": "Run both targets for a bounded time.",
             "data": {
               "boost_enabled": "Enable boost (experimental)"
+            },
+            "data_description": {
+              "boost_enabled": "Allow set_boost to run both targets for a bounded time."
             }
           },
           "lock": {
@@ -63,6 +94,11 @@
               "lock_enabled": "Enable the UI lock",
               "lock_code": "UI lock code (4-8 digits, optional)",
               "auto_relock_sec": "Auto-relock delay (0 = stay unlocked)"
+            },
+            "data_description": {
+              "lock_enabled": "Create the UI lock and block user commands while it is locked.",
+              "lock_code": "Optional 4-8 digit code required to unlock.",
+              "auto_relock_sec": "Relock automatically after this delay. 0 keeps the lock unlocked."
             }
           },
           "display": {
@@ -70,6 +106,9 @@
             "description": "Optional VTherm identity attributes for cards that auto-detect VTherm. Leave off unless needed.",
             "data": {
               "expose_vtherm_identity": "Expose VTherm identity-detection attributes"
+            },
+            "data_description": {
+              "expose_vtherm_identity": "Expose VTherm identity attributes for cards that need them. Leave off unless required."
             }
           }
         }
@@ -86,6 +125,12 @@
               "radiator_entity_id": "Radiator thermostat (over_switch)",
               "ac_entity_id": "AC thermostat (over_climate)",
               "outdoor_sensor_entity_id": "Outdoor temperature sensor"
+            },
+            "data_description": {
+              "name": "Name shown on the device and its entities.",
+              "radiator_entity_id": "Versatile Thermostat that controls the radiator.",
+              "ac_entity_id": "Versatile Thermostat that controls the AC.",
+              "outdoor_sensor_entity_id": "Temperature sensor used to choose the route."
             }
           },
           "routing": {
@@ -100,6 +145,16 @@
               "startup_grace": "Startup grace period",
               "settle_time": "Command settle time",
               "fallback_on_unavailable": "Fall back to the other target"
+            },
+            "data_description": {
+              "cold_threshold": "At or below this outdoor temperature, prefer the radiator.",
+              "mild_threshold": "Above this outdoor temperature, prefer the AC. Must not be below the cold threshold.",
+              "min_route_dwell": "Minimum time after a handover before automatic routing can switch again.",
+              "handover_idle_confirm": "How long the old target must stay idle before it is switched off.",
+              "off_confirm_timeout": "How long to wait for the old target to confirm it is off.",
+              "startup_grace": "Delay before state is reconciled after Home Assistant starts.",
+              "settle_time": "Ignore state changes caused by the router's own commands for this long.",
+              "fallback_on_unavailable": "Use the other target when the selected one is unavailable or cannot serve the mode."
             }
           },
           "manual": {
@@ -109,6 +164,11 @@
               "default_manual_minutes": "Default manual timer (0 = no timer)",
               "max_manual_minutes": "Maximum manual timer",
               "manual_blocks_schedule": "Block schedule/automation commands while manual"
+            },
+            "data_description": {
+              "default_manual_minutes": "Timer for a new manual session. 0 keeps manual mode active until ended.",
+              "max_manual_minutes": "Upper limit for the manual timer.",
+              "manual_blocks_schedule": "Reject schedule and automation commands while manual mode is active. User commands still work."
             }
           },
           "conflicts": {
@@ -120,6 +180,13 @@
               "auto_resolve_simultaneous": "Turn off idle targets when both are on",
               "outdoor_stale_after": "Outdoor sensor staleness",
               "temperature_tolerance": "Setpoint tolerance"
+            },
+            "data_description": {
+              "conflict_policy": "Monitor reports conflicts, reassert resends the desired state once, adopt accepts the external change.",
+              "auto_resolve_idle_targets": "Turn off a non-selected target when it is idle.",
+              "auto_resolve_simultaneous": "When both targets are on, turn off the idle one.",
+              "outdoor_stale_after": "Outdoor values older than this are stale; routing then holds the last target.",
+              "temperature_tolerance": "Setpoint difference that counts as a mismatch."
             }
           },
           "boost": {
@@ -127,6 +194,9 @@
             "description": "Run both targets for a bounded time.",
             "data": {
               "boost_enabled": "Enable boost (experimental)"
+            },
+            "data_description": {
+              "boost_enabled": "Allow set_boost to run both targets for a bounded time."
             }
           },
           "lock": {
@@ -136,6 +206,11 @@
               "lock_enabled": "Enable the UI lock",
               "lock_code": "UI lock code (4-8 digits, optional)",
               "auto_relock_sec": "Auto-relock delay (0 = stay unlocked)"
+            },
+            "data_description": {
+              "lock_enabled": "Create the UI lock and block user commands while it is locked.",
+              "lock_code": "Optional 4-8 digit code required to unlock.",
+              "auto_relock_sec": "Relock automatically after this delay. 0 keeps the lock unlocked."
             }
           },
           "display": {
@@ -143,6 +218,9 @@
             "description": "Optional VTherm identity attributes for cards that auto-detect VTherm. Leave off unless needed.",
             "data": {
               "expose_vtherm_identity": "Expose VTherm identity-detection attributes"
+            },
+            "data_description": {
+              "expose_vtherm_identity": "Expose VTherm identity attributes for cards that need them. Leave off unless required."
             }
           }
         }
@@ -188,6 +266,12 @@
           "radiator_entity_id": "Radiator thermostat (over_switch)",
           "ac_entity_id": "AC thermostat (over_climate)",
           "outdoor_sensor_entity_id": "Outdoor temperature sensor"
+        },
+        "data_description": {
+          "name": "Name shown on the device and its entities.",
+          "radiator_entity_id": "Versatile Thermostat that controls the radiator.",
+          "ac_entity_id": "Versatile Thermostat that controls the AC.",
+          "outdoor_sensor_entity_id": "Temperature sensor used to choose the route."
         }
       },
       "routing": {
@@ -202,6 +286,16 @@
           "startup_grace": "Startup grace period",
           "settle_time": "Command settle time",
           "fallback_on_unavailable": "Fall back to the other target"
+        },
+        "data_description": {
+          "cold_threshold": "At or below this outdoor temperature, prefer the radiator.",
+          "mild_threshold": "Above this outdoor temperature, prefer the AC. Must not be below the cold threshold.",
+          "min_route_dwell": "Minimum time after a handover before automatic routing can switch again.",
+          "handover_idle_confirm": "How long the old target must stay idle before it is switched off.",
+          "off_confirm_timeout": "How long to wait for the old target to confirm it is off.",
+          "startup_grace": "Delay before state is reconciled after Home Assistant starts.",
+          "settle_time": "Ignore state changes caused by the router's own commands for this long.",
+          "fallback_on_unavailable": "Use the other target when the selected one is unavailable or cannot serve the mode."
         }
       },
       "manual": {
@@ -211,6 +305,11 @@
           "default_manual_minutes": "Default manual timer (0 = no timer)",
           "max_manual_minutes": "Maximum manual timer",
           "manual_blocks_schedule": "Block schedule/automation commands while manual"
+        },
+        "data_description": {
+          "default_manual_minutes": "Timer for a new manual session. 0 keeps manual mode active until ended.",
+          "max_manual_minutes": "Upper limit for the manual timer.",
+          "manual_blocks_schedule": "Reject schedule and automation commands while manual mode is active. User commands still work."
         }
       },
       "conflicts": {
@@ -222,6 +321,13 @@
           "auto_resolve_simultaneous": "Turn off idle targets when both are on",
           "outdoor_stale_after": "Outdoor sensor staleness",
           "temperature_tolerance": "Setpoint tolerance"
+        },
+        "data_description": {
+          "conflict_policy": "Monitor reports conflicts, reassert resends the desired state once, adopt accepts the external change.",
+          "auto_resolve_idle_targets": "Turn off a non-selected target when it is idle.",
+          "auto_resolve_simultaneous": "When both targets are on, turn off the idle one.",
+          "outdoor_stale_after": "Outdoor values older than this are stale; routing then holds the last target.",
+          "temperature_tolerance": "Setpoint difference that counts as a mismatch."
         }
       },
       "boost": {
@@ -229,6 +335,9 @@
         "description": "Run both targets for a bounded time.",
         "data": {
           "boost_enabled": "Enable boost (experimental)"
+        },
+        "data_description": {
+          "boost_enabled": "Allow set_boost to run both targets for a bounded time."
         }
       },
       "lock": {
@@ -238,6 +347,11 @@
           "lock_enabled": "Enable the UI lock",
           "lock_code": "UI lock code (4-8 digits, optional)",
           "auto_relock_sec": "Auto-relock delay (0 = stay unlocked)"
+        },
+        "data_description": {
+          "lock_enabled": "Create the UI lock and block user commands while it is locked.",
+          "lock_code": "Optional 4-8 digit code required to unlock.",
+          "auto_relock_sec": "Relock automatically after this delay. 0 keeps the lock unlocked."
         }
       },
       "display": {
@@ -245,6 +359,9 @@
         "description": "Optional VTherm identity attributes for cards that auto-detect VTherm. Leave off unless needed.",
         "data": {
           "expose_vtherm_identity": "Expose VTherm identity-detection attributes"
+        },
+        "data_description": {
+          "expose_vtherm_identity": "Expose VTherm identity attributes for cards that need them. Leave off unless required."
         }
       }
     },
