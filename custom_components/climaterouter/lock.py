@@ -28,9 +28,9 @@ async def async_setup_entry(
 
 
 class RouterLock(RouterEntity, LockEntity):
-    """Lock that rejects user and automation commands on the proxy."""
+    """Accidental-touch UI lock (Lock A) for the proxy."""
 
-    _attr_name = "Lock"
+    _attr_name = "UI lock"
 
     def __init__(self, coordinator: ClimateRouterCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator)

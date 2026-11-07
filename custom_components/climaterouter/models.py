@@ -402,9 +402,8 @@ class RouterSnapshot:
     lock_enabled: bool = False
     locked: bool = False
     lock_has_code: bool = False
-    lock_users: bool = True
-    lock_automations: bool = True
     auto_relock_sec: int = DEFAULT_AUTO_RELOCK_SEC
+    manual_blocks_schedule: bool = True
     targets: dict[Target, UnderlyingState] = field(default_factory=dict)
     hvac_modes: tuple[str, ...] = (HVAC_OFF, HVAC_HEAT)
     preset_modes: tuple[str, ...] = ("none",)
@@ -442,6 +441,11 @@ class RouterSnapshot:
     def manual_timer_minutes(self) -> int | None:
         """Return the selected manual timer length, or ``None`` when off."""
         return self.manual_mode.timer_minutes if self.manual_mode is not None else None
+
+    @property
+    def schedule_locked(self) -> bool:
+        """Return whether manual mode currently blocks schedule commands."""
+        return self.manual_blocks_schedule and self.manual_mode is not None
 
 
 @dataclass(frozen=True)
@@ -514,9 +518,8 @@ class RouterConfig:
     boost_enabled: bool = False
     lock_enabled: bool = False
     lock_code: str = ""
-    lock_users: bool = True
-    lock_automations: bool = True
     auto_relock_sec: int = DEFAULT_AUTO_RELOCK_SEC
+    manual_blocks_schedule: bool = True
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> RouterConfig:
@@ -571,9 +574,8 @@ class RouterConfig:
             boost_enabled=_bool("boost_enabled", False),
             lock_enabled=_bool("lock_enabled", False),
             lock_code=str(data.get("lock_code") or ""),
-            lock_users=_bool("lock_users", True),
-            lock_automations=_bool("lock_automations", True),
             auto_relock_sec=_int("auto_relock_sec", DEFAULT_AUTO_RELOCK_SEC),
+            manual_blocks_schedule=_bool("manual_blocks_schedule", True),
         )
 
 
@@ -581,12 +583,30 @@ def lock_blocks_context(
     *,
     enabled: bool,
     locked: bool,
-    lock_users: bool,
-    lock_automations: bool,
     user_id: str | None,
 ) -> bool:
-    """Return whether a command from this context is blocked by the lock."""
+    """Return whether the proxy UI lock (Lock A) blocks this command.
+
+    Lock A is an accidental-touch lock: it only rejects user-initiated
+    commands and never blocks schedule/automation traffic.
+    """
     if not (enabled and locked):
         return False
-    source_is_user = user_id is not None
-    return (lock_users and source_is_user) or (lock_automations and not source_is_user)
+    return user_id is not None
+
+
+def manual_lock_blocks_context(
+    *,
+    enabled: bool,
+    manual_active: bool,
+    user_id: str | None,
+) -> bool:
+    """Return whether manual mode (Lock B) blocks this command.
+
+    Lock B protects an active manual mode from schedule/automation commands.
+    User commands must always be accepted so the manual setpoint can be
+    adjusted without unlocking.
+    """
+    if not (enabled and manual_active):
+        return False
+    return user_id is None

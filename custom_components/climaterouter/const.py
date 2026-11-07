@@ -48,6 +48,7 @@ CONF_LOCK_CODE: Final = "lock_code"
 CONF_LOCK_USERS: Final = "lock_users"
 CONF_LOCK_AUTOMATIONS: Final = "lock_automations"
 CONF_AUTO_RELOCK_SEC: Final = "auto_relock_sec"
+CONF_MANUAL_BLOCKS_SCHEDULE: Final = "manual_blocks_schedule"
 
 CONFLICT_POLICIES: Final = ["monitor", "reassert", "adopt"]
 

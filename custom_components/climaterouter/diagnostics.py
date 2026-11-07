@@ -48,9 +48,8 @@ def _serialize_snapshot(snapshot: RouterSnapshot) -> dict[str, Any]:
         "lock_enabled": snapshot.lock_enabled,
         "locked": snapshot.locked,
         "lock_has_code": snapshot.lock_has_code,
-        "lock_users": snapshot.lock_users,
-        "lock_automations": snapshot.lock_automations,
         "auto_relock_sec": snapshot.auto_relock_sec,
+        "manual_blocks_schedule": snapshot.manual_blocks_schedule,
         "hvac_modes": list(snapshot.hvac_modes),
         "preset_modes": list(snapshot.preset_modes),
         "targets": {

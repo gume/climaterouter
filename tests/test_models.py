@@ -14,6 +14,7 @@ from climaterouter.models import (
     Target,
     UnderlyingState,
     lock_blocks_context,
+    manual_lock_blocks_context,
 )
 
 
@@ -260,48 +261,48 @@ def test_router_config_parses_lock_settings() -> None:
         {
             "lock_enabled": "on",
             "lock_code": 1234,
-            "lock_users": False,
-            "lock_automations": "false",
             "auto_relock_sec": "60",
+            "manual_blocks_schedule": "false",
         }
     )
     assert config.lock_enabled is True
     assert config.lock_code == "1234"
-    assert config.lock_users is False
-    assert config.lock_automations is False
     assert config.auto_relock_sec == 60
+    assert config.manual_blocks_schedule is False
 
 
 def test_router_config_lock_defaults() -> None:
     config = RouterConfig.from_mapping({})
     assert config.lock_enabled is False
     assert config.lock_code == ""
-    assert config.lock_users is True
-    assert config.lock_automations is True
     assert config.auto_relock_sec == 30
+    assert config.manual_blocks_schedule is True
 
 
-def test_lock_blocks_context() -> None:
+def test_ui_lock_blocks_only_user_commands() -> None:
     base = {
         "enabled": True,
         "locked": True,
-        "lock_users": True,
-        "lock_automations": True,
     }
     assert lock_blocks_context(**base, user_id="user-1") is True
-    assert lock_blocks_context(**base, user_id=None) is True
-    assert lock_blocks_context(**base, user_id="") is True
+    # Automations must keep working so handovers can complete.
+    assert lock_blocks_context(**base, user_id=None) is False
     assert lock_blocks_context(**{**base, "locked": False}, user_id="user-1") is False
-    assert lock_blocks_context(**{**base, "enabled": False}, user_id=None) is False
+    assert lock_blocks_context(**{**base, "enabled": False}, user_id="user-1") is False
+
+
+def test_manual_lock_blocks_only_automation_commands() -> None:
+    base = {
+        "enabled": True,
+        "manual_active": True,
+    }
+    assert manual_lock_blocks_context(**base, user_id=None) is True
+    # The user must still be able to adjust the manual setpoint.
+    assert manual_lock_blocks_context(**base, user_id="user-1") is False
     assert (
-        lock_blocks_context(
-            **{**base, "lock_users": False}, user_id="user-1"
-        )
+        manual_lock_blocks_context(**{**base, "manual_active": False}, user_id=None)
         is False
     )
     assert (
-        lock_blocks_context(
-            **{**base, "lock_automations": False}, user_id=None
-        )
-        is False
+        manual_lock_blocks_context(**{**base, "enabled": False}, user_id=None) is False
     )

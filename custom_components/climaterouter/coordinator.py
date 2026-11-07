@@ -84,6 +84,7 @@ from .models import (
     Target,
     UnderlyingState,
     lock_blocks_context,
+    manual_lock_blocks_context,
 )
 from .router import choose_route, target_conflict
 
@@ -852,16 +853,24 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._schedule_auto_relock()
 
     def _ensure_unlocked(self, context: Context | None) -> None:
-        """Reject a command when the lock covers its source and mode."""
+        """Reject a command blocked by Lock A or Lock B."""
+        user_id = context.user_id if context is not None else None
         if lock_blocks_context(
             enabled=self.config.lock_enabled,
             locked=self._locked,
-            lock_users=self.config.lock_users,
-            lock_automations=self.config.lock_automations,
-            user_id=context.user_id if context is not None else None,
+            user_id=user_id,
         ):
             raise HomeAssistantError(
                 "ClimateRouter is locked; unlock it before sending commands"
+            )
+        if manual_lock_blocks_context(
+            enabled=self.config.manual_blocks_schedule,
+            manual_active=self._manual is not None,
+            user_id=user_id,
+        ):
+            raise HomeAssistantError(
+                "Manual mode is active; return to schedule before sending "
+                "automation commands"
             )
 
     def _schedule_auto_relock(self, delay: float | None = None) -> None:
@@ -1853,9 +1862,8 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             lock_enabled=self.config.lock_enabled,
             locked=self._locked,
             lock_has_code=bool(self.config.lock_code),
-            lock_users=self.config.lock_users,
-            lock_automations=self.config.lock_automations,
             auto_relock_sec=self.config.auto_relock_sec,
+            manual_blocks_schedule=self.config.manual_blocks_schedule,
             targets=dict(self._states),
             hvac_modes=tuple(hvac_modes),
             preset_modes=tuple(sorted(presets)),

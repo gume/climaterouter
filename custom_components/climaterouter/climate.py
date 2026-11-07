@@ -217,6 +217,8 @@ class RouterClimate(RouterEntity, ClimateEntity):
                 if snapshot.manual_mode is not None
                 else None
             ),
+            "ui_lock_active": snapshot.locked,
+            "schedule_lock_active": snapshot.schedule_locked,
             "boost_active": snapshot.boost_until is not None,
             "boost_until": snapshot.boost_until.isoformat() if snapshot.boost_until else None,
             "boost_targets": sorted(target.value for target in snapshot.boost_targets),
