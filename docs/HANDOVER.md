@@ -44,6 +44,7 @@
 | `8c2abc3` | `feat: add brief help text to config and options fields` |
 | `baa2d49` | `test: guard translation parity and field descriptions` |
 | `50b6d16` | `docs: correct deprecated service descriptions` |
+| `b68bdbb` | `docs: align plan and handover with the 0.8.x implementation` |
 
 Everything through `bf19c92` (version **0.5.0**) is pushed to `origin/main` and installed in the live test instance.
 Local commits from `28fbf93` (version **0.6.0**, read-only VTherm display attributes) onward are not pushed yet. The
