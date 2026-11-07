@@ -46,6 +46,7 @@
 | `50b6d16` | `docs: correct deprecated service descriptions` |
 | `b68bdbb` | `docs: align plan and handover with the 0.8.x implementation` |
 | `ade30ba` | `test: stop bind-mounting climaterouter in the Docker lab` |
+| `f01abcc` | `docs: correct the Marketplace update mechanism and test lab` |
 
 Everything through `d3af8b4` is pushed to `origin/main` and the test instance is running **0.8.0** (`fd009ea`). The
 current checkout is version **0.8.1**. The assistant has no GitHub credentials; the owner pushes.
