@@ -32,6 +32,7 @@
 | `38e0ef0` | `refactor: remove the external manual switch routing input` |
 | `ce6d163` | `feat: add proxy-owned manual mode with optional timer` |
 | `a028adf` | `feat: expose manual mode switch, timer select, sensors, and return button` |
+| `40f510c` | `feat: split the proxy UI lock from the manual schedule lock` |
 
 Everything through `bf19c92` (version **0.5.0**) is pushed to `origin/main` and installed in the live test instance.
 Local commits `28fbf93` (version **0.6.0**, read-only VTherm display attributes), `e0634e2` (docs), `97c620e`
@@ -60,7 +61,8 @@ still outstanding (see §8).
 A larger **proxy rework** is in progress: proxy-owned manual mode and timer, two separate locks, sectioned
 config/options flows, and VTherm display compatibility split into harmless versus identity keys. Iteration 1
 (`38e0ef0`) removed the external manual-switch routing input; iteration 2 (`ce6d163`) added the proxy-owned manual
-mode model, timer, persistence, and services; iteration 3 (`a028adf`) exposed the standard-card entities.
+mode model, timer, persistence, and services; iteration 3 (`a028adf`) exposed the standard-card entities; iteration
+4 (`40f510c`) split the accidental-touch UI lock (Lock A) from the manual/schedule lock (Lock B).
 
 The next developer should start with section 8 (Next steps).
 
@@ -308,26 +310,37 @@ Options are:
 3. Use the native ClimateRouter lock described in §3.10; Equinox upstream support for a configurable
    lock service/entity is still needed before its lock button can drive it.
 
-### 3.10 Native lock
+### 3.10 Two proxy locks
 
-The optional native lock protects the **proxy's command surface**, not the underlying VTherms:
+**Lock A — accidental-touch UI lock.** Optional and disabled by default. Enable `lock_enabled` in the options,
+optionally set a 4–8 digit `lock_code`, and set `auto_relock_sec` (0 disables auto-relock).
 
-- Disabled by default. Enable `lock_enabled` in the options, optionally set a 4–8 digit `lock_code`, choose whether
-  to block `lock_users` and/or `lock_automations`, and set `auto_relock_sec` (0 disables auto-relock).
-- When enabled, the integration creates `lock.<name>_lock`. Standard `lock.lock`/`lock.unlock` and the
-  `climaterouter.lock`/`climaterouter.unlock` services are available. The `climaterouter` services accept an
-  optional `code`; `climaterouter.unlock` requires the configured code.
+- The integration creates `lock.<name>_lock` (displayed as "UI lock"). Standard `lock.lock`/`lock.unlock` and the
+  `climaterouter.lock`/`climaterouter.unlock` services are available. The services accept an optional `code`.
+- It only rejects **user-initiated** commands (service-call context has a `user_id`). Schedule/automation commands
+  are never blocked, so handovers and scheduled operation continue while the UI is locked.
 - Locking does not require a code. Unlocking with a configured code requires the exact code; a wrong or missing
   code raises `HomeAssistantError` and leaves the lock locked.
-- When locked, `set_temperature`, `set_hvac_mode`, `set_preset_mode`, `turn_on`, `turn_off`,
-  `set_manual_override` and `set_boost` are rejected for the configured sources. A source counts as a user when the
-  service-call context has a `user_id`, matching VTherm's `lock_users`/`lock_automations` semantics. The check runs
-  in the coordinator, so it applies to both the climate entity and the services.
-- The lock state is persisted. Unlocking schedules an exact auto-relock deadline, which is persisted as an
-  absolute UTC timestamp; after a restart the remaining delay is resumed (or the router locks immediately when the
-  deadline already passed). The lock is cleared from persisted state when the feature is disabled.
-- The proxy climate does **not** expose `is_lock_configured`, `lock_manager` or `is_locked`, so Equinox does not
-  render a lock button that cannot work. Diagnostics expose the lock flags and redact `lock_code`.
+- Unlock is intentionally brief: an auto-relock deadline is scheduled and persisted as an absolute UTC timestamp;
+  after a restart the remaining delay is resumed (or the router locks immediately when the deadline already
+  passed). The lock state is cleared from persisted state when the feature is disabled.
+- Blocked: `set_temperature`, `set_hvac_mode`, `set_preset_mode`, `turn_on`, `turn_off`, manual-mode entry/timer,
+  and boost.
+
+**Lock B — manual/schedule lock.** Controlled by `manual_blocks_schedule` (default on) and the manual-mode state
+itself; it is not mirrored to either VTherm.
+
+- While manual mode is active, commands without a `user_id` (Scheduler, automations, scripts) are rejected with a
+  clear error. User commands are always accepted, so the manual setpoint and timer can be adjusted without
+  unlocking.
+- `climaterouter.return_to_schedule` is deliberately not gated, so an explicit return (including an automation)
+  can end manual mode. Lock A still blocks user-initiated service calls when locked.
+- The manual-mode switch (`switch.<name>_manual_mode`) is the user-facing Lock B control: on enters manual mode,
+  off returns to the schedule.
+- `sensor.<name>_manual_mode`, `sensor.<name>_manual_remaining`, `sensor.<name>_manual_until`, and the
+  `schedule_locked` climate attribute expose Lock B. The proxy climate does **not** expose `is_lock_configured`,
+  `lock_manager`, or `is_locked`, so Equinox does not render a broken lock button. Diagnostics expose both lock
+  states and redact `lock_code`.
 
 ---
 
