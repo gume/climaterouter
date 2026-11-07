@@ -108,13 +108,6 @@ SENSOR_SPECS: tuple[
         lambda snapshot: snapshot.outdoor_stale,
     ),
     (
-        "manual_switch_stale",
-        "Manual switch stale",
-        BinarySensorDeviceClass.PROBLEM,
-        EntityCategory.DIAGNOSTIC,
-        lambda snapshot: snapshot.manual_switch_stale,
-    ),
-    (
         "target_mismatch",
         "Target mismatch",
         BinarySensorDeviceClass.PROBLEM,

@@ -10,7 +10,6 @@ from .models import (
     HVAC_HEAT,
     HVAC_OFF,
     ROUTE_AC,
-    ROUTE_AUTO,
     ROUTE_RADIATOR,
     DesiredState,
     RouteDecision,
@@ -25,8 +24,8 @@ from .models import (
 def choose_route(inputs: RouteInputs) -> RouteDecision:
     """Choose the target(s) for the current inputs.
 
-    Precedence (PLAN.md section 7.2): off, cool, route override, manual switch,
-    outdoor hysteresis, stale fallback, then capability fallback.
+    Precedence (PLAN.md section 7.2): off, cool, route override, outdoor
+    hysteresis, stale fallback, then capability fallback.
     """
     if inputs.hvac_mode == HVAC_OFF:
         return RouteDecision(frozenset(), "off")
@@ -43,11 +42,6 @@ def choose_route(inputs: RouteInputs) -> RouteDecision:
         return _with_capability(frozenset({Target.RADIATOR}), "manual_route", inputs)
     if inputs.route_override == ROUTE_AC:
         return _with_capability(frozenset({Target.AC}), "manual_route", inputs)
-
-    if inputs.manual_switch == "on":
-        return _with_capability(
-            frozenset({inputs.manual_switch_on_target}), "manual_switch", inputs
-        )
 
     if inputs.outdoor_temperature is None or not inputs.outdoor_fresh:
         fallback = inputs.current_target or Target.RADIATOR
@@ -172,11 +166,4 @@ def target_conflict(
         if expected.preset_mode != state.preset_mode:
             return ("preset_mismatch", expected.preset_mode, state.preset_mode)
 
-    return None
-
-
-def normalize_manual_select(value: str | None) -> str | None:
-    """Map an input_select state to the router's manual switch language."""
-    if value in (ROUTE_AUTO, ROUTE_RADIATOR, ROUTE_AC):
-        return value
     return None

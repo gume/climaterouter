@@ -324,8 +324,6 @@ repository, so code changes only need a container restart.
    - radiator entity: `climate.vtherm_radiator`;
    - AC entity: `climate.vtherm_ac`;
    - outdoor sensor: `sensor.fake_outdoor_temperature`;
-   - manual switch: `input_boolean.climaterouter_force_ac` (optional);
-   - manual switch `on` target: `ac`;
    - thresholds: `cold_threshold: 7`, `mild_threshold: 9`;
    - short test timings, for example:
      - `min_route_dwell: 60`
@@ -431,20 +429,22 @@ The scenarios below assume `climate.climaterouter`, `climate.vtherm_radiator` an
    - `sensor.climaterouter_active_target` becomes `ac`;
    - `sensor.climaterouter_last_handover` updates.
 
-### 8.3 Manual switch
+### 8.3 Route override
 
-With outdoor temperature at `5`:
+With outdoor temperature at `5`, force the AC through the built-in select:
 
 ```yaml
-action: input_boolean.turn_on
+action: select.select_option
 target:
-  entity_id: input_boolean.climaterouter_force_ac
+  entity_id: select.climaterouter_route_override
+data:
+  option: ac
 ```
 
 Verify the route moves to `ac` (subject to the normal handover rules), and
-`sensor.climaterouter_route_reason` reports `manual_switch`.
+`sensor.climaterouter_route_reason` reports `manual_route`.
 
-Turn it off to return to automatic outdoor routing.
+Select `auto` to return to automatic outdoor routing.
 
 ### 8.4 Manual override
 

@@ -106,17 +106,17 @@ without an HA runtime. Keep it that way.
 1. `off` wins — no active target.
 2. Explicit `cool` forces the AC.
 3. `select.<name>_route_override` (`radiator` / `ac`) wins over automatic routing.
-4. The optional manual switch (`switch` / `input_boolean` / `input_select`) forces its configured target.
-5. Outdoor hysteresis:
+4. Outdoor hysteresis:
    - current target AC stays AC while `outdoor > cold_threshold`;
    - current target radiator stays radiator while `outdoor <= mild_threshold`;
    - no current target: AC above `mild_threshold`, radiator at/below `cold_threshold`, radiator in the dead band.
-6. Missing/stale outdoor input holds the last route; with no history it falls back to radiator.
-7. Unavailable or mode-incapable targets fall back to the other target when
+5. Missing/stale outdoor input holds the last route; with no history it falls back to radiator.
+6. Unavailable or mode-incapable targets fall back to the other target when
    `fallback_on_unavailable` is enabled.
 
-The coordinator computes the effective override as: built-in select first, then an `input_select` manual switch,
-then `auto`. `min_route_dwell` suppresses non-explicit route changes after a completed handover.
+The route override is proxy-owned and comes only from the built-in select (or its services). The former external
+manual switch input was removed in 0.8.0. `min_route_dwell` suppresses non-explicit route changes after a completed
+handover.
 
 ### 3.2 Command handling
 

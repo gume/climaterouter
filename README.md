@@ -44,7 +44,7 @@ single-entity interface, while keeping the two VTherms independent and fully fun
 
 The proxy is deliberately thin:
 
-- It selects a target using outdoor temperature, a manual switch, and explicit HVAC-mode intent.
+- It selects a target using outdoor temperature, an optional route override, and explicit HVAC-mode intent.
 - It forwards `set_temperature`, `set_hvac_mode`, and `set_preset_mode` to the selected target only.
 - It never turns off a target that is actively heating/cooling just because the route changed.
 - It reads current/target temperature and preset from the active target and mirrors them.
@@ -69,7 +69,7 @@ enabled in the integration options and optionally blocks user commands, automati
 | Capability | Summary |
 |---|---|
 | One climate entity | Scheduler/UI see `climate.climaterouter`; no scheduler changes required. |
-| Temperature/manual routing | Outdoor sensor plus optional manual switch; hysteresis and minimum dwell time. |
+| Temperature-based routing | Outdoor sensor plus optional `select` override; hysteresis and minimum dwell time. |
 | Safe handover | Route change is deferred until the old target is idle; old target is turned off before the new one starts. |
 | Manual override | `climaterouter.set_manual_override` applies a temperature or preset for a duration, then restores the latest schedule command. Implemented in the coordinator and survives handover/restart. |
 | Observability | Binary sensors and sensors for active target, pending handover, override, boost, stale inputs, conflicts, and last handover. |
@@ -87,7 +87,6 @@ enabled in the integration options and optionally blocks user commands, automati
 - `binary_sensor.climaterouter_boost_active` — both targets are active for a bounded boost.
 - `binary_sensor.climaterouter_conflict` — an underlying VTherm or input is inconsistent with the proxy.
 - `binary_sensor.climaterouter_outdoor_sensor_stale` — outdoor temperature is unavailable or stale.
-- `binary_sensor.climaterouter_manual_switch_stale` — manual routing switch is unavailable.
 - `binary_sensor.climaterouter_ready` — startup reconciliation is complete.
 - `sensor.climaterouter_active_target` — `radiator`, `ac`, `both`, or `none`.
 - `sensor.climaterouter_pending_target` — pending handover target.
@@ -130,7 +129,7 @@ enabled in the integration options and optionally blocks user commands, automati
   container at the time of writing); compatibility with older releases is not verified.
 - Two existing VTherm climate entities: one radiator (`over_switch`) and one AC (`over_climate`).
 - An outdoor temperature sensor.
-- Optional manual switch (`switch`, `input_boolean`, or `input_select`).
+- Optional route override through the built-in `select.climaterouter_route` entity.
 - Scheduler Component and Scheduler Card for scheduling.
 
 ## Non-goals

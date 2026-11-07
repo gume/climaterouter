@@ -42,8 +42,6 @@ def _serialize_snapshot(snapshot: RouterSnapshot) -> dict[str, Any]:
         "boost_targets": sorted(target.value for target in snapshot.boost_targets),
         "outdoor_temperature": snapshot.outdoor_temperature,
         "outdoor_stale": snapshot.outdoor_stale,
-        "manual_switch_state": snapshot.manual_switch_state,
-        "manual_switch_stale": snapshot.manual_switch_stale,
         "route_override": snapshot.route_override,
         "last_handover": snapshot.last_handover.isoformat() if snapshot.last_handover else None,
         "last_command": snapshot.last_command.isoformat() if snapshot.last_command else None,
@@ -71,9 +69,7 @@ async def async_get_config_entry_diagnostics(
     if coordinator is None:
         return {"version": VERSION, "error": "entry not loaded"}
 
-    config = asdict(coordinator.config)
-    config["manual_switch_on_target"] = coordinator.config.manual_switch_on_target.value
-    config = _redact(config)
+    config = _redact(asdict(coordinator.config))
 
     return {
         "version": VERSION,

@@ -40,8 +40,6 @@ from .const import (
     CONF_LOCK_CODE,
     CONF_LOCK_ENABLED,
     CONF_LOCK_USERS,
-    CONF_MANUAL_SWITCH_ENTITY_ID,
-    CONF_MANUAL_SWITCH_ON_TARGET,
     CONF_MAX_OVERRIDE_MINUTES,
     CONF_MILD_THRESHOLD,
     CONF_MIN_ROUTE_DWELL,
@@ -70,10 +68,7 @@ from .models import (
     DEFAULT_SETTLE_TIME,
     DEFAULT_STARTUP_GRACE,
     DEFAULT_TEMPERATURE_TOLERANCE,
-    Target,
 )
-
-MANUAL_SWITCH_DOMAINS = ["switch", "input_boolean", "input_select"]
 
 
 def _defaults(current: Mapping[str, Any] | None = None) -> dict[str, Any]:
@@ -83,8 +78,6 @@ def _defaults(current: Mapping[str, Any] | None = None) -> dict[str, Any]:
         CONF_RADIATOR_ENTITY_ID: current.get(CONF_RADIATOR_ENTITY_ID, vol.UNDEFINED),
         CONF_AC_ENTITY_ID: current.get(CONF_AC_ENTITY_ID, vol.UNDEFINED),
         CONF_OUTDOOR_SENSOR_ENTITY_ID: current.get(CONF_OUTDOOR_SENSOR_ENTITY_ID, vol.UNDEFINED),
-        CONF_MANUAL_SWITCH_ENTITY_ID: current.get(CONF_MANUAL_SWITCH_ENTITY_ID, None),
-        CONF_MANUAL_SWITCH_ON_TARGET: current.get(CONF_MANUAL_SWITCH_ON_TARGET, Target.AC.value),
         CONF_COLD_THRESHOLD: current.get(CONF_COLD_THRESHOLD, DEFAULT_COLD_THRESHOLD),
         CONF_MILD_THRESHOLD: current.get(CONF_MILD_THRESHOLD, DEFAULT_MILD_THRESHOLD),
         CONF_MIN_ROUTE_DWELL: current.get(CONF_MIN_ROUTE_DWELL, DEFAULT_MIN_ROUTE_DWELL),
@@ -135,12 +128,6 @@ def _number(minimum: float, maximum: float, step: float, unit: str | None = None
 
 def _schema(current: Mapping[str, Any] | None = None) -> vol.Schema:
     defaults = _defaults(current)
-    manual_switch = defaults[CONF_MANUAL_SWITCH_ENTITY_ID]
-    manual_switch_key = (
-        vol.Optional(CONF_MANUAL_SWITCH_ENTITY_ID)
-        if manual_switch is None
-        else vol.Optional(CONF_MANUAL_SWITCH_ENTITY_ID, default=manual_switch)
-    )
     return vol.Schema(
         {
             vol.Required(CONF_NAME, default=defaults[CONF_NAME]): cv.string,
@@ -154,16 +141,6 @@ def _schema(current: Mapping[str, Any] | None = None) -> vol.Schema:
                 CONF_OUTDOOR_SENSOR_ENTITY_ID,
                 default=defaults[CONF_OUTDOOR_SENSOR_ENTITY_ID],
             ): EntitySelector(EntitySelectorConfig(domain="sensor")),
-            manual_switch_key: EntitySelector(EntitySelectorConfig(domain=MANUAL_SWITCH_DOMAINS)),
-            vol.Required(
-                CONF_MANUAL_SWITCH_ON_TARGET,
-                default=defaults[CONF_MANUAL_SWITCH_ON_TARGET],
-            ): SelectSelector(
-                SelectSelectorConfig(
-                    options=[Target.AC.value, Target.RADIATOR.value],
-                    mode=SelectSelectorMode.DROPDOWN,
-                )
-            ),
             vol.Required(CONF_COLD_THRESHOLD, default=defaults[CONF_COLD_THRESHOLD]): _number(
                 -50, 60, 0.5, "°C"
             ),
@@ -264,13 +241,6 @@ def _validate_input(hass: HomeAssistant, data: Mapping[str, Any]) -> dict[str, s
             errors[field] = "entity_not_found"
         elif not entity_id.startswith(f"{domain}."):
             errors[field] = "invalid_entity"
-
-    manual = data.get(CONF_MANUAL_SWITCH_ENTITY_ID)
-    if manual:
-        if hass.states.get(manual) is None:
-            errors[CONF_MANUAL_SWITCH_ENTITY_ID] = "entity_not_found"
-        elif manual.split(".", 1)[0] not in MANUAL_SWITCH_DOMAINS:
-            errors[CONF_MANUAL_SWITCH_ENTITY_ID] = "invalid_entity"
 
     cold = float(data.get(CONF_COLD_THRESHOLD, DEFAULT_COLD_THRESHOLD))
     mild = float(data.get(CONF_MILD_THRESHOLD, DEFAULT_MILD_THRESHOLD))

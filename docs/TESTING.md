@@ -27,7 +27,7 @@ Coverage targets:
   - can be set to `heating`, `cooling`, `idle`, `off`, `unavailable`;
   - can simulate delayed state transitions and failures.
 - Mock outdoor sensor (`sensor.test_outdoor`) with controllable state/timestamp.
-- Mock manual switch (`input_boolean.test_manual`).
+- Mock route override select.
 - A config entry factory with sensible defaults.
 - `freeze_time` / `async_fire_time_changed` helpers for override and timeout tests.
 
@@ -71,11 +71,9 @@ class MockClimate(ClimateEntity):
 | `test_route_deadband_holds_radiator` | current radiator, 8 °C | radiator, `hysteresis` |
 | `test_route_ac_to_radiator_at_cold` | current AC, 6 °C | radiator |
 | `test_route_radiator_to_ac_above_mild` | current radiator, 10 °C | AC |
-| `test_route_manual_switch_forces_ac` | switch on, 0 °C | AC, `manual_switch` |
-| `test_route_manual_switch_forces_radiator` | switch on, 20 °C, on_target=radiator | radiator |
-| `test_route_override_beats_switch` | select=radiator, switch on=ac | radiator, `manual_route` |
+| `test_route_override_forces_radiator` | select=radiator, 20 °C | radiator, `manual_route` |
 | `test_route_cool_forces_ac` | mode=cool, 0 °C | AC, `hvac_mode_cool` |
-| `test_route_off_wins` | mode=off, switch on | no targets, `off` |
+| `test_route_off_wins` | mode=off | no targets, `off` |
 | `test_route_outdoor_stale_holds_last` | stale, current AC | AC, `fallback_outdoor` |
 | `test_route_outdoor_stale_no_history` | stale, no current | radiator |
 | `test_route_unavailable_target_fallback` | route AC, AC unavailable, fallback true | radiator, `fallback_unavailable` |
@@ -185,7 +183,6 @@ class MockClimate(ClimateEntity):
 | `adopt` guard | Not adopted. |
 | Unavailable target | Fallback/offline; conflict. |
 | Outdoor stale | Binary sensor on; route held. |
-| Manual switch stale | Binary sensor/attribute; last state held. |
 | Target temperature mismatch | Diagnostic sensor on. |
 
 ### 4.6 Services and diagnostics (`test_services.py`, `test_diagnostics.py`)
@@ -304,7 +301,6 @@ class MockClimate(ClimateEntity):
 
 1. Make the outdoor sensor unavailable.
 2. Verify `binary_sensor.outdoor_sensor_stale`, route holds, no flapping.
-3. Make the manual switch unavailable; verify last state held and diagnostic attribute.
 
 ### 5.7 Restart
 

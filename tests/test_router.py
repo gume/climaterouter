@@ -42,8 +42,6 @@ def _inputs(**overrides) -> RouteInputs:
     values = {
         "hvac_mode": "heat",
         "route_override": "auto",
-        "manual_switch": "off",
-        "manual_switch_on_target": Target.AC,
         "outdoor_temperature": 10.0,
         "outdoor_fresh": True,
         "current_target": None,
@@ -100,26 +98,8 @@ def test_route_radiator_to_ac_above_mild() -> None:
     assert _targets(decision) == {Target.AC}
 
 
-def test_route_manual_switch_forces_ac() -> None:
-    decision = choose_route(_inputs(manual_switch="on", outdoor_temperature=0.0))
-    assert _targets(decision) == {Target.AC}
-    assert decision.reason == "manual_switch"
-
-
-def test_route_manual_switch_forces_radiator() -> None:
-    decision = choose_route(
-        _inputs(
-            manual_switch="on",
-            manual_switch_on_target=Target.RADIATOR,
-            outdoor_temperature=20.0,
-        )
-    )
-    assert _targets(decision) == {Target.RADIATOR}
-    assert decision.reason == "manual_switch"
-
-
-def test_route_override_beats_switch() -> None:
-    decision = choose_route(_inputs(route_override="radiator", manual_switch="on"))
+def test_route_override_forces_radiator() -> None:
+    decision = choose_route(_inputs(route_override="radiator"))
     assert _targets(decision) == {Target.RADIATOR}
     assert decision.reason == "manual_route"
 
@@ -131,7 +111,7 @@ def test_route_cool_forces_ac() -> None:
 
 
 def test_route_off_wins() -> None:
-    decision = choose_route(_inputs(hvac_mode="off", manual_switch="on"))
+    decision = choose_route(_inputs(hvac_mode="off"))
     assert _targets(decision) == set()
     assert decision.reason == "off"
 

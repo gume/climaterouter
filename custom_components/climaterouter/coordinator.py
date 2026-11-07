@@ -23,7 +23,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     ATTR_TEMPERATURE,
     ATTR_UNIT_OF_MEASUREMENT,
-    STATE_OFF,
     STATE_ON,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
@@ -85,7 +84,7 @@ from .models import (
     UnderlyingState,
     lock_blocks_context,
 )
-from .router import choose_route, normalize_manual_select, target_conflict
+from .router import choose_route, target_conflict
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -113,8 +112,6 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         }
         self._outdoor_temperature: float | None = None
         self._outdoor_stale = True
-        self._manual_switch_state: str | None = None
-        self._manual_switch_stale = False
 
         self._baseline = DesiredState()
         self._desired = DesiredState()
@@ -187,8 +184,6 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             self.config.ac_entity_id,
             self.config.outdoor_sensor_entity_id,
         ]
-        if self.config.manual_switch_entity_id:
-            entity_ids.append(self.config.manual_switch_entity_id)
 
         self._unsubs.append(
             async_track_state_change_event(self.hass, entity_ids, self._handle_state_change)
@@ -1530,7 +1525,6 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         for target in Target:
             self._states[target] = self._read_target(target)
         self._read_outdoor()
-        self._read_manual_switch()
 
     def _read_target(self, target: Target) -> UnderlyingState:
         entity_id = (
@@ -1590,43 +1584,15 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         age = (dt_util.utcnow() - state.last_updated).total_seconds()
         self._outdoor_stale = age > self.config.outdoor_stale_after
 
-    def _read_manual_switch(self) -> None:
-        entity_id = self.config.manual_switch_entity_id
-        if not entity_id:
-            self._manual_switch_state = None
-            self._manual_switch_stale = False
-            return
-
-        state = self.hass.states.get(entity_id)
-        if state is None or state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
-            self._manual_switch_stale = True
-            return
-
-        self._manual_switch_stale = False
-        if entity_id.startswith("input_select."):
-            self._manual_switch_state = normalize_manual_select(state.state)
-        elif state.state == STATE_ON:
-            self._manual_switch_state = STATE_ON
-        else:
-            self._manual_switch_state = STATE_OFF
-
     def _route_override_value(self) -> str:
-        """Return the effective route override (built-in select wins)."""
-        if self._route_override != ROUTE_AUTO:
-            return self._route_override
-        if self.config.manual_switch_entity_id and self.config.manual_switch_entity_id.startswith(
-            "input_select."
-        ):
-            return self._manual_switch_state or ROUTE_AUTO
-        return ROUTE_AUTO
+        """Return the effective route override."""
+        return self._route_override
 
     def _route_decision(self) -> RouteDecision:
         capabilities = {target: self._states[target].capability for target in Target}
         inputs = RouteInputs(
             hvac_mode=self._desired.hvac_mode or HVAC_HEAT,
             route_override=self._route_override_value(),
-            manual_switch=self._manual_switch_state,
-            manual_switch_on_target=self.config.manual_switch_on_target,
             outdoor_temperature=self._outdoor_temperature,
             outdoor_fresh=not self._outdoor_stale,
             current_target=self._current_route_target(),
@@ -1691,8 +1657,6 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             conflict_count=self._conflict_count,
             outdoor_temperature=self._outdoor_temperature,
             outdoor_stale=self._outdoor_stale,
-            manual_switch_state=self._manual_switch_state,
-            manual_switch_stale=self._manual_switch_stale,
             route_override=self._route_override_value(),
             last_handover=self._last_handover,
             last_command=self._last_command,
@@ -1762,7 +1726,6 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
                 "new_target": new.value if new else None,
                 "reason": self._route_reason,
                 "outdoor_temperature": self._outdoor_temperature,
-                "manual_switch": self._manual_switch_state,
             },
         )
 

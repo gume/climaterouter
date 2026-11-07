@@ -6,7 +6,7 @@ thermostat (VTherm `over_switch`) and an AC thermostat (VTherm `over_climate`).
 Implemented milestones (see [`docs/PLAN.md`](../../docs/PLAN.md)):
 
 - **M1** — config/options/reconfigure flow, device, proxy entity, services, diagnostics, translations, tests.
-- **M2** — pure routing with outdoor hysteresis, manual switch, route override, `off`/`cool`, command forwarding,
+- **M2** — pure routing with outdoor hysteresis, route override, `off`/`cool`, command forwarding,
   state mirroring, status sensors and override/route buttons.
 - **M3** — handover state machine: idle detection, off confirmation, timeout, pending command carriage, startup
   reconciliation, handover events and the handover-pending binary sensor.

@@ -21,7 +21,6 @@ def test_router_config_defaults() -> None:
     config = RouterConfig.from_mapping({})
     assert config.cold_threshold == 7.0
     assert config.mild_threshold == 9.0
-    assert config.manual_switch_on_target is Target.AC
     assert config.boost_enabled is False
 
 
@@ -32,7 +31,6 @@ def test_router_config_parses_types() -> None:
             "cold_threshold": "5.5",
             "mild_threshold": 7,
             "min_route_dwell": "120",
-            "manual_switch_on_target": "radiator",
             "boost_enabled": "true",
         }
     )
@@ -40,7 +38,6 @@ def test_router_config_parses_types() -> None:
     assert config.cold_threshold == 5.5
     assert config.mild_threshold == 7.0
     assert config.min_route_dwell == 120
-    assert config.manual_switch_on_target is Target.RADIATOR
     assert config.boost_enabled is True
 
 

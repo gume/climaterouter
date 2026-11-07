@@ -348,8 +348,6 @@ class RouterSnapshot:
     conflict_count: int = 0
     outdoor_temperature: float | None = None
     outdoor_stale: bool = True
-    manual_switch_state: str | None = None
-    manual_switch_stale: bool = False
     route_override: str = ROUTE_AUTO
     last_handover: datetime | None = None
     last_command: datetime | None = None
@@ -397,8 +395,6 @@ class RouteInputs:
 
     hvac_mode: str | None
     route_override: str = ROUTE_AUTO
-    manual_switch: str | None = None
-    manual_switch_on_target: Target = Target.AC
     outdoor_temperature: float | None = None
     outdoor_fresh: bool = True
     current_target: Target | None = None
@@ -433,8 +429,6 @@ class RouterConfig:
     radiator_entity_id: str = ""
     ac_entity_id: str = ""
     outdoor_sensor_entity_id: str = ""
-    manual_switch_entity_id: str | None = None
-    manual_switch_on_target: Target = Target.AC
     cold_threshold: float = DEFAULT_COLD_THRESHOLD
     mild_threshold: float = DEFAULT_MILD_THRESHOLD
     min_route_dwell: int = DEFAULT_MIN_ROUTE_DWELL
@@ -460,7 +454,6 @@ class RouterConfig:
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> RouterConfig:
         """Build a config from entry data merged with options."""
-        target = str(data.get("manual_switch_on_target", Target.AC.value))
 
         def _float(key: str, default: float) -> float:
             try:
@@ -480,16 +473,11 @@ class RouterConfig:
                 return value.lower() in ("1", "true", "yes", "on")
             return bool(value)
 
-        manual = data.get("manual_switch_entity_id") or None
         return cls(
             name=str(data.get("name") or "ClimateRouter"),
             radiator_entity_id=str(data.get("radiator_entity_id") or ""),
             ac_entity_id=str(data.get("ac_entity_id") or ""),
             outdoor_sensor_entity_id=str(data.get("outdoor_sensor_entity_id") or ""),
-            manual_switch_entity_id=str(manual) if manual else None,
-            manual_switch_on_target=Target.RADIATOR
-            if target == Target.RADIATOR.value
-            else Target.AC,
             cold_threshold=_float("cold_threshold", DEFAULT_COLD_THRESHOLD),
             mild_threshold=_float("mild_threshold", DEFAULT_MILD_THRESHOLD),
             min_route_dwell=_int("min_route_dwell", DEFAULT_MIN_ROUTE_DWELL),

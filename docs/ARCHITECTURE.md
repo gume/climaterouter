@@ -27,7 +27,7 @@ This document describes the technical design behind the plan in [`PLAN.md`](PLAN
 ┌───────────────────────────────▼────────────────────────────────────┐
 │ Home Assistant services / state                                    │
 │  climate.vtherm_radiator · climate.vtherm_ac · outdoor sensor ·    │
-│  manual switch · route override select                             │
+│  route override select                                            │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -108,8 +108,6 @@ class RouterSnapshot:
     conflicts: tuple[Conflict, ...]
     outdoor_temperature: float | None
     outdoor_stale: bool
-    manual_switch_state: str | None
-    manual_switch_stale: bool
     route_override: str
     last_handover: datetime | None
     last_command: datetime | None
@@ -299,7 +297,6 @@ available = entry loaded AND (any target available OR fallback possible)
 
 - If the active target is unavailable and fallback is disabled, `available=false` and conflict sensor on.
 - If the outdoor sensor is stale, `available` stays true; route holds.
-- If the manual switch is stale, `available` stays true; switch state holds.
 
 ## 11. Concurrency rules
 

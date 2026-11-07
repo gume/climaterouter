@@ -82,8 +82,6 @@ if not boost_active and non_selected_target_on:
     conflict("inactive_target_on")
 if outdoor_stale:
     warning("input_stale", "outdoor")
-if manual_switch_stale:
-    warning("input_stale", "manual_switch")
 if radiator_temp != ac_temp beyond tolerance:
     diagnostic("target_mismatch")
 ```

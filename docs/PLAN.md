@@ -7,6 +7,11 @@ Target: Home Assistant custom integration (`custom_components/climaterouter`)
 Key decisions are recorded in [`ADR/`](ADR/README.md): proxy climate entity, deferred handover, proxy-level
 override, monitor-first conflict policy, and set-based targets for boost.
 
+> **Historical note (0.8.0):** the optional external manual-routing switch described in this plan was removed.
+> Routing is forced only through the built-in `select.climaterouter_route_override` entity (or the
+> `set_route_override` / `clear_route_override` services). Mentions of a "manual switch" below are kept for
+> historical context only.
+
 ---
 
 ## 1. Purpose

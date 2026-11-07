@@ -198,8 +198,6 @@ class RouterClimate(RouterEntity, ClimateEntity):
             "route_reason": snapshot.route_reason,
             "outdoor_temperature": snapshot.outdoor_temperature,
             "outdoor_sensor_stale": snapshot.outdoor_stale,
-            "manual_switch_state": snapshot.manual_switch_state,
-            "manual_switch_stale": snapshot.manual_switch_stale,
             "route_override": snapshot.route_override,
             "desired_hvac_mode": snapshot.desired.hvac_mode,
             "desired_preset_mode": snapshot.desired.preset_mode,

@@ -11,7 +11,6 @@ the package is installable.
   - `climate.vtherm_radiator` — type `over_switch` (TPI), supports `heat`/`off`.
   - `climate.vtherm_ac` — type `over_climate`, supports `heat`/`cool`/`off`.
 - An outdoor temperature sensor, e.g. `sensor.outdoor_temperature`.
-- Optional manual switch, e.g. `input_boolean.climaterouter_force_ac`.
 - [Scheduler Component](https://github.com/nielsfaber/scheduler-component) and
   [Scheduler Card](https://github.com/nielsfaber/scheduler-card) for scheduling.
 
@@ -59,7 +58,6 @@ proxy will surface it as an underlying override.
    - radiator VTherm;
    - AC VTherm;
    - outdoor temperature sensor;
-   - optional manual switch and its `on` target;
    - thresholds and timings (defaults are fine to start).
 5. Finish. A device with `climate.climaterouter` and the diagnostic entities is created.
 
@@ -96,46 +94,17 @@ to the new target when it is safe.
 
 In shoulder seasons, the outdoor temperature may route the same schedule to the AC instead of the radiator.
 
-## 5. Manual switch
+## 5. Route override
 
-### Boolean switch
+`select.climaterouter_route_override` forces routing without an external helper:
 
-Configure `manual_switch_entity_id` and `manual_switch_on_target`:
+- `auto` — automatic outdoor-temperature routing;
+- `radiator` — always use the radiator;
+- `ac` — always use the AC.
 
-- `on` → force the configured target (default AC).
-- `off` → automatic outdoor routing.
-
-Example:
-
-```yaml
-# configuration.yaml (helper)
-input_boolean:
-  climaterouter_force_ac:
-    name: ClimateRouter force AC
-    icon: mdi:air-conditioner
-```
-
-Then select `input_boolean.climaterouter_force_ac` in the config flow with `on_target: ac`.
-
-### Input select
-
-An `input_select` with states `auto`, `radiator`, `ac` is also supported:
-
-```yaml
-input_select:
-  climaterouter_route:
-    name: ClimateRouter route
-    options:
-      - auto
-      - radiator
-      - ac
-    initial: auto
-```
-
-### Built-in route override
-
-`select.climaterouter_route_override` provides the same capability without an external helper. The select wins over
-the external switch. Use it for temporary overrides from a dashboard.
+Use it for temporary overrides from a dashboard. The route override is cleared on restart by design; the
+`climaterouter.set_route_override` / `climaterouter.clear_route_override` services provide the same control from
+scripts and automations.
 
 ## 6. Manual override
 
@@ -273,7 +242,7 @@ automation:
 | Symptom | Check |
 |---|---|
 | Scheduler does not see the proxy | Entity is created and available; Scheduler Card `include` has `climate.climaterouter`. |
-| Commands go to the wrong VTherm | `sensor.active_target`, `sensor.route_reason`, outdoor sensor value, manual switch, route override. |
+| Commands go to the wrong VTherm | `sensor.active_target`, `sensor.route_reason`, outdoor sensor value, route override. |
 | Handover does not happen | `binary_sensor.handover_pending`; old target may still be heating. Wait for its cycle to end. |
 | Override does not return to schedule | `sensor.override_remaining`, baseline attributes, Scheduler command during override. |
 | Conflict sensor on | `climate.climaterouter` attributes `conflicts`; check direct VTherm changes or guards. |

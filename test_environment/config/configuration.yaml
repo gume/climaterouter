@@ -32,23 +32,6 @@ fake_hvac:
   simulation_enabled: true
 
 # ---------------------------------------------------------------------------
-# Manual routing helpers (optional; the integration also has its own select)
-# ---------------------------------------------------------------------------
-input_boolean:
-  climaterouter_force_ac:
-    name: ClimateRouter force AC
-    icon: mdi:air-conditioner
-
-input_select:
-  climaterouter_route:
-    name: ClimateRouter test route
-    options:
-      - auto
-      - radiator
-      - ac
-    initial: auto
-
-# ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
 logger:
