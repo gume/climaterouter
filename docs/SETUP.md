@@ -25,8 +25,8 @@ temperatures consistently (eco/comfort/boost/frost) so a preset means the same t
 - TPI coefficients tuned for the radiator.
 - Presets configured: `eco`, `comfort`, `boost`, `frost`.
 - Window/presence/power/safety features as desired.
-- Keep VTherm's own manual override timer at `0` if you intend to use the proxy override
-  (`manual_override_duration_min: 0`).
+- Keep VTherm's own manual override timer at `0` (`manual_override_duration_min: 0`); the proxy owns the
+  cross-target timer.
 - Do not schedule the radiator VTherm directly.
 
 ### AC (`over_climate`)
@@ -35,7 +35,7 @@ temperatures consistently (eco/comfort/boost/frost) so a preset means the same t
 - Enable AC mode if the unit supports cooling.
 - Presets configured consistently with the radiator.
 - Window/presence/power/safety features as desired.
-- Keep VTherm's own manual override timer at `0` if you use the proxy override.
+- Keep VTherm's own manual override timer at `0`; the proxy owns the cross-target timer.
 - Disable "Follow underlying temperature changes" unless you accept that physical remote changes will be detected
   as conflicts.
 - Do not schedule the AC VTherm directly.
@@ -43,7 +43,7 @@ temperatures consistently (eco/comfort/boost/frost) so a preset means the same t
 ### Why disable VTherm's timed override?
 
 VTherm's `set_timed_preset` and `manual_override_duration_min` are per-target. If the proxy hands over to the other
-target, the timed override does not follow. ClimateRouter therefore keeps the cross-target override in the proxy.
+target, the timed override does not follow. ClimateRouter therefore keeps manual mode and its timer in the proxy.
 If you prefer VTherm's own timer, use it directly on the active VTherm and accept that it is target-local; the
 proxy will surface it as an underlying override.
 
@@ -106,16 +106,19 @@ Use it for temporary overrides from a dashboard. The route override is cleared o
 `climaterouter.set_route_override` / `climaterouter.clear_route_override` services provide the same control from
 scripts and automations.
 
-## 6. Manual override
+## 6. Manual mode
 
-Use the service from a script or dashboard button:
+Manual mode is owned by the proxy and is **not** mirrored to either VTherm. Two ways to start it:
+
+- move the temperature or change the preset in the UI — this starts manual mode automatically;
+- use the switch/select or a service call.
 
 ```yaml
 script:
-  climaterouter_override_30:
-    alias: "ClimateRouter override 22 °C for 30 min"
+  climaterouter_manual_22_30:
+    alias: "ClimateRouter manual 22 °C for 30 min"
     sequence:
-      - action: climaterouter.set_manual_override
+      - action: climaterouter.enter_manual_mode
         target:
           entity_id: climate.climaterouter
         data:
@@ -123,14 +126,14 @@ script:
           duration_minutes: 30
 ```
 
-Preset override:
+Preset:
 
 ```yaml
 script:
   climaterouter_comfort_90:
     alias: "ClimateRouter comfort for 90 min"
     sequence:
-      - action: climaterouter.set_manual_override
+      - action: climaterouter.enter_manual_mode
         target:
           entity_id: climate.climaterouter
         data:
@@ -138,20 +141,16 @@ script:
           duration_minutes: 90
 ```
 
-Cancel:
-
-```yaml
-script:
-  climaterouter_cancel_override:
-    alias: "ClimateRouter cancel override"
-    sequence:
-      - action: climaterouter.cancel_manual_override
-        target:
-          entity_id: climate.climaterouter
-```
-
-When the override expires, the latest schedule command is restored. If a handover is pending at expiry, the
-baseline is applied after the handover.
+- Additional temperature/preset moves update the manual value but **do not reset the timer**.
+- Change the timer with `select.climaterouter_manual_timer` or `climaterouter.set_manual_timer`; `off` / `0`
+  means manual mode stays active until it is ended.
+- Return with `button.climaterouter_return_to_schedule` or `climaterouter.return_to_schedule`. The latest schedule
+  command is restored, including across a handover.
+- The timer is stored as an absolute deadline, so manual mode survives a restart until the deadline.
+- `default_manual_minutes` sets the default timer for new sessions (`0` = no timer). `manual_blocks_schedule`
+  (default on) rejects Scheduler/automation commands while manual mode is active; user moves are always accepted.
+- Manual mode is **not** VTherm's own manual preset. Set VTherm `manual_override_duration_min` to `0` and let the
+  proxy own the timer.
 
 ## 7. Dashboard example
 
@@ -169,34 +168,38 @@ cards:
       - binary_sensor.climaterouter_heating
       - binary_sensor.climaterouter_cooling
       - binary_sensor.climaterouter_handover_pending
-      - binary_sensor.climaterouter_manual_override
+      - binary_sensor.climaterouter_manual_mode
       - binary_sensor.climaterouter_conflict
       - sensor.climaterouter_active_target
       - sensor.climaterouter_pending_target
       - sensor.climaterouter_route_reason
       - sensor.climaterouter_outdoor_temperature
-      - sensor.climaterouter_override_remaining
+      - sensor.climaterouter_manual_remaining
+      - sensor.climaterouter_manual_until
+      - switch.climaterouter_manual_mode
+      - select.climaterouter_manual_timer
+      - button.climaterouter_return_to_schedule
       - select.climaterouter_route_override
 
   - type: horizontal-stack
     cards:
       - type: button
-        name: Override 30 min
+        name: Manual 30 min
         icon: mdi:timer-edit-outline
         tap_action:
           action: call-service
-          service: climaterouter.set_manual_override
+          service: climaterouter.enter_manual_mode
           target:
             entity_id: climate.climaterouter
           data:
             temperature: 22
             duration_minutes: 30
       - type: button
-        name: Cancel override
-        icon: mdi:timer-off-outline
+        name: Return to schedule
+        icon: mdi:calendar-clock
         tap_action:
           action: call-service
-          service: climaterouter.cancel_manual_override
+          service: climaterouter.return_to_schedule
           target:
             entity_id: climate.climaterouter
 ```
@@ -244,12 +247,12 @@ automation:
 | Scheduler does not see the proxy | Entity is created and available; Scheduler Card `include` has `climate.climaterouter`. |
 | Commands go to the wrong VTherm | `sensor.active_target`, `sensor.route_reason`, outdoor sensor value, route override. |
 | Handover does not happen | `binary_sensor.handover_pending`; old target may still be heating. Wait for its cycle to end. |
-| Override does not return to schedule | `sensor.override_remaining`, baseline attributes, Scheduler command during override. |
+| Manual mode does not return to schedule | `sensor.manual_remaining`, `sensor.manual_until`, `manual_blocks_schedule`, Scheduler command during manual mode. |
 | Conflict sensor on | `climate.climaterouter` attributes `conflicts`; check direct VTherm changes or guards. |
 | Both VTherms on | Conflict; check `auto_resolve_idle_targets`; do not force off while heating. |
 | Outdoor route flapping | Increase the gap between `cold_threshold` and `mild_threshold`; increase `min_route_dwell`. |
 | Proxy unavailable | At least one target unavailable and fallback disabled; check VTherm entities. |
-| VTherm timed override appears | The proxy treats it as an underlying override; use one override layer consistently. |
+| VTherm timed override appears | Set VTherm `manual_override_duration_min` to `0`; the proxy owns the timer. |
 
 ## 10. Upgrade notes
 

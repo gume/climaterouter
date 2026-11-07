@@ -36,17 +36,22 @@ calls `versatile_thermostat.lock`/`unlock` on the card entity, which a proxy can
 | `sensor.<name>_pending_target` | Target waiting for the old one to become idle. |
 | `sensor.<name>_route_reason` | Why the current route was chosen. |
 | `binary_sensor.<name>_handover_pending` | A route change is waiting for an idle target. |
-| `binary_sensor.<name>_manual_override` | A bounded manual override is active. |
+| `binary_sensor.<name>_manual_mode` | Proxy-owned manual mode is active. |
+| `sensor.<name>_manual_remaining` | Whole minutes left in manual mode (unknown when the timer is off). |
+| `sensor.<name>_manual_until` | Absolute manual-mode deadline. |
+| `sensor.<name>_manual_timer_minutes` | Selected timer length (diagnostic). |
+| `switch.<name>_manual_mode` | Enter manual mode / return to the schedule. |
+| `select.<name>_manual_timer` | Choose a timer length or `off`. |
 | `binary_sensor.<name>_boost_active` | Both targets are active during a bounded boost. |
 | `binary_sensor.<name>_conflict` | An underlying VTherm differs from the expected state. |
 | `sensor.<name>_conflict_count` | Total conflicts detected since startup. |
-| `sensor.<name>_override_remaining` | Whole minutes left in the override. |
 | `sensor.<name>_boost_remaining` | Whole minutes left in boost. |
 | `select.<name>_route_override` | Force `auto`, `radiator` or `ac`. |
 | `button.<name>_recalculate_route` | Re-evaluate immediately. |
-| `button.<name>_cancel_override` | Cancel the override and restore the baseline. |
+| `button.<name>_return_to_schedule` | End manual mode and restore the schedule. |
 | `button.<name>_clear_conflicts` | Acknowledge and clear current conflicts. |
 | `button.<name>_force_handover` | Finish a pending handover without waiting for the old target to idle. |
+| `lock.<name>_lock` | Optional accidental-touch UI lock (user commands only). |
 | `sensor.<name>_outdoor_temperature` | Outdoor value the router used. |
 
 ## Services
@@ -54,12 +59,15 @@ calls `versatile_thermostat.lock`/`unlock` on the card entity, which a proxy can
 - `climaterouter.recalculate`
 - `climaterouter.set_route_override` (`route: auto|radiator|ac`)
 - `climaterouter.clear_route_override`
-- `climaterouter.set_manual_override` (`temperature`, `preset_mode`, or `hvac_mode` + optional `duration_minutes`)
-- `climaterouter.cancel_manual_override`
+- `climaterouter.enter_manual_mode` (`temperature`, `preset_mode`, or `hvac_mode` + optional `duration_minutes`)
+- `climaterouter.set_manual_timer` (`minutes`; `0` or omitted switches the timer off)
+- `climaterouter.return_to_schedule`
+- `climaterouter.set_manual_override` / `cancel_manual_override` (deprecated aliases)
 - `climaterouter.set_boost` (`duration_minutes`, `targets: both`; requires `boost_enabled` and heat mode)
 - `climaterouter.cancel_boost`
 - `climaterouter.clear_conflicts`
 - `climaterouter.force_handover`
+- `climaterouter.lock` / `climaterouter.unlock` (optional `code`; UI lock only)
 
 All services target the proxy climate entity.
 

@@ -189,9 +189,10 @@ class MockClimate(ClimateEntity):
 
 | Test | Expected |
 |---|---|
-| `set_manual_override` missing value | `ServiceValidationError`. |
-| `set_manual_override` target not proxy | `ServiceValidationError`. |
-| `cancel_manual_override` no override | No-op / clear error. |
+| `enter_manual_mode` with two values | `ServiceValidationError`. |
+| `enter_manual_mode` target not proxy | `ServiceValidationError`. |
+| `set_manual_timer` with no manual mode | `HomeAssistantError` / clear error. |
+| `return_to_schedule` no manual mode | No-op. |
 | `set_route_override` valid | Select state changes, route recalculated. |
 | `clear_route_override` | Back to auto. |
 | `set_boost` disabled | `ServiceValidationError`. |
@@ -276,14 +277,15 @@ class MockClimate(ClimateEntity):
 8. Verify the proxy climate does **not** expose `is_lock_configured`, `lock_manager` or `is_locked`.
 9. Disable the native lock in options; verify the lock entity disappears and commands are accepted again.
 
-### 5.3 Manual override
+### 5.3 Manual mode
 
-1. Start a 30-minute temperature override at 22.5 °C.
-2. Verify `binary_sensor.manual_override` and `sensor.override_remaining`.
-3. Change the schedule during the override; verify the baseline updates but the override continues.
-4. Let it expire; verify the latest schedule preset/temperature is restored.
-5. Repeat with a preset override.
-6. Restart HA mid-override; verify remaining time and restore behavior.
+1. Start a 30-minute manual mode at 22.5 °C.
+2. Verify `binary_sensor.manual_mode` and `sensor.manual_remaining`.
+3. Change the temperature again; verify the value updates but the timer does not reset.
+4. Switch the timer off; verify `sensor.manual_remaining` is unknown and manual mode stays active.
+5. Return to schedule; verify the latest schedule preset/temperature is restored.
+6. Repeat with a preset and with a handover during manual mode; verify the deadline survives.
+7. Restart HA mid-manual-mode; verify remaining time and restore behaviour.
 
 ### 5.4 Conflict detection
 

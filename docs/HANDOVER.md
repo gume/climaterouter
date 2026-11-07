@@ -34,11 +34,12 @@
 | `a028adf` | `feat: expose manual mode switch, timer select, sensors, and return button` |
 | `40f510c` | `feat: split the proxy UI lock from the manual schedule lock` |
 | `e60bbfc` | `feat: sectioned config/options flows with the new manual and display options` |
+| `07e04f4` | `feat: gate VTherm identity attributes behind expose_vtherm_identity` |
 
 Everything through `bf19c92` (version **0.5.0**) is pushed to `origin/main` and installed in the live test instance.
 Local commits `28fbf93` (version **0.6.0**, read-only VTherm display attributes), `e0634e2` (docs), `97c620e`
-(version **0.7.0**, native lock) and the proxy-rework series starting with `38e0ef0` are not pushed yet. The
-assistant has no GitHub credentials.
+(version **0.7.0**, native lock) and the proxy-rework series starting with `38e0ef0` are not pushed yet. The current
+checkout is version **0.8.0**. The assistant has no GitHub credentials.
 
 ---
 
@@ -52,19 +53,21 @@ Milestones M1–M6 from [`PLAN.md`](PLAN.md) are implemented. M1–M3 were valid
 | M1 — skeleton and config flow | Done | Config/options/reconfigure flows, device, proxy entity, services, diagnostics, translations, CI. |
 | M2 — proxy and routing | Done | Hysteresis, route override, `off`/`cool`, command forwarding, status entities. The external manual switch was removed in 0.8.0. |
 | M3 — safe handover | Done, live-verified | Idle detection, off confirmation, timeout, queued desired state, startup reconciliation, events. The manual forced handover and command forwarding during `PENDING` were verified live in 0.5.0 (see section 6). |
-| M4 — manual override | Implemented, not live-verified | Temperature/preset/mode override, absolute deadline, baseline capture/restore, persistence, handover forwarding, events, binary sensor, remaining sensor and cancel button. Unit coverage is limited to the pure model helpers. |
+| M4 — manual mode | Implemented, not live-verified | Proxy-owned manual mode (temperature/preset/mode), optional timer with configurable default/maximum, baseline capture/restore, non-resetting repeat moves, persistence, handover carry-over, events, switch/select/button/sensors. Replaces the earlier bounded override. |
 | M5 — conflicts | Implemented, not live-verified | Setpoint/preset/mode mismatch, unavailable targets, underlying timed presets, both-on and inactive-target-on detection; own-context and guard suppression; `monitor`/`reassert`/`adopt` policies, auto-resolve switches, events, history and clear button. Unit coverage is limited to the pure classifier. |
 | M6 — boost | Implemented, not live-verified | Feature-flagged both-target boost with heat-only/availability/handover interlocks, persistence, expiry, start/end events, active/remaining entities, and a handover back to single-target routing. |
 
 The post-M6 **native lock** (0.7.0) is implemented and unit-tested at the source-matrix level; live verification is
 still outstanding (see §8).
 
-A larger **proxy rework** is in progress: proxy-owned manual mode and timer, two separate locks, sectioned
+A larger **proxy rework** landed in 0.8.0: proxy-owned manual mode and timer, two separate locks, sectioned
 config/options flows, and VTherm display compatibility split into harmless versus identity keys. Iteration 1
 (`38e0ef0`) removed the external manual-switch routing input; iteration 2 (`ce6d163`) added the proxy-owned manual
 mode model, timer, persistence, and services; iteration 3 (`a028adf`) exposed the standard-card entities; iteration
 4 (`40f510c`) split the accidental-touch UI lock (Lock A) from the manual/schedule lock (Lock B); iteration 5
-(`e60bbfc`) rebuilt the config, options, and reconfigure forms as sections with a menu-based options flow.
+(`e60bbfc`) rebuilt the config, options, and reconfigure forms as sections with a menu-based options flow;
+iteration 6 (`07e04f4`) made the VTherm identity attributes opt-in. Everything is unit-tested locally but still
+needs live verification in the test instance.
 
 The next developer should start with section 8 (Next steps).
 
@@ -480,11 +483,11 @@ current live entry uses the two VTherm entities described in section 4 and runs 
 | No prior command, underlying target already on | adopted, no commands sent |
 | Diagnostics endpoint | OK |
 
-The M4 override, M5 conflict and M6 boost implementations have **not** been exercised in the live instance yet.
-The read-only VTherm display pass-through (**0.6.0**) and the native lock (**0.7.0**) also still need live
-verification. Not yet covered by automated tests: config flow, coordinator, handover, override
-expiry/cancel/handover/restart, conflict policies, boost safety/expiry/return, lock enforcement/persistence,
-persistence, event payloads.
+The M4 manual override, M5 conflict and M6 boost implementations have **not** been exercised in the live instance
+yet. The read-only VTherm display pass-through (**0.6.0**), the native lock (**0.7.0**) and the 0.8.0 proxy rework
+(manual mode/timer, split locks, sectioned flows, opt-in VTherm identity) also still need live verification. Not
+yet covered by automated tests: config flow, coordinator, handover, manual expiry/return/handover/restart, conflict
+policies, boost safety/expiry/return, lock enforcement/persistence, persistence, event payloads.
 
 ---
 
@@ -496,10 +499,10 @@ persistence, event payloads.
    before lowering the floor.
 2. **No automated integration tests.** `tests/` covers only the pure domain/routing layer. CI deliberately does not
    install HA to stay fast.
-3. **M4 is implemented but only unit-tested at the model layer.** Coordinator expiry/cancel/handover/restart
-   behaviour still needs live verification and integration tests. A temperature/preset override started while the
-   proxy has no mode/active target is stored and counted down but does not by itself start heating; start the proxy
-   (`heat`/`cool`) first. The `hvac_mode` override variant is implemented but not part of the normal dashboard flow.
+3. **Manual mode is implemented but only unit-tested at the model layer.** Coordinator auto-entry, timer
+   expiry/return, handover/restart carry-over and Lock B enforcement still need live verification and integration
+   tests. A user temperature/preset move started while the proxy has no mode/active target updates the baseline but
+   does not by itself start heating; start the proxy (`heat`/`cool`) first.
 4. **M5 is implemented but only unit-tested at the classifier layer.** Coordinator policy behaviour (context
    suppression, settle windows, reassert grace, adopt, auto-resolve, history/clear) still needs integration tests
    and live verification. Detection deliberately pauses during handover and during the post-command settle window,

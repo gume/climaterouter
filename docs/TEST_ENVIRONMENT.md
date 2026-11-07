@@ -446,12 +446,12 @@ Verify the route moves to `ac` (subject to the normal handover rules), and
 
 Select `auto` to return to automatic outdoor routing.
 
-### 8.4 Manual override
+### 8.4 Manual mode and timer
 
-Start a one-minute temperature override:
+Start a one-minute manual mode:
 
 ```yaml
-action: climaterouter.set_manual_override
+action: climaterouter.enter_manual_mode
 target:
   entity_id: climate.climaterouter
 data:
@@ -461,13 +461,18 @@ data:
 
 Verify:
 
-- `binary_sensor.climaterouter_manual_override` is `on`;
-- `sensor.climaterouter_override_remaining` counts down;
+- `binary_sensor.climaterouter_manual_mode` is `on`;
+- `sensor.climaterouter_manual_remaining` counts down;
 - the active VTherm receives 22.5 °C;
 - after one minute the previous schedule setpoint is restored.
 
-Repeat with `preset_mode: comfort`. During the override, change the schedule setpoint through
-`climate.set_temperature`; the override should continue and the new schedule value should become the baseline.
+Repeat with `preset_mode: comfort`. While manual mode is active, move the temperature again and verify the value
+changes but the deadline does not reset. Switch the timer off through
+`select.climaterouter_manual_timer` (`off`) and verify the remaining sensor becomes unknown. Return with
+`button.climaterouter_return_to_schedule` or `climaterouter.return_to_schedule`.
+
+With `manual_blocks_schedule` on, send `climate.set_temperature` from an automation (no `user_id`) and verify it is
+rejected while manual mode is active. User moves must still work.
 
 ### 8.5 Direct VTherm change (conflict)
 

@@ -31,10 +31,10 @@ Scheduler / User UI / Automations
 
 ## Status
 
-**M1–M6 implemented.** The integration package provides the config flow, proxy climate entity, outdoor/manual
-routing, safe handover, bounded manual override, conflict detection, feature-flagged boost, a native access lock,
-status entities, services and diagnostics. See [`docs/HANDOVER.md`](docs/HANDOVER.md) for the exact state, test
-results, known gaps and next steps.
+**M1–M6 implemented, plus the 0.8.0 proxy rework.** The integration package provides the config flow, proxy climate
+entity, outdoor routing, safe handover, proxy-owned manual mode/timer, conflict detection, feature-flagged boost,
+two separate locks, status entities, services and diagnostics. See [`docs/HANDOVER.md`](docs/HANDOVER.md) for the
+exact state, test results, known gaps and next steps.
 
 ## Why a proxy?
 
@@ -76,11 +76,11 @@ user-initiated commands; schedule and automation traffic keeps running. See
 | One climate entity | Scheduler/UI see `climate.climaterouter`; no scheduler changes required. |
 | Temperature-based routing | Outdoor sensor plus optional `select` override; hysteresis and minimum dwell time. |
 | Safe handover | Route change is deferred until the old target is idle; old target is turned off before the new one starts. |
-| Manual override | `climaterouter.set_manual_override` applies a temperature or preset for a duration, then restores the latest schedule command. Implemented in the coordinator and survives handover/restart. |
-| Observability | Binary sensors and sensors for active target, pending handover, override, boost, stale inputs, conflicts, and last handover. |
+| Manual mode | Moving the temperature/preset or `climaterouter.enter_manual_mode` starts proxy-owned manual mode with an optional timer; additional moves do not reset it, and `return_to_schedule` restores the schedule. Survives handover/restart. |
+| Observability | Binary sensors and sensors for active target, pending handover, manual mode, boost, stale inputs, conflicts, and last handover. |
 | Conflict detection | Detects direct changes to either VTherm, both-targets-on, unavailable targets, and stale inputs; `monitor` by default, with `reassert`/`adopt` policies and guarded states excluded. |
 | Boost | `climaterouter.set_boost` runs both targets for a bounded time when `boost_enabled` is on; heat-only, both targets must be available, and ending boost hands back to single-target routing. |
-| Native lock | Optional `lock.climaterouter_lock` with a 4–8 digit code, configurable user/automation blocking, auto-relock and persistence. |
+| Two locks | Optional `lock.climaterouter_lock` (UI lock, user commands only) with a 4–8 digit code and auto-relock; `manual_blocks_schedule` forms the manual/schedule lock. |
 
 ## Planned entities
 
@@ -88,7 +88,7 @@ user-initiated commands; schedule and automation traffic keeps running. See
 - `binary_sensor.climaterouter_radiator_active` / `_ac_active` — which route target is selected and on.
 - `binary_sensor.climaterouter_heating` / `_cooling` — actual action of the active target.
 - `binary_sensor.climaterouter_handover_pending` — route change waiting for the old target to become idle.
-- `binary_sensor.climaterouter_manual_override` — timed manual override is active.
+- `binary_sensor.climaterouter_manual_mode` — proxy-owned manual mode is active.
 - `binary_sensor.climaterouter_boost_active` — both targets are active for a bounded boost.
 - `binary_sensor.climaterouter_conflict` — an underlying VTherm or input is inconsistent with the proxy.
 - `binary_sensor.climaterouter_outdoor_sensor_stale` — outdoor temperature is unavailable or stale.
@@ -97,18 +97,24 @@ user-initiated commands; schedule and automation traffic keeps running. See
 - `sensor.climaterouter_pending_target` — pending handover target.
 - `sensor.climaterouter_route_reason` — why the current route was chosen.
 - `sensor.climaterouter_outdoor_temperature` — mirrored outdoor temperature for dashboards/history.
-- `sensor.climaterouter_override_remaining` — minutes left in the manual override.
+- `sensor.climaterouter_manual_remaining` — minutes left in manual mode (unknown when the timer is off).
+- `sensor.climaterouter_manual_until` — absolute manual-mode deadline.
 - `sensor.climaterouter_boost_remaining` — minutes left in boost.
 - `sensor.climaterouter_last_handover` — timestamp of the last completed handover.
 - `sensor.climaterouter_conflict_count` — diagnostic conflict counter.
 - `select.climaterouter_route_override` — `auto` / `radiator` / `ac` (manual route override).
-- `button.climaterouter_cancel_override`, `_recalculate_route`, `_clear_conflicts`, `_force_handover`.
-- `lock.climaterouter_lock` — optional native access lock (only created when `lock_enabled` is on).
+- `switch.climaterouter_manual_mode` — enter manual mode / return to schedule.
+- `select.climaterouter_manual_timer` — timer length or `off`.
+- `sensor.climaterouter_manual_timer_minutes` — selected timer length (diagnostic).
+- `button.climaterouter_return_to_schedule`, `_recalculate_route`, `_clear_conflicts`, `_force_handover`.
+- `lock.climaterouter_lock` — optional UI lock (only created when `lock_enabled` is on).
 
 ## Services
 
-- `climaterouter.set_manual_override`
-- `climaterouter.cancel_manual_override`
+- `climaterouter.enter_manual_mode`
+- `climaterouter.set_manual_timer`
+- `climaterouter.return_to_schedule`
+- `climaterouter.set_manual_override` / `climaterouter.cancel_manual_override` (deprecated aliases)
 - `climaterouter.set_route_override`
 - `climaterouter.clear_route_override`
 - `climaterouter.set_boost` / `climaterouter.cancel_boost` (requires `boost_enabled`)
@@ -134,7 +140,7 @@ user-initiated commands; schedule and automation traffic keeps running. See
   container at the time of writing); compatibility with older releases is not verified.
 - Two existing VTherm climate entities: one radiator (`over_switch`) and one AC (`over_climate`).
 - An outdoor temperature sensor.
-- Optional route override through the built-in `select.climaterouter_route` entity.
+- Optional route override through the built-in `select.climaterouter_route_override` entity.
 - Scheduler Component and Scheduler Card for scheduling.
 
 ## Non-goals
