@@ -49,11 +49,12 @@
 | `f01abcc` | `docs: correct the Marketplace update mechanism and test lab` |
 | `d1190df` | `docs: record the Marketplace investigation commits` |
 | `e025cf4` | `fix: initialize the sensor icon attribute` |
+| `a1c4b66` | `docs: hand over the 0.8.1 live check and sensor fix` |
 
-Everything through `d3af8b4` is pushed to `origin/main`. Local commits `ade30ba`, `f01abcc`, `d1190df`, and
-`e025cf4` are not pushed yet. The test instance runs the `d3af8b4` build of **0.8.1** with a local hotfix copy of
-`sensor.py` (`e025cf4`); reinstalling `e025cf4` through the Marketplace gives a clean build. The assistant has no
-GitHub credentials; the owner pushes.
+Everything through `d3af8b4` is pushed to `origin/main`. Local commits `ade30ba`, `f01abcc`, `d1190df`,
+`e025cf4`, and `a1c4b66` (plus this follow-up docs commit) are not pushed yet. The test instance runs the `d3af8b4`
+build of **0.8.1** with a local hotfix copy of `sensor.py` (`e025cf4`); reinstalling `e025cf4` through the
+Marketplace gives a clean build. The assistant has no GitHub credentials; the owner pushes.
 
 ---
 
