@@ -30,6 +30,7 @@
 | `e0634e2` | `docs: record the card attribute commit` |
 | `97c620e` | `feat: add native ClimateRouter lock` |
 | `38e0ef0` | `refactor: remove the external manual switch routing input` |
+| `ce6d163` | `feat: add proxy-owned manual mode with optional timer` |
 
 Everything through `bf19c92` (version **0.5.0**) is pushed to `origin/main` and installed in the live test instance.
 Local commits `28fbf93` (version **0.6.0**, read-only VTherm display attributes), `e0634e2` (docs), `97c620e`
@@ -57,7 +58,8 @@ still outstanding (see §8).
 
 A larger **proxy rework** is in progress: proxy-owned manual mode and timer, two separate locks, sectioned
 config/options flows, and VTherm display compatibility split into harmless versus identity keys. Iteration 1
-(`38e0ef0`) removed the external manual-switch routing input; only the built-in route-override select remains.
+(`38e0ef0`) removed the external manual-switch routing input; iteration 2 (`ce6d163`) added the proxy-owned manual
+mode model, timer, persistence, and services.
 
 The next developer should start with section 8 (Next steps).
 
@@ -203,29 +205,31 @@ Events fired on the HA bus:
 - Presets are the intersection of both targets' presets, or the union when the intersection is empty, plus `none`.
 - `min_temp`, `max_temp` and `target_temperature_step` come from the active target (or the AC/first available one).
 
-### 3.6 Manual override (M4)
+### 3.6 Manual mode (proxy-owned)
 
-- Services: `climaterouter.set_manual_override` and `climaterouter.cancel_manual_override`, plus
-  `button.<name>_cancel_override`.
-- `set_manual_override` requires exactly one of `temperature`, `preset_mode`, or `hvac_mode`. `hvac_mode: off`
-  cancels the override and turns the proxy off. `duration_minutes` defaults to `default_override_minutes` and is
-  capped by `max_override_minutes`.
-- The coordinator keeps a **baseline** desired state (the latest schedule/proxy command) and a separate
-  `OverrideState` (kind, value, absolute UTC deadline, baseline snapshot, start time). The effective desired state
-  is the baseline with the override applied.
-- Starting an override when the baseline is empty snapshots the active target's actual state. Starting a second
-  override keeps the original baseline and replaces the value/deadline.
-- Schedule commands received during an override update the baseline but do **not** replace the override value.
-  An explicit `off` cancels the override (`cause=off`).
-- Handovers use the effective desired state, so the override is automatically applied to the new target after a
-  handover. Expiry/cancel restores the baseline and forwards it to the active target (or queues it while a
-  handover is pending).
-- Expiry is scheduled exactly at the deadline and is also checked by the 30 s watchdog. The override is stored in
-  the existing `Store` as an absolute UTC timestamp plus baseline; expired overrides are discarded on startup.
-- Events: `climaterouter_override_started` and `climaterouter_override_ended` (causes: `expired`, `cancelled`,
-  `replaced`, `off`).
-- The climate entity exposes the active override in its `override` attribute; `binary_sensor.<name>_manual_override`
-  is on while it is active and `sensor.<name>_override_remaining` counts whole minutes rounded up.
+- Manual mode is owned by the proxy and is **not** mirrored to either VTherm.
+- A user moving the temperature or changing the preset in the UI enters manual mode automatically. Schedule and
+  automation commands (no `user_id` in the context) update the schedule baseline instead and do not enter manual
+  mode.
+- Additional user moves while manual mode is active update the manual value but **never reset the timer**.
+- `duration_minutes` defaults to `default_manual_minutes`; `0` means no countdown. The timer can be changed or
+  switched off later with `climaterouter.set_manual_timer` (minutes `0` or omitted = infinite).
+- The coordinator keeps a **baseline** desired state (the latest schedule command) and a separate `ManualMode`
+  (desired state, absolute UTC deadline or `None`, baseline snapshot, start time). The effective desired state is
+  the manual desired state while active.
+- A user move starts manual mode without modifying the baseline, so `climaterouter.return_to_schedule` restores the
+  schedule value rather than the last manual value. Schedule commands received while manual mode is active update
+  the baseline but do not replace the manual value.
+- An explicit `off` ends manual mode (`cause=off`). Timer expiry ends it with `cause=expired`.
+- Handovers use the effective desired state, so manual mode and its deadline carry over to the new target. The
+  manual mode is persisted with an absolute deadline; expired sessions are discarded on startup, infinite sessions
+  are restored as-is.
+- Services: `climaterouter.enter_manual_mode`, `set_manual_timer`, `return_to_schedule`; the old
+  `set_manual_override` / `cancel_manual_override` names remain as aliases.
+- Events: `climaterouter_manual_mode_started`, `climaterouter_manual_mode_ended`, and
+  `climaterouter_manual_timer_changed`.
+- The climate entity exposes `manual_mode` (and the legacy `override` key) plus `binary_sensor.<name>_manual_override`
+  and `sensor.<name>_override_remaining`; the remaining sensor is unknown when the timer is off.
 
 ### 3.7 Conflict detection (M5)
 
