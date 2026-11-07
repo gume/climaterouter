@@ -24,6 +24,14 @@ from .models import RouterSnapshot
 PARALLEL_UPDATES = 0
 
 
+TARGET_ICONS: dict[str, str] = {
+    "radiator": "mdi:radiator",
+    "ac": "mdi:air-conditioner",
+    "both": "mdi:hvac",
+    "none": "mdi:hvac-off",
+}
+
+
 def _active_target(snapshot: RouterSnapshot) -> str:
     return snapshot.active_label
 
@@ -187,6 +195,7 @@ class RouterSensor(RouterEntity, SensorEntity):
         value_fn: Callable[[RouterSnapshot], Any],
     ) -> None:
         super().__init__(coordinator)
+        self._key = key
         self._value_fn = value_fn
         self._attr_name = name
         self._attr_unique_id = f"{entry.entry_id}_{key}"
@@ -197,6 +206,12 @@ class RouterSensor(RouterEntity, SensorEntity):
             self._attr_native_unit_of_measurement = unit
         elif device_class == SensorDeviceClass.TEMPERATURE:
             self._attr_native_unit_of_measurement = coordinator.hass.config.units.temperature_unit
+
+    @property
+    def icon(self) -> str | None:
+        if self._key in ("active_target", "pending_target"):
+            return TARGET_ICONS.get(self._value_fn(self._snapshot), "mdi:eye")
+        return self._attr_icon
 
     @property
     def native_value(self) -> Any:
