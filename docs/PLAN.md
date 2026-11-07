@@ -1264,7 +1264,7 @@ and hassfest pass.
 - [x] Sectioned setup/options/reconfigure flows with brief field descriptions.
 - [x] Read-only VTherm display attributes; identity attributes are opt-in.
 - [x] State-dependent radiator/AC icons on the target sensors.
-- [x] Live verification through 0.8.0; 0.8.1 is offered by the Marketplace as `d3af8b4` and still needs a live check.
+- [x] Live verification through 0.8.0; 0.8.1 (`d3af8b4`) was installed through the Marketplace and its target icons verified live.
 - [ ] Integration tests for the flows, locks, and manual mode.
 
 ---
@@ -1411,4 +1411,4 @@ target:
 - [x] Outdoor sensor staleness is visible.
 - [x] Both-target-on is detected.
 - [x] Boost is feature-flagged and safe.
-- [ ] Diagnostics, translations, HACS/hassfest, and tests pass (0.8.1 still needs a live check).
+- [ ] Diagnostics, translations, HACS/hassfest, and tests pass (0.8.1 was installed live; the `e025cf4` sensor fix still needs a clean Marketplace reinstall).

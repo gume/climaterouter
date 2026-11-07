@@ -47,17 +47,23 @@
 | `b68bdbb` | `docs: align plan and handover with the 0.8.x implementation` |
 | `ade30ba` | `test: stop bind-mounting climaterouter in the Docker lab` |
 | `f01abcc` | `docs: correct the Marketplace update mechanism and test lab` |
+| `d1190df` | `docs: record the Marketplace investigation commits` |
+| `e025cf4` | `fix: initialize the sensor icon attribute` |
 
-Everything through `d3af8b4` is pushed to `origin/main` and the test instance is running **0.8.0** (`fd009ea`). The
-current checkout is version **0.8.1**. The assistant has no GitHub credentials; the owner pushes.
+Everything through `d3af8b4` is pushed to `origin/main`. Local commits `ade30ba`, `f01abcc`, `d1190df`, and
+`e025cf4` are not pushed yet. The test instance runs the `d3af8b4` build of **0.8.1** with a local hotfix copy of
+`sensor.py` (`e025cf4`); reinstalling `e025cf4` through the Marketplace gives a clean build. The assistant has no
+GitHub credentials; the owner pushes.
 
 ---
 
 ## 1. Where things stand
 
 Milestones M1–M6 from [`PLAN.md`](PLAN.md) are implemented. The owner reports live verification through version
-**0.8.0** in the test Home Assistant. The Marketplace now sees the 0.8.1 commits (`d3af8b4`) and offers the update;
-installing it is the next live check.
+**0.8.0**, and **0.8.1** (`d3af8b4`) has now been installed in the test Home Assistant. The live check confirmed the
+new target icons and found one regression: nine sensors failed to add because `RouterSensor.icon` returned an
+uninitialized `_attr_icon`. Fixed in `e025cf4` and verified by hot-patching the installed file and restarting; the
+clean Marketplace reinstall of `e025cf4` is the remaining check.
 
 | Milestone | State | Notes |
 |---|---|---|
@@ -80,7 +86,8 @@ attributes opt-in.
 Version **0.8.1** is the follow-up batch: state-dependent radiator/AC icons on the target sensors, brief
 explanations under the config/options fields, persisted `last_handover`, preset comparison in the target-mismatch
 sensor, consistent config storage (schema-only `entry.data`, empty `entry.options`), a translation-sync test, and
-the plan/handover alignment.
+the plan/handover alignment. The icon property initially broke the other sensors; `e025cf4` initializes the shared
+icon attribute and restores them.
 
 The next developer should start with section 8 (Next steps).
 
@@ -420,7 +427,8 @@ Defined in `test_environment/`; full instructions in [`TEST_ENVIRONMENT.md`](TES
   `test_environment/config` as `/config`; that directory is git-ignored runtime state.
 - The Marketplace installs from the default branch (`main`) and identifies the version by the **short commit
   hash**, not by a tag or release. The owner has updated and tested the integration through commit `fd009ea`
-  (version **0.8.0**).
+  (version **0.8.0**); commit `d3af8b4` (version **0.8.1**) was installed on 2026-11-07 but currently carries a
+  manually copied `sensor.py` hotfix (`e025cf4`).
 - Installed custom repositories refresh their commit metadata at Home Assistant startup and then every **48 hours**
   (`marketplace/base.py`, `timedelta(hours=48)`). A push made after the last startup is therefore not visible until
   Home Assistant restarts, the repository is refreshed from the Marketplace, or 48 hours pass. The assistant
@@ -431,20 +439,24 @@ Defined in `test_environment/`; full instructions in [`TEST_ENVIRONMENT.md`](TES
   `ServiceCall`. The previous `(hass, call)` call made every `climaterouter.*` service fail with
   `AttributeError: 'HomeAssistant' object has no attribute 'hass'`. Fixed in `2b9b300` (version 0.4.1) and verified
   live: `climaterouter.recalculate` returns HTTP 200.
-- The config entry was recreated after the mount change. New entry id **`01M6SAYNX19FHJ5KQAEYMM3K9N`**; the device
-  was put back in area `living_room` and the entity ids were renamed back to the `living_room_climaterouter_*` form
-  (e.g. `climate.living_room_climaterouter`) so existing dashboards and Scheduler references keep working.
+- The config entry was recreated during the Marketplace migration. Current entry id
+  **`01M6TG5YKCZCM4B5N5WM29AVJ4`** (created 2026-11-07); the device is in area `living_room` and the entity ids use
+  the `living_room_climaterouter_*` form (e.g. `climate.living_room_climaterouter`) so existing dashboards and
+  Scheduler references keep working.
 - `fake_hvac` entries: one system, `Fake HVAC Lab`, exposing `climate.living_room_fake_ac`,
   `sensor.living_room_fake_room_temperature`, `sensor.living_room_fake_outdoor_temperature`,
   `switch.living_room_fake_radiator`, and the matching `number` controls.
-- Router entry **`ClimateRouter`** (entry id `01M6SAYNX19FHJ5KQAEYMM3K9N`), read from diagnostics:
+- Router entry **`ClimateRouter`** (entry id `01M6TG5YKCZCM4B5N5WM29AVJ4`), read from the live config entry:
   - radiator `climate.living_room_room_radiator`, AC `climate.living_room_room_ac`;
   - outdoor sensor `sensor.living_room_fake_outdoor_temperature`;
-  - `cold_threshold=-5`, `mild_threshold=0`, `min_route_dwell=600`, `handover_idle_confirm=30`,
-    `off_confirm_timeout=30`, `startup_grace=10`, `settle_time=10`;
-  - `conflict_policy=monitor`, `auto_resolve_idle_targets=true`, `auto_resolve_simultaneous=true`;
+  - `cold_threshold=-10`, `mild_threshold=-5`, `min_route_dwell=60`, `handover_idle_confirm=30`,
+    `off_confirm_timeout=30`, `startup_grace=10`, `settle_time=10`, `outdoor_stale_after=3600`;
+  - `conflict_policy=monitor`, `auto_resolve_idle_targets=true`, `auto_resolve_simultaneous=true`,
+    `fallback_on_unavailable=true`;
   - `default_manual_minutes=60`, `max_manual_minutes=1440`, `manual_blocks_schedule=true`,
-    `expose_vtherm_identity=false`, `temperature_tolerance=0.2`, `boost_enabled=false`.
+    `expose_vtherm_identity=true`, `temperature_tolerance=0.2`, `boost_enabled=false`;
+  - `lock_enabled=false`, a lock code is stored, `auto_relock_sec=30`. The stale
+    `lock.living_room_climaterouter_ui_lock` entity restores as `unavailable` while the lock is disabled.
   The entry was created before 0.8.0 and may still store the removed external manual-switch key. That key is ignored;
   open **Configure** once after updating and save any section to rewrite the stored config in the new shape. The
   schema-only save also drops the key from `entry.data`.
@@ -509,11 +521,14 @@ ACs; later versions use the two VTherm entities described in section 4.
 | Restart with persisted `heat` | resumes without crashing when targets start late |
 | No prior command, underlying target already on | adopted, no commands sent |
 | Diagnostics endpoint | OK |
+| 0.8.1 install through the Marketplace | Installed `d3af8b4`; `update.climaterouter` went from `fd009ea` to `d3af8b4` and then to `off` |
+| 0.8.1 target icons | `sensor.*_active_target` = `ac` with `mdi:air-conditioner`; `sensor.*_pending_target` = `none` with `mdi:hvac-off` |
+| 0.8.1 sensor regression | Nine sensors (`route_reason`, `outdoor_temperature`, manual/boost/last-handover/last-command/conflict) failed to add with `AttributeError: 'RouterSensor' object has no attribute '_attr_icon'` |
+| 0.8.1 sensor fix (`e025cf4`) | Hot-patched the installed `sensor.py`, restarted, and all nine sensors became available; `last_handover` = `unknown` (no handover yet) |
 
 The owner reports live verification through version **0.8.0** for M4 manual mode, M5 conflicts, M6 boost, the native
-lock, the 0.8.0 proxy rework, and the read-only VTherm display pass-through. Detailed per-scenario results were not
-recorded in this file. Version **0.8.1** (target icons, field help, persistence/flow fixes) is offered by the
-Marketplace as commit `d3af8b4` and still needs a live check.
+lock, the 0.8.0 proxy rework, and the read-only VTherm display pass-through. Version **0.8.1** (`d3af8b4`) was
+installed and checked live as described above. The clean Marketplace reinstall of `e025cf4` is still outstanding.
 
 Not yet covered by automated tests: config flow, coordinator, handover, manual expiry/return/handover/restart,
 conflict policies, boost safety/expiry/return, lock enforcement/persistence, persistence, event payloads.
@@ -564,10 +579,11 @@ conflict policies, boost safety/expiry/return, lock enforcement/persistence, per
 
 ### 8.1 Immediate
 
-1. Owner: push the current working tree, then restart Home Assistant (or use the repository **Refresh** action in
-   the Marketplace) so the installed custom repository re-reads `last_commit`. The Marketplace is commit-based; no
-   tag or release is needed. Then install the offered update through the **Marketplace** (custom repository
-   `gume/climaterouter`, repository id `1448098130`) and restart Home Assistant. Do not re-add the old
+1. Owner: push the current working tree (including `e025cf4`), then restart Home Assistant (or use the repository
+   **Refresh** action in the Marketplace) so the installed custom repository re-reads `last_commit`. The Marketplace
+   is commit-based; no tag or release is needed. Then install the offered update through the **Marketplace** (custom
+   repository `gume/climaterouter`, repository id `1448098130`) and restart Home Assistant. This replaces the local
+   `sensor.py` hotfix with the pushed `e025cf4` build. Do not re-add the old
    `custom_components/climaterouter` bind mount: it makes the folder a mount point (`EBUSY`) and the Marketplace
    cannot back it up before replacing it.
 2. Open **Configure** once after the update and save any section. The schema-only save drops the removed
@@ -576,6 +592,7 @@ conflict policies, boost safety/expiry/return, lock enforcement/persistence, per
    closes it.
 3. Verify the 0.8.1 changes in the live instance:
    - `sensor.<name>_active_target` and `sensor.<name>_pending_target` show the radiator/AC icon;
+   - all nine other sensors are available (this was the `e025cf4` regression fix);
    - `sensor.<name>_last_handover` survives a restart;
    - `binary_sensor.<name>_target_mismatch` also reacts to differing presets;
    - diagnostics show the cleaned config and an empty `options` block.
@@ -648,7 +665,9 @@ with a Python version matching the supported HA. Suggested coverage:
 - [x] Schema-only config saves (drop removed keys, keep `entry.options` empty).
 - [x] Translation-sync and field-description tests.
 - [x] Live verification through 0.8.0.
-- [ ] Install commit `d3af8b4` (0.8.1) through the Marketplace and verify the follow-up batch live.
+- [x] Install commit `d3af8b4` (0.8.1) through the Marketplace; the target icons were verified live.
+- [ ] Reinstall `e025cf4` cleanly through the Marketplace. The live instance currently carries a manually copied
+  `sensor.py` hotfix because `e025cf4` is not pushed yet.
 - [ ] Integration tests for the flows, locks, and manual mode.
 
 ---
