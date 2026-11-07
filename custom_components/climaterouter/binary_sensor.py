@@ -36,14 +36,22 @@ def _action_is(action: str) -> Callable[[RouterSnapshot], bool]:
     return _value
 
 
-def _both_setpoints_differ(snapshot: RouterSnapshot) -> bool:
+def _both_targets_differ(snapshot: RouterSnapshot) -> bool:
     radiator = snapshot.targets.get(Target.RADIATOR)
     ac = snapshot.targets.get(Target.AC)
     if radiator is None or ac is None:
         return False
-    if radiator.target_temperature is None or ac.target_temperature is None:
-        return False
-    return abs(radiator.target_temperature - ac.target_temperature) > 0.2
+    if (
+        radiator.target_temperature is not None
+        and ac.target_temperature is not None
+        and abs(radiator.target_temperature - ac.target_temperature) > 0.2
+    ):
+        return True
+    return bool(
+        radiator.preset_mode
+        and ac.preset_mode
+        and radiator.preset_mode != ac.preset_mode
+    )
 
 
 SENSOR_SPECS: tuple[
@@ -112,7 +120,7 @@ SENSOR_SPECS: tuple[
         "Target mismatch",
         BinarySensorDeviceClass.PROBLEM,
         EntityCategory.DIAGNOSTIC,
-        _both_setpoints_differ,
+        _both_targets_differ,
     ),
     (
         "ready",

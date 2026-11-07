@@ -328,6 +328,17 @@ def _flatten_sections(data: Mapping[str, Any]) -> dict[str, Any]:
     return flat
 
 
+def _clean_config(data: Mapping[str, Any]) -> dict[str, Any]:
+    """Keep only the keys the current schema knows about.
+
+    This drops options removed in older releases (for example the external
+    manual switch and the old override durations) the next time any form is
+    saved.
+    """
+    allowed = set(_defaults({}))
+    return {key: value for key, value in data.items() if key in allowed}
+
+
 def _as_int(value: Any, default: int) -> int:
     try:
         return int(value)
@@ -406,7 +417,9 @@ class ClimateRouterConfigFlow(ConfigFlow, domain=DOMAIN):
             if not errors:
                 await self.async_set_unique_id(_unique_id(current))
                 self._abort_if_unique_id_configured()
-                return self.async_create_entry(title=str(current[CONF_NAME]), data=current)
+                return self.async_create_entry(
+                    title=str(current[CONF_NAME]), data=_clean_config(current)
+                )
 
         return self.async_show_form(
             step_id="user",
@@ -436,7 +449,8 @@ class ClimateRouterConfigFlow(ConfigFlow, domain=DOMAIN):
                         return self.async_abort(reason="already_configured")
                 self.hass.config_entries.async_update_entry(
                     entry,
-                    data=current,
+                    title=str(current[CONF_NAME]),
+                    data=_clean_config(current),
                     options={},
                     unique_id=unique_id,
                 )
@@ -474,8 +488,10 @@ class ClimateRouterOptionsFlow(OptionsFlow):
             if not errors:
                 self.hass.config_entries.async_update_entry(
                     entry,
+                    title=str(merged.get(CONF_NAME, entry.title)),
+                    data=_clean_config(merged),
+                    options={},
                     unique_id=_unique_id(merged),
-                    options={**entry.options, **user_input},
                 )
                 return self.async_show_menu(step_id="init", menu_options=OPTION_MENU)
             current = merged

@@ -1964,6 +1964,11 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             parsed = dt_util.parse_datetime(auto_relock_at)
             if parsed is not None and not self._locked:
                 self._auto_relock_at = parsed
+        last_handover = data.get("last_handover")
+        if isinstance(last_handover, str):
+            parsed = dt_util.parse_datetime(last_handover)
+            if parsed is not None:
+                self._last_handover = parsed
         if not self.config.lock_enabled:
             self._locked = False
             self._auto_relock_at = None
@@ -1975,6 +1980,9 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             "manual_mode": self._manual.to_dict() if self._manual is not None else None,
             "boost": self._boost.to_dict() if self._boost is not None else None,
             "last_route": self._last_route.value if self._last_route else None,
+            "last_handover": (
+                self._last_handover.isoformat() if self._last_handover else None
+            ),
             "locked": self._locked,
             "auto_relock_at": (
                 self._auto_relock_at.isoformat() if self._auto_relock_at else None
