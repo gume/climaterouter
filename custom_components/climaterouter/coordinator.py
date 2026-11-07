@@ -286,6 +286,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         ):
             # First user setpoint move starts manual mode. Capture the current
             # schedule first so "return to schedule" restores it, not the move.
+            self._ensure_manual_baseline()
             desired = self._baseline.copy()
             if hvac_mode is not None:
                 if hvac_mode not in MODES:
@@ -334,6 +335,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         elif self._manual is None and self._is_user_context(context) and (
             self._baseline.hvac_mode not in (None, HVAC_OFF)
         ):
+            self._ensure_manual_baseline()
             desired = self._baseline.copy()
             self._apply_setpoint(desired, temperature=None, preset_mode=preset_mode)
             self._start_manual(dt_util.utcnow(), desired=desired)
