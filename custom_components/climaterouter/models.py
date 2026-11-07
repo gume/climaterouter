@@ -198,6 +198,7 @@ class ManualMode:
     started_at: datetime
     until: datetime | None = None
     baseline: DesiredState = field(default_factory=DesiredState)
+    timer_minutes: int | None = None
 
     @property
     def has_deadline(self) -> bool:
@@ -224,6 +225,7 @@ class ManualMode:
             "until": self.until.isoformat() if self.until else None,
             "started_at": self.started_at.isoformat(),
             "baseline": self.baseline.to_dict(),
+            "timer_minutes": self.timer_minutes,
         }
 
     @classmethod
@@ -273,11 +275,28 @@ class ManualMode:
                 desired.hvac_mode = str(value)
             else:
                 return None
+
+        if "timer_minutes" in data:
+            raw_timer = data.get("timer_minutes")
+            timer_minutes = (
+                int(raw_timer)
+                if isinstance(raw_timer, (int, float)) and int(raw_timer) > 0
+                else None
+            )
+        elif until is not None:
+            timer_minutes = max(
+                1,
+                int(round((until - started_at).total_seconds() / 60)),
+            )
+        else:
+            timer_minutes = None
+
         return cls(
             desired=desired,
             started_at=started_at,
             until=until,
             baseline=baseline,
+            timer_minutes=timer_minutes,
         )
 
 
@@ -418,6 +437,11 @@ class RouterSnapshot:
     def manual_until(self) -> datetime | None:
         """Return the manual-mode deadline, or ``None`` for infinite mode."""
         return self.manual_mode.until if self.manual_mode is not None else None
+
+    @property
+    def manual_timer_minutes(self) -> int | None:
+        """Return the selected manual timer length, or ``None`` when off."""
+        return self.manual_mode.timer_minutes if self.manual_mode is not None else None
 
 
 @dataclass(frozen=True)

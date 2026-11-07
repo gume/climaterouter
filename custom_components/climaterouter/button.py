@@ -25,6 +25,11 @@ def _handover_in_progress(coordinator: ClimateRouterCoordinator) -> bool:
     )
 
 
+def _manual_active(coordinator: ClimateRouterCoordinator) -> bool:
+    """Return whether manual mode can be ended."""
+    return coordinator.data.manual_active
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -45,10 +50,11 @@ async def async_setup_entry(
             RouterButton(
                 coordinator,
                 entry,
-                "cancel_override",
-                "Cancel override",
-                "mdi:timer-cancel-outline",
-                coordinator.async_cancel_manual_override,
+                "return_to_schedule",
+                "Return to schedule",
+                "mdi:calendar-clock",
+                coordinator.async_return_to_schedule,
+                _manual_active,
             ),
             RouterButton(
                 coordinator,

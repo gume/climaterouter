@@ -207,6 +207,16 @@ class RouterClimate(RouterEntity, ClimateEntity):
             "active_target_temperature": state.target_temperature if state else None,
             "override": snapshot.manual_mode.to_dict() if snapshot.manual_mode else None,
             "manual_mode": snapshot.manual_mode.to_dict() if snapshot.manual_mode else None,
+            "manual_active": snapshot.manual_active,
+            "manual_until": (
+                snapshot.manual_until.isoformat() if snapshot.manual_until else None
+            ),
+            "manual_timer_minutes": snapshot.manual_timer_minutes,
+            "manual_remaining_minutes": (
+                snapshot.manual_mode.remaining_minutes(dt_util.utcnow())
+                if snapshot.manual_mode is not None
+                else None
+            ),
             "boost_active": snapshot.boost_until is not None,
             "boost_until": snapshot.boost_until.isoformat() if snapshot.boost_until else None,
             "boost_targets": sorted(target.value for target in snapshot.boost_targets),

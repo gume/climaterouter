@@ -32,7 +32,7 @@ def _pending_target(snapshot: RouterSnapshot) -> str:
     return snapshot.pending_target.value if snapshot.pending_target else "none"
 
 
-def _override_remaining(snapshot: RouterSnapshot) -> int | None:
+def _manual_remaining(snapshot: RouterSnapshot) -> int | None:
     if snapshot.manual_mode is None:
         return None
     return snapshot.manual_mode.remaining_minutes(dt_util.utcnow())
@@ -96,13 +96,31 @@ SENSOR_SPECS: tuple[
         lambda snapshot: snapshot.outdoor_temperature,
     ),
     (
-        "override_remaining",
-        "Override remaining",
+        "manual_remaining",
+        "Manual remaining",
         None,
         None,
         None,
         "min",
-        _override_remaining,
+        _manual_remaining,
+    ),
+    (
+        "manual_until",
+        "Manual until",
+        SensorDeviceClass.TIMESTAMP,
+        None,
+        None,
+        None,
+        lambda snapshot: snapshot.manual_until,
+    ),
+    (
+        "manual_timer_minutes",
+        "Manual timer",
+        None,
+        None,
+        EntityCategory.DIAGNOSTIC,
+        "min",
+        lambda snapshot: snapshot.manual_timer_minutes,
     ),
     (
         "boost_remaining",

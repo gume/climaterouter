@@ -80,7 +80,7 @@ SENSOR_SPECS: tuple[
         lambda snapshot: snapshot.handover_state.value == "pending",
     ),
     (
-        "manual_override",
+        "manual_mode",
         "Manual mode",
         None,
         None,

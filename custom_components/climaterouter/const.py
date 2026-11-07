@@ -17,6 +17,7 @@ PLATFORMS: Final = [
     Platform.SELECT,
     Platform.BUTTON,
     Platform.LOCK,
+    Platform.SWITCH,
 ]
 
 # Configuration keys.

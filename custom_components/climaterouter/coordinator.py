@@ -479,24 +479,26 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._ensure_manual_baseline()
 
         if self._manual is None:
-            if duration_minutes is None:
-                duration = self.config.default_manual_minutes
-                until = self._manual_deadline(duration, now) if duration > 0 else None
-            elif int(duration_minutes) <= 0:
-                until = None
-            else:
-                until = self._manual_deadline(int(duration_minutes), now)
+            duration = (
+                self.config.default_manual_minutes
+                if duration_minutes is None
+                else int(duration_minutes)
+            )
+            timer = duration if duration > 0 else None
+            until = self._manual_deadline(timer, now) if timer is not None else None
             self._manual = ManualMode(
                 desired=desired.copy(),
                 started_at=now,
                 until=until,
                 baseline=self._baseline.copy(),
+                timer_minutes=timer,
             )
             self.hass.bus.async_fire(
                 EVENT_MANUAL_MODE_STARTED,
                 {
                     "entry_id": self.entry.entry_id,
                     "until": until.isoformat() if until else None,
+                    "timer_minutes": timer,
                     "desired": self._manual.desired.to_dict(),
                 },
             )
@@ -505,11 +507,12 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             # unless a new duration is supplied explicitly.
             self._manual.desired = desired.copy()
             if duration_minutes is not None:
+                duration = int(duration_minutes)
+                timer = duration if duration > 0 else None
                 self._manual.started_at = now
+                self._manual.timer_minutes = timer
                 self._manual.until = (
-                    None
-                    if int(duration_minutes) <= 0
-                    else self._manual_deadline(int(duration_minutes), now)
+                    self._manual_deadline(timer, now) if timer is not None else None
                 )
 
         self._manual.baseline = self._baseline.copy()
@@ -528,12 +531,14 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         """Create manual mode from a UI move without awaiting evaluation."""
         self._ensure_manual_baseline()
         duration = self.config.default_manual_minutes
-        until = self._manual_deadline(duration, now) if duration > 0 else None
+        timer = duration if duration > 0 else None
+        until = self._manual_deadline(timer, now) if timer is not None else None
         self._manual = ManualMode(
             desired=desired.copy(),
             started_at=now,
             until=until,
             baseline=self._baseline.copy(),
+            timer_minutes=timer,
         )
         self._schedule_manual_expiry()
         self._store.async_delay_save(self._data_to_save, 1)
@@ -542,6 +547,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             {
                 "entry_id": self.entry.entry_id,
                 "until": until.isoformat() if until else None,
+                "timer_minutes": timer,
                 "desired": self._manual.desired.to_dict(),
             },
         )
@@ -612,10 +618,13 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         if self._manual is None:
             raise HomeAssistantError("Manual mode is not active")
         now = dt_util.utcnow()
-        if minutes is None or int(minutes) <= 0:
+        timer = int(minutes) if minutes is not None and int(minutes) > 0 else None
+        if timer is None:
             self._manual.until = None
+            self._manual.timer_minutes = None
         else:
-            self._manual.until = self._manual_deadline(int(minutes), now)
+            self._manual.until = self._manual_deadline(timer, now)
+            self._manual.timer_minutes = timer
         self._schedule_manual_expiry()
         self._store.async_delay_save(self._data_to_save, 1)
         self.hass.bus.async_fire(
@@ -623,7 +632,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             {
                 "entry_id": self.entry.entry_id,
                 "until": self._manual.until.isoformat() if self._manual.until else None,
-                "minutes": minutes,
+                "minutes": timer,
             },
         )
         self._publish()
