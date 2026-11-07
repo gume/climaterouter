@@ -1,16 +1,25 @@
 # ClimateRouter — Implementation Plan
 
-Status: **planning / design review**
+Status: **implemented through 0.8.0; see [`HANDOVER.md`](HANDOVER.md) for the live state**
 Owner: Gabor Feher
 Target: Home Assistant custom integration (`custom_components/climaterouter`)
 
 Key decisions are recorded in [`ADR/`](ADR/README.md): proxy climate entity, deferred handover, proxy-level
 override, monitor-first conflict policy, and set-based targets for boost.
 
-> **Historical note (0.8.0):** the optional external manual-routing switch described in this plan was removed.
-> Routing is forced only through the built-in `select.climaterouter_route_override` entity (or the
-> `set_route_override` / `clear_route_override` services). Mentions of a "manual switch" below are kept for
-> historical context only.
+> **Historical note (0.8.0):** several parts of this document describe the original design and are kept for
+> context. The authoritative description of the current runtime behaviour is [`HANDOVER.md`](HANDOVER.md). In
+> particular:
+>
+> - the optional external manual-routing switch was removed; routing is forced only through the built-in
+>   `select.climaterouter_route_override` entity (or the `set_route_override` / `clear_route_override` services);
+> - the bounded `set_manual_override` was replaced by proxy-owned **manual mode** with an optional timer
+>   (`enter_manual_mode`, `set_manual_timer`, `return_to_schedule`, plus the manual-mode entities);
+> - there are two separate locks: the optional accidental-touch UI lock (`lock.<name>_lock`) and the
+>   manual/schedule lock (`manual_blocks_schedule`).
+>
+> Sections below are updated to the 0.8.x state where practical. Mentions of a "manual switch" or the old
+> "override" service are historical unless explicitly marked otherwise.
 
 ---
 
@@ -25,7 +34,7 @@ and delegates actual heating/cooling to **two underlying Versatile Thermostat (V
 The proxy is intentionally not a thermostat implementation. It is a **routing and arbitration layer**:
 
 - Scheduler/UI call standard `climate.*` services on the proxy.
-- The proxy chooses the active target (radiator or AC) from outdoor temperature, a manual switch, and explicit
+- The proxy chooses the active target (radiator or AC) from outdoor temperature, a route override, and explicit
   HVAC-mode intent.
 - The proxy forwards only the commands that belong to the selected target.
 - The proxy mirrors the selected target's current temperature, target temperature, preset, HVAC mode, and action.
@@ -43,8 +52,9 @@ inhibit, and device-level regulation.
 1. A single `climate.climaterouter` entity that works with Scheduler Component without custom scheduler actions.
 2. Deterministic, hysteresis-based routing between radiator and AC.
 3. A safe handover that never interrupts an active heating/cooling cycle merely because the route changed.
-4. A manual override (temperature or preset) with a duration that restores the latest schedule command.
-5. Rich observability: active target, pending handover, override, boost, stale inputs, conflicts.
+4. Proxy-owned manual mode (temperature, preset, or mode) with an optional timer that restores the latest
+   schedule command.
+5. Rich observability: active target, pending handover, manual mode, boost, stale inputs, conflicts.
 6. Conflict detection for direct underlying changes, simultaneous targets, unavailable entities, and stale inputs.
 7. A data model that already supports two simultaneously active targets, so boost can be added without a rewrite.
 8. HACS-installable, testable, and maintainable as a standard HA custom integration.
@@ -87,7 +97,7 @@ inhibit, and device-level regulation.
 | **Pending target** | A newly selected route that cannot be activated yet because the old target is active. |
 | **Handover** | The sequence: wait for old target to become idle → turn old off → configure new target. |
 | **Desired state** | The last state requested through the proxy (`hvac_mode`, `preset` or `temperature`). |
-| **Baseline** | The desired state snapshot captured when a manual override starts; restored when it ends. |
+| **Baseline** | The desired state snapshot captured when manual mode starts; restored when it ends. |
 | **Guard** | A legitimate VTherm-internal restriction (window, presence, power, safety, central mode) that may override the proxy. |
 | **Conflict** | An underlying state or input that does not match the proxy's expectation and was not caused by the proxy or a known guard. |
 
@@ -129,18 +139,18 @@ inhibit, and device-level regulation.
 
 | Layer | Owns | Must not own |
 |---|---|---|
-| **ClimateRouter proxy** | Route selection, hysteresis, handover sequencing, cross-target override, conflict detection, scheduler-facing state, diagnostics. | TPI, valve/switch cycling, device regulation, preset temperatures. |
+| **ClimateRouter proxy** | Route selection, hysteresis, handover sequencing, cross-target manual mode, conflict detection, scheduler-facing state, diagnostics. | TPI, valve/switch cycling, device regulation, preset temperatures. |
 | **Radiator VTherm** | TPI, switch/valve control, preset temperatures, window/presence/power/safety inhibit, device-level state. | Cross-target routing, scheduler-facing entity. |
 | **AC VTherm** | AC regulation, mode handling, preset temperatures, window/presence/power/safety inhibit, device-level state. | Cross-target routing, scheduler-facing entity. |
 | **Scheduler** | Time slots and commands. | Direct control of underlying VTherms. |
-| **User** | Commands through the proxy, manual override service, route override. | Direct control of underlying VTherms (discouraged; detected as conflict). |
+| **User** | Commands through the proxy, manual-mode services, route override. | Direct control of underlying VTherms (discouraged; detected as conflict). |
 
 ### 5.3 Data flow
 
 1. A command arrives at the proxy (`async_set_temperature`, `async_set_hvac_mode`, `async_set_preset_mode`,
    `async_turn_on`, `async_turn_off`).
 2. The proxy updates its **desired state** and writes an optimistic entity state.
-3. The router computes a **route decision** from outdoor temperature, manual switch, route override, HVAC mode,
+3. The router computes a **route decision** from outdoor temperature, route override, HVAC mode,
    current active target, and target availability.
 4. If the route equals the active target, the command is forwarded to that target.
 5. If the route differs, the **handover state machine** decides whether it can switch now or must wait.
@@ -148,7 +158,7 @@ inhibit, and device-level regulation.
    for external interference.
 7. State changes from both VTherms update the mirror. The climate entity reports the active target's state, with a
    short optimistic window for commands that are still in flight.
-8. A watchdog re-evaluates override expiry, stale inputs, pending handovers, and conflict clearing.
+8. A watchdog re-evaluates manual/boost expiry, stale inputs, pending handovers, and conflict clearing.
 
 ---
 
@@ -165,8 +175,6 @@ entries are allowed (e.g., living room, bedroom), each with its own device and e
 | `radiator_entity_id` | climate | — | yes | VTherm over_switch entity. |
 | `ac_entity_id` | climate | — | yes | VTherm over_climate entity. |
 | `outdoor_sensor_entity_id` | sensor | — | yes | Temperature device class recommended. |
-| `manual_switch_entity_id` | switch/input_boolean/input_select | none | no | Manual routing input. |
-| `manual_switch_on_target` | `ac` / `radiator` | `ac` | no | Meaning of `on` for a boolean switch. |
 | `cold_threshold` | float | `7.0` | yes | At or below → radiator. |
 | `mild_threshold` | float | `9.0` | yes | Above → AC. |
 | `min_route_dwell` | int (s) | `600` | yes | Anti-flapping dwell after a handover. |
@@ -179,33 +187,46 @@ entries are allowed (e.g., living room, bedroom), each with its own device and e
 | `auto_resolve_simultaneous` | bool | `false` | yes | Turn off non-selected target when both are on and idle. |
 | `fallback_on_unavailable` | bool | `true` | yes | Use the other target if the selected one is unavailable. |
 | `outdoor_stale_after` | int (s) | `3600` | yes | Outdoor sensor staleness. |
-| `default_override_minutes` | int | `60` | yes | Default manual override duration. |
-| `max_override_minutes` | int | `1440` | yes | Maximum override duration (24 h). |
+| `default_manual_minutes` | int | `60` | yes | Timer for a new manual session; `0` = no timer. |
+| `max_manual_minutes` | int | `1440` | yes | Maximum manual timer (24 h). |
+| `manual_blocks_schedule` | bool | `true` | yes | Lock B: reject schedule/automation commands while manual. |
 | `temperature_tolerance` | float | `0.2` | yes | Setpoint mismatch tolerance. |
 | `boost_enabled` | bool | `false` | yes | Enables bounded both-target boost. |
+| `lock_enabled` | bool | `false` | yes | Enables the optional `lock.<name>_lock` UI lock. |
+| `lock_code` | string | `""` | no | Optional 4–8 digit unlock code. |
+| `auto_relock_sec` | int (s) | `0` | yes | Auto-relock delay; `0` keeps the lock unlocked. |
+| `expose_vtherm_identity` | bool | `false` | yes | Opt-in VTherm identity attributes for some cards. |
 
 `cold_threshold` must be less than or equal to `mild_threshold`. Setting both to `8.0` reproduces the simple
 `> 8 °C → AC; ≤ 8 °C → radiator` rule. The default `7/9` creates a 2 °C deadband to avoid flapping.
 
+The former `manual_switch_entity_id` / `manual_switch_on_target` and `default_override_minutes` /
+`max_override_minutes` keys are no longer part of the schema. `RouterConfig.from_mapping` still reads the old
+override keys as a fallback for entries created before 0.8.0; they are dropped the next time any form is saved.
+
 ### 6.2 Options flow
 
-Options can change thresholds, timings, conflict policy, override defaults, and boost flag. Entity changes require
-a reload. The options flow validates the same constraints as the initial flow. `async_step_reconfigure` is
-implemented for HA versions that support it.
+All three flows (setup, options, reconfigure) share the same sectioned schema: Thermostats, Routing, Manual mode,
+Conflicts, Boost, UI lock, and Lovelace display. Setup and reconfigure show every section in one form; the options
+flow is a menu where each section is saved immediately and **Finish** closes it.
+
+The options flow validates the same constraints as the initial flow. `async_step_reconfigure` is implemented.
+Every save writes a cleaned, schema-only config into `entry.data` and clears `entry.options`, so removed legacy keys
+disappear and the coordinator can keep merging `{**entry.data, **entry.options}`.
 
 ### 6.3 Validation
 
 - All entity IDs exist and have the expected domain.
 - Radiator and AC entities are distinct and are not the proxy itself.
-- Outdoor sensor has `device_class: temperature` or a temperature unit; otherwise the flow warns and requires
-  confirmation.
-- Manual switch is `switch`, `input_boolean`, or `input_select`.
 - `cold_threshold <= mild_threshold`.
-- Durations and timeouts are non-negative; override durations are within `1..max_override_minutes`.
+- Durations and timeouts are non-negative; `default_manual_minutes` must not exceed `max_manual_minutes` unless it
+  is `0`.
+- The lock code, when set, is 4–8 digits.
 - `temperature_tolerance > 0`.
 - Unique ID is derived from `radiator_entity_id|ac_entity_id`; duplicate pairs abort with `already_configured`.
-- VTherm custom attributes (`is_over_switch`, `is_over_climate`) are checked if present. A non-VTherm climate is
-  allowed with a warning so the integration can be tested with mock entities.
+
+Not validated today: the outdoor sensor device class/temperature unit, and VTherm-specific custom attributes. A
+non-VTherm climate is accepted so the integration can be tested with mock entities.
 
 ### 6.4 Unit handling
 
@@ -223,7 +244,6 @@ implemented for HA versions that support it.
 
 - `outdoor_temp`: current numeric value, or `None` if unavailable/unknown.
 - `outdoor_fresh`: `last_updated` within `outdoor_stale_after`.
-- `manual_switch`: `on` / `off` / `unavailable`, plus the configured `manual_switch_on_target`.
 - `route_override`: `auto` / `radiator` / `ac` (from `select.climaterouter_route_override`).
 - `hvac_mode`: desired mode (`off`, `heat`, `cool`).
 - `current_target`: the last active target, used for hysteresis.
@@ -234,15 +254,14 @@ implemented for HA versions that support it.
 
 1. **`off` wins.** Turn off all targets; no route is active.
 2. **Explicit `cool` wins.** Route to AC; if AC cannot cool, fail the command.
-3. **Manual route override** (`select`) wins over automatic logic.
-4. **Manual switch** wins over outdoor logic.
-5. **Outdoor hysteresis** selects AC or radiator.
-6. **Fallback** when outdoor is stale/unknown: hold the last route; if no last route, use radiator.
-7. **Capability/availability fallback**: if the selected target cannot handle the requested mode or is unavailable,
+3. **Route override** (`select`) wins over automatic logic.
+4. **Outdoor hysteresis** selects AC or radiator.
+5. **Fallback** when outdoor is stale/unknown: hold the last route; if no last route, use radiator.
+6. **Capability/availability fallback**: if the selected target cannot handle the requested mode or is unavailable,
    use the other target if it can; otherwise no target and a conflict/unavailable state.
 
 `off` and `cool` are explicit user intent and may interrupt an active cycle. Route-driven changes (outdoor,
-manual switch, route override) are subject to the handover rules in section 8.
+route override) are subject to the handover rules in section 8.
 
 ### 7.3 Hysteresis
 
@@ -256,9 +275,6 @@ def choose_route(inputs) -> RouteDecision:
 
     if inputs.route_override != AUTO:
         return RouteDecision(targets=route_override_targets(inputs), reason="manual_route")
-
-    if inputs.manual_switch is ON:
-        return RouteDecision(targets={inputs.manual_switch_on_target}, reason="manual_switch")
 
     if inputs.outdoor_temp is None or not inputs.outdoor_fresh:
         fallback = inputs.current_target or RADIATOR
@@ -295,36 +311,22 @@ This yields:
 | none | `<= cold_threshold` | radiator |
 | none | between thresholds | radiator (safe default) |
 
-### 7.4 Manual switch semantics
+### 7.4 Route override
 
-**Boolean switch (`switch` / `input_boolean`)**
+`select.climaterouter_route_override` is the only manual routing input:
 
-- `on` → route to `manual_switch_on_target` (default AC).
-- `off` → automatic outdoor logic.
-- `unavailable`/`unknown` → hold the last known manual state for the configured grace period; mark the input stale
-  in diagnostics. If never known, treat as `off`.
-
-**Input select**
-
-- States `auto`, `radiator`, `ac` map directly.
-- Unknown state → treat as `auto` and mark a conflict/input warning.
-
-**Built-in route override**
-
-`select.climaterouter_route_override` is independent of the external switch:
-
-- `auto` → no override.
+- `auto` → no override; outdoor hysteresis decides.
 - `radiator` / `ac` → force that target.
 - `both` is reserved for boost and is rejected unless `boost_enabled` is true.
 
-Precedence between the external switch and the select: **select wins**. This lets the user temporarily force a
-target from the dashboard even if an external switch is wired to a different policy. The proxy exposes
-`sensor.route_reason` so the active reason is always visible.
+The override is proxy-owned and can also be set with `climaterouter.set_route_override` or cleared with
+`climaterouter.clear_route_override`. The proxy exposes `sensor.route_reason` so the active reason is always
+visible. The former external switch input was removed in 0.8.0.
 
 ### 7.5 Debouncing and dwell
 
-- Manual switch changes are debounced by 5 seconds.
-- Outdoor temperature changes are evaluated immediately but handover is subject to hysteresis and `min_route_dwell`.
+- Outdoor temperature and route-override changes are evaluated immediately but handover is subject to hysteresis
+  and `min_route_dwell`.
 - After a completed handover, no new route-driven handover is started for `min_route_dwell` (default 10 min)
   unless the new command is explicit `off`/`cool`.
 - The watchdog re-evaluates every 30 seconds, so a missed state event cannot leave the router stuck.
@@ -381,7 +383,8 @@ immediately; this exception is logged and surfaced in the handover event.
 
 `handover_max_wait` defaults to `0` (wait indefinitely). The plan does **not** force off an active target by
 default. If an operator explicitly enables a force timeout, the proxy logs a warning and fires a handover event
-before interrupting.
+before interrupting. **Not implemented in 0.8.x:** use the manual `force_handover` button/service when a handover is
+stuck.
 
 ### 8.4 Sequence
 
@@ -417,15 +420,16 @@ sequenceDiagram
    final state, because VTherm treats a temperature change as `preset: none`.
 3. If both were requested in the same original call, temperature wins (the proxy clears the desired preset when a
    temperature is set).
-4. Wait for state confirmation up to `command_confirm_timeout`; if the target does not confirm, mark conflict but
-   do not retry indefinitely.
+4. There is no separate command-confirmation timeout today. The settle window and state mirroring cover in-flight
+   commands; a failed target is reported through conflicts and handover events.
 
 ### 8.6 Pending commands
 
 If a command arrives while a handover is pending:
 
 - The proxy updates its desired state immediately.
-- The command is **not** sent to the old target (it is about to be turned off).
+- The command is forwarded to the currently active target **and** kept for the pending target, so the old target
+  does not keep running on its old setpoint (0.5.0 behaviour).
 - The latest desired state is applied to the new target when the handover completes.
 - The climate entity reports an optimistic target/preset for a short window, and `binary_sensor.handover_pending`
   is `on`.
@@ -435,7 +439,7 @@ If a command arrives while a handover is pending:
 
 On startup or integration reload:
 
-1. Load persisted desired state, override deadline, last route, and boost flag.
+1. Load persisted desired state, manual mode, boost, lock state, last route, and last handover timestamp.
 2. Wait `startup_grace` for entities to populate.
 3. Read both targets.
 4. If exactly one is on/heating, adopt it as active; if it does not match the route, set a pending handover.
@@ -467,7 +471,8 @@ class DesiredState:
 
 Rules:
 
-- `set_hvac_mode(off)` sets `hvac_mode=off`, cancels pending handover and override, turns off all targets.
+- `set_hvac_mode(off)` sets `hvac_mode=off`, ends manual mode and boost, cancels a pending handover, and turns
+  off all targets.
 - `set_hvac_mode(heat)` sets the mode and keeps the existing preset/temperature.
 - `set_hvac_mode(cool)` forces AC and sets the mode.
 - `set_preset_mode(p)` sets `setpoint_kind=preset`, `preset_mode=p`, clears `target_temperature`.
@@ -519,9 +524,8 @@ Scheduler compatibility and may be deferred to a later milestone if they complic
 | `fan_mode` / `swing_mode` | Active target if supported. |
 | `min_temp` / `max_temp` / `step` | Active target's values, intersected/fallback. |
 
-The optimistic window is cleared when the underlying state matches the desired state, or after
-`command_confirm_timeout` (default 10 s). The `extra_state_attributes` always expose the actual active-target
-values separately so debugging is unambiguous.
+The optimistic window is cleared when the underlying state matches the desired state, or after `settle_time`. The
+`extra_state_attributes` always expose the actual active-target values separately so debugging is unambiguous.
 
 ### 9.5 HVAC mode and preset capability handling
 
@@ -549,11 +553,13 @@ values separately so debugging is unambiguous.
   - `pending_target`: `none` / `radiator` / `ac`
   - `route_reason`
   - `outdoor_temperature`, `outdoor_sensor_stale`
-  - `manual_switch_state`, `route_override`
+  - `route_override`
   - `desired_hvac_mode`, `desired_preset_mode`, `desired_temperature`
   - `active_target_hvac_mode`, `active_target_preset_mode`, `active_target_temperature`
-  - `override`: `{kind, value, until, baseline}` or `null`
-  - `boost_active`
+  - `override` (legacy alias), `manual_mode`, `manual_active`, `manual_until`, `manual_timer_minutes`,
+    `manual_remaining_minutes`
+  - `ui_lock_active`, `schedule_lock_active`
+  - `boost_active`, `boost_until`, `boost_targets`
   - `conflict_count`, `conflicts` (summary list)
   - `handover_state`, `last_handover`
   - `targets`: per-target diagnostic dict (available, mode, action, preset, temperature)
@@ -568,7 +574,7 @@ values separately so debugging is unambiguous.
 | `binary_sensor.climaterouter_heating` | on/off | — | Active target `hvac_action == heating`. |
 | `binary_sensor.climaterouter_cooling` | on/off | — | Active target `hvac_action == cooling`. |
 | `binary_sensor.climaterouter_handover_pending` | on/off | — | A route change is waiting for the old target to become idle. |
-| `binary_sensor.climaterouter_manual_override` | on/off | — | Timed manual override is active. |
+| `binary_sensor.climaterouter_manual_mode` | on/off | — | Proxy-owned manual mode is active. |
 | `binary_sensor.climaterouter_boost_active` | on/off | — | Both targets are active during a bounded boost. |
 | `binary_sensor.climaterouter_conflict` | on/off | diagnostic | At least one unresolved conflict. |
 | `binary_sensor.climaterouter_outdoor_sensor_stale` | on/off | diagnostic | Outdoor value is unavailable or older than `outdoor_stale_after`. |
@@ -579,24 +585,30 @@ values separately so debugging is unambiguous.
 
 | Entity | State | Category | Notes |
 |---|---|---|---|
-| `sensor.climaterouter_active_target` | `none` / `radiator` / `ac` / `both` | — | Current active target(s). |
-| `sensor.climaterouter_pending_target` | `none` / `radiator` / `ac` | — | Pending handover target. |
-| `sensor.climaterouter_route_reason` | enum | — | `off`, `outdoor_cold`, `outdoor_mild`, `hysteresis`, `deadband_default`, `manual_switch`, `manual_route`, `hvac_mode_cool`, `fallback_outdoor`, `fallback_unavailable`, `boost`. |
+| `sensor.climaterouter_active_target` | `none` / `radiator` / `ac` / `both` | — | Current active target(s). Uses a state-dependent icon. |
+| `sensor.climaterouter_pending_target` | `none` / `radiator` / `ac` | — | Pending handover target. Uses a state-dependent icon. |
+| `sensor.climaterouter_route_reason` | enum | — | `off`, `outdoor_cold`, `outdoor_mild`, `hysteresis`, `deadband_default`, `manual_route`, `hvac_mode_cool`, `fallback_outdoor`, `fallback_unavailable`, `boost`, `boost_unavailable`, `dwell`, `startup_conflict`. |
 | `sensor.climaterouter_outdoor_temperature` | float | — | Mirrored for dashboards/history; unit from HA. |
-| `sensor.climaterouter_override_remaining` | int minutes | — | `0` when no override. |
+| `sensor.climaterouter_manual_remaining` | int minutes | — | Minutes left in manual mode; unknown when the timer is off. |
+| `sensor.climaterouter_manual_until` | timestamp | — | Absolute manual-mode deadline; unknown when the timer is off. |
+| `sensor.climaterouter_manual_timer_minutes` | int minutes | diagnostic | Selected manual timer length. |
 | `sensor.climaterouter_boost_remaining` | int minutes | — | `0` when no boost. |
-| `sensor.climaterouter_last_handover` | timestamp | diagnostic | Last completed handover. |
+| `sensor.climaterouter_last_handover` | timestamp | diagnostic | Last completed handover; persisted across restarts. |
 | `sensor.climaterouter_conflict_count` | int | diagnostic | Total conflicts detected since startup. |
 | `sensor.climaterouter_last_command` | timestamp | diagnostic | Last command received through the proxy. |
 
-### 10.4 Buttons and select
+### 10.4 Buttons, selects, and switches
 
 | Entity | Action |
 |---|---|
-| `button.climaterouter_cancel_override` | Cancel the active manual override and restore the baseline. |
+| `button.climaterouter_return_to_schedule` | End manual mode and restore the latest schedule command. |
 | `button.climaterouter_recalculate_route` | Force an immediate route evaluation. |
 | `button.climaterouter_clear_conflicts` | Clear resolved/acknowledged conflict state. |
+| `button.climaterouter_force_handover` | Complete a pending handover immediately. |
 | `select.climaterouter_route_override` | `auto` / `radiator` / `ac` (and `both` only when boost is enabled). |
+| `select.climaterouter_manual_timer` | `off` or a timer length in minutes. |
+| `switch.climaterouter_manual_mode` | On enters manual mode, off returns to the schedule. |
+| `lock.climaterouter_lock` | Optional UI lock (created only when `lock_enabled` is on). |
 
 ### 10.5 Device
 
@@ -611,32 +623,34 @@ All entities belong to one HA device:
 
 ---
 
-## 11. Manual override
+## 11. Manual mode (proxy-owned)
 
 ### 11.1 Purpose
 
-The user can override the temperature or preset for a bounded time, then return to the **latest schedule
-command**. The override must survive a route handover and a Home Assistant restart.
+The user can override the temperature, preset, or mode for a bounded or infinite time, then return to the **latest
+schedule command**. Manual mode is owned by the proxy, is not mirrored to either VTherm, and must survive a route
+handover and a Home Assistant restart.
 
-### 11.2 Service
+### 11.2 Services
 
-`climaterouter.set_manual_override`
+`climaterouter.enter_manual_mode`
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `duration_minutes` | int | no | `1..max_override_minutes`; defaults to `default_override_minutes`. |
-| `temperature` | float | one of | Target temperature. |
+| `temperature` | float | one of | Manual target temperature. |
 | `preset_mode` | string | one of | Must be supported by the active target. |
-| `hvac_mode` | `heat`/`cool`/`off` | no | Advanced; `off` cancels the override. |
+| `hvac_mode` | `heat`/`cool`/`off` | no | `off` ends manual mode and turns the proxy off. |
+| `duration_minutes` | int | no | `0..max_manual_minutes`; omitted/`0` = no countdown. |
 | `target` | climate entity | yes | The proxy entity. |
 
-Validation: exactly one of `temperature` / `preset_mode` / `hvac_mode` is required (unless a future combined mode
-is added). `off` is equivalent to cancel.
+`climaterouter.set_manual_timer` changes or switches off the countdown without changing the setpoint.
+`climaterouter.return_to_schedule` ends manual mode and restores the latest schedule command.
+`set_manual_override` / `cancel_manual_override` remain as deprecated aliases.
 
 Examples:
 
 ```yaml
-action: climaterouter.set_manual_override
+action: climaterouter.enter_manual_mode
 target:
   entity_id: climate.climaterouter
 data:
@@ -645,7 +659,7 @@ data:
 ```
 
 ```yaml
-action: climaterouter.set_manual_override
+action: climaterouter.enter_manual_mode
 target:
   entity_id: climate.climaterouter
 data:
@@ -656,70 +670,74 @@ data:
 ### 11.3 Lifecycle
 
 1. **Start**
-   - If no override is active, snapshot the current **desired** state as the baseline:
-     `hvac_mode`, `setpoint_kind`, `preset_mode`, `target_temperature`.
-   - If the desired state is empty, snapshot the active target's actual state.
-   - If an override is already active, keep the original baseline and replace the value/duration.
-   - Set `override = {kind, value, until, baseline}`.
-   - Apply the override to the active target (or all active targets in boost).
-   - Fire `climaterouter_override_started`.
+   - A user move of the temperature/preset in the UI, or an explicit service call, starts manual mode.
+   - Snapshot the current **baseline** desired state (`hvac_mode`, `setpoint_kind`, `preset_mode`,
+     `target_temperature`).
+   - Use `default_manual_minutes` as the initial timer; `0` means no countdown.
+   - Fire `climaterouter_manual_mode_started`.
 2. **During**
-   - The override value wins over the baseline for `target_temperature`/`preset_mode`.
-   - If a route handover occurs, the override is re-applied to the new target after handover.
-   - If a schedule command arrives:
-     - `off` cancels the override (safety).
-     - Other commands update the baseline (the latest schedule command), but the override continues
-       (`override_policy: hold`, default).
-   - If the underlying VTherm enters a guard (window/power/safety), the guard wins; the override remains pending.
+   - The manual desired state wins over the baseline.
+   - Additional user moves update the manual value but **never reset the timer**.
+   - Schedule/automation commands update the baseline but do not replace the manual value. While Lock B is active
+     (`manual_blocks_schedule`), they are rejected with a clear error.
+   - A route handover uses the effective desired state, so the manual value and deadline carry over to the new
+     target.
+   - Changing the timer fires `climaterouter_manual_timer_changed`.
 3. **End**
-   - On expiry, cancellation, or restart-with-expired-deadline, restore the baseline to the current active target:
-     - set `hvac_mode` if it differs;
-     - apply the baseline preset, or the baseline temperature if the baseline kind is `temperature`.
-   - If a handover is pending, store the restored baseline as the desired state and apply it after handover.
-   - Clear the override and fire `climaterouter_override_ended` with `cause` (`expired`, `cancelled`,
-     `replaced`, `off`).
+   - On expiry, an explicit `off`, or `return_to_schedule`, restore the baseline to the active target.
+   - If a handover is pending, store the restored baseline and apply it after the handover.
+   - Fire `climaterouter_manual_mode_ended` with `cause` (`expired`, `cancelled`, `replaced`, `off`).
 4. **Persistence**
-   - Store `until` as an absolute UTC timestamp plus the baseline and value.
-   - On startup, if `until` is in the past, restore the baseline immediately; otherwise resume the countdown.
-   - Use `RestoreEntity` for entity-local state and a versioned `Store` for coordinator state.
+   - Store the manual desired state and an absolute UTC deadline. `None` means infinite.
+   - On startup, discard an expired session; restore an infinite session as-is.
 
-### 11.4 Interaction with VTherm's own timed override
+### 11.4 Standard-card entities
+
+- `switch.<name>_manual_mode` (on = manual, off = return to schedule)
+- `select.<name>_manual_timer` (`off` or minutes)
+- `button.<name>_return_to_schedule`
+- `binary_sensor.<name>_manual_mode`
+- `sensor.<name>_manual_remaining`
+- `sensor.<name>_manual_until`
+- diagnostic `sensor.<name>_manual_timer_minutes`
+
+The climate entity exposes `manual_mode`, `manual_active`, `manual_until`, `manual_timer_minutes`, and
+`manual_remaining_minutes`. A timer that is off reports `null`/unknown rather than a fake countdown.
+
+### 11.5 Schedule command vs manual command
+
+The proxy distinguishes user moves by the service-call context (`context.user_id`):
+
+- A call with a `user_id` is a user move and starts/updates manual mode.
+- A call without a `user_id` (Scheduler, automation, script) updates the baseline. While manual mode is active and
+  `manual_blocks_schedule` is on, Lock B rejects it.
+- `return_to_schedule` is deliberately not gated by Lock B, so an explicit return (including an automation) can end
+  manual mode. The UI lock (Lock A) still blocks user-initiated service calls while locked.
+
+### 11.6 Manual mode and routing
+
+- Manual mode applies to the active target; it does not change the route by itself.
+- If the route changes during manual mode, the normal handover rules apply and the manual state is forwarded to the
+  new target after handover.
+- If manual mode expires while a handover is pending, the baseline is stored and applied when the handover
+  completes.
+- `off` always ends manual mode and turns off all targets.
+
+### 11.7 Interaction with VTherm's own timed override
 
 VTherm supports `versatile_thermostat.set_timed_preset` and an optional `manual_override_duration_min`. These are
 useful, but they are **per VTherm** and are lost when the proxy hands over to the other target.
 
 Decision:
 
-- The proxy implements the cross-target override itself.
+- The proxy implements the cross-target manual mode itself.
 - The proxy does **not** call VTherm-specific timed-preset services in v1.
 - If a VTherm's `timed_preset_manager.is_active` is true and the proxy did not start it, the proxy treats it as an
   **underlying override/guard**, exposes it in diagnostics, and does not start a second timer. This is a conflict
   unless the user intentionally uses the VTherm directly.
 - For deterministic behavior, the setup guide recommends either:
-  - use the proxy override and leave VTherm's `manual_override_duration_min` at `0`; or
+  - use proxy manual mode and leave VTherm's `manual_override_duration_min` at `0`; or
   - use VTherm's timed override directly and accept that it is target-local (not recommended with routing).
-
-A future `override_engine: proxy|vtherm` option can delegate to VTherm when no handover is expected.
-
-### 11.5 Schedule command vs manual command
-
-The proxy cannot reliably distinguish "Scheduler" from "user" service calls in all HA contexts. Therefore:
-
-- `climate.set_temperature` / `set_preset_mode` through the proxy update the **baseline** and do not start a timed
-  override.
-- A timed override is started explicitly through `climaterouter.set_manual_override`.
-- This makes the behavior predictable and lets a dashboard button/script provide the timed override UX.
-- A future option `auto_override_on_manual_change` may classify UI calls by `context.user_id`, but it is not part
-  of v1 because Scheduler and users can share the same user context.
-
-### 11.6 Override and routing
-
-- Override applies to the active target; it does not change the route by itself.
-- If the route changes during an override, the normal handover rules apply; the override is forwarded to the new
-  target after handover.
-- If the override expires while a handover is pending, the baseline is stored and applied when the handover
-  completes.
-- `off` always cancels the override and turns off all targets.
 
 ---
 
@@ -773,8 +791,8 @@ Detection rules:
    it off (`auto_resolve_idle_targets`). If it is heating/cooling, do not interrupt; wait for idle.
 6. **Both active.** If both are on and boost is not active, conflict. If one is idle, optionally turn it off; if
    both are active, do not interrupt.
-7. **Stale inputs.** Outdoor sensor and manual switch staleness are input warnings, not target conflicts. They
-   produce binary sensors and hold the last route.
+7. **Stale inputs.** Outdoor sensor staleness is an input warning, not a target conflict. It produces a binary
+   sensor and holds the last route.
 8. **Setpoint mismatch.** Compare with `temperature_tolerance`; VTherm preset changes may legitimately alter the
    target, so compare against the proxy's desired value only when the desired kind is temperature.
 
@@ -789,8 +807,8 @@ Detection rules:
 | `both_targets_on` | Radiator and AC both on without boost. | `monitor`; turn off idle one if enabled. |
 | `target_unavailable` | Active VTherm unavailable. | Fallback if enabled; else unavailable. |
 | `underlying_override` | VTherm timed preset active. | `monitor`/guard. |
-| `input_stale` | Outdoor sensor/manual switch stale. | Hold route; binary sensor. |
-| `target_mismatch` | Radiator and AC target temps differ. | Diagnostic only. |
+| `input_stale` | Outdoor sensor stale. | Hold route; binary sensor. |
+| `target_mismatch` | Radiator and AC target temperatures or presets differ. | Diagnostic only. |
 | `handover_failed` | Old target did not report off. | Conflict; keep old, retry later. |
 
 ### 12.5 Policies
@@ -824,7 +842,7 @@ Additional independent switches:
 - Schedule/automate only `climate.climaterouter`.
 - Exclude `climate.vtherm_radiator` and `climate.vtherm_ac` from Scheduler Card's `include` list.
 - Do not enable VTherm's "follow underlying temperature changes" unless you accept external-device conflicts.
-- Do not enable VTherm's own manual override timer if you use the proxy override.
+- Do not enable VTherm's own manual override timer if you use proxy manual mode.
 - Use the conflict sensor in dashboards/notifications.
 - If a third-party automation must control a VTherm directly, disable the proxy route or accept the conflict.
 
@@ -880,7 +898,6 @@ advanced strategies remain future work.
 - If the active target is unavailable and fallback is disabled, the proxy becomes unavailable/unknown and the
   conflict sensor is on.
 - If the outdoor sensor is stale, the proxy remains available; route holds the last known target.
-- If the manual switch is stale, the proxy remains available; treat the switch as its last known state.
 
 ### 14.2 Startup
 
@@ -893,10 +910,12 @@ advanced strategies remain future work.
 
 Use a versioned `Store` (`climaterouter.<entry_id>`) for:
 
-- desired state;
-- override (value, baseline, absolute `until`);
+- desired baseline state;
+- manual mode (desired state, baseline, absolute `until`);
 - last route;
 - boost state;
+- last handover timestamp;
+- lock state and absolute auto-relock deadline;
 - conflict history/counter (optional).
 
 Entity state can use `RestoreEntity`, but the coordinator store is the source of truth. Migrate the store schema
@@ -908,13 +927,12 @@ with a version field.
 - Old target does not report `off` → abort handover; do not turn on the new target.
 - New target fails to accept commands → keep old target off, mark conflict, try fallback if configured.
 - Outdoor sensor unavailable → hold route, mark stale.
-- Manual switch unavailable → hold last state, mark stale.
-- HA restart during override → restore from absolute deadline.
+- HA restart during manual mode → restore from the absolute deadline; discard an expired session.
 - HA restart during handover → reconcile from actual states; never assume the persisted active target is correct.
 
 ### 14.5 Logging
 
-- Info: route changes, handover start/complete, override start/end, boost start/end.
+- Info: route changes, handover start/complete, manual-mode start/end, boost start/end.
 - Warning: conflict detected, handover aborted, target unavailable, stale input.
 - Debug: every command, expected/actual state, suppression windows.
 - Avoid repeated warnings: log once per conflict episode, then debug.
@@ -931,39 +949,42 @@ climaterouter/
 │   ├── __init__.py            # setup/unload, services, runtime_data
 │   ├── manifest.json
 │   ├── const.py               # domain, defaults, enums
-│   ├── config_flow.py         # initial/options/reconfigure flows
+│   ├── config_flow.py         # sectioned initial/options/reconfigure flows
 │   ├── coordinator.py         # event listeners, watchdog, state store
-│   ├── router.py              # pure routing + override + conflict logic
+│   ├── router.py              # pure routing + conflict logic
 │   ├── models.py              # dataclasses/enums (Target, DesiredState, ...)
 │   ├── climate.py             # proxy climate entity
+│   ├── vt_display.py          # read-only VTherm attributes for cards
+│   ├── entity.py              # shared coordinator entity + DeviceInfo
 │   ├── binary_sensor.py       # operation/conflict sensors
-│   ├── sensor.py              # active target, reason, remaining, etc.
-│   ├── button.py              # cancel override, recalc, clear conflicts
-│   ├── select.py              # route override
+│   ├── sensor.py              # active target, reason, manual/boost, etc.
+│   ├── switch.py              # manual-mode switch
+│   ├── button.py              # return to schedule, recalc, clear, force handover
+│   ├── select.py              # route override + manual timer
+│   ├── lock.py                # optional UI lock
 │   ├── services.py            # service registration/handlers
 │   ├── diagnostics.py         # config entry diagnostics
 │   ├── services.yaml
 │   ├── strings.json
-│   ├── icons.json
 │   └── translations/
 │       └── en.json
 ├── tests/
 │   ├── conftest.py
-│   ├── test_router.py
-│   ├── test_handover.py
-│   ├── test_override.py
-│   ├── test_conflicts.py
-│   ├── test_config_flow.py
-│   ├── test_services.py
-│   └── test_diagnostics.py
+│   ├── test_router.py         # pure routing
+│   ├── test_models.py         # config/desired/manual/boost/conflict models
+│   ├── test_vt_display.py     # card-facing attribute selection
+│   └── test_translations.py   # strings/en.json and field descriptions
 ├── docs/
 │   ├── PLAN.md
+│   ├── HANDOVER.md
 │   ├── ARCHITECTURE.md
 │   ├── CONFLICTS.md
 │   ├── TESTING.md
+│   ├── TEST_ENVIRONMENT.md
 │   ├── SETUP.md
 │   └── ADR/
-├── .github/workflows/          # added in M1
+├── .github/workflows/          # CI + hassfest/HACS validation
+├── test_environment/           # Docker lab (reference only)
 ├── hacs.json
 ├── pyproject.toml
 ├── requirements_test.txt
@@ -971,16 +992,20 @@ climaterouter/
 └── README.md
 ```
 
+The planned `test_handover.py`, `test_manual_mode.py`, `test_conflicts.py`, `test_config_flow.py`, `test_services.py`,
+and `test_diagnostics.py` do not exist yet; they belong to the integration-test work in section 16.2.
+
 ### 15.2 Module responsibilities
 
 | Module | Responsibility |
 |---|---|
-| `models.py` | Enums/dataclasses: `Target`, `RouteReason`, `DesiredState`, `UnderlyingState`, `OverrideState`, `Conflict`, `RouterSnapshot`. No HA service calls. |
-| `router.py` | Pure functions: `choose_route`, hysteresis, override baseline/expiry helpers, conflict comparison. Unit-testable without HA. |
-| `coordinator.py` | `DataUpdateCoordinator`/event coordinator; subscribes to state changes; owns the state machine and store; serializes commands with a lock; watchdog. |
+| `models.py` | Enums/dataclasses: `Target`, `DesiredState`, `UnderlyingState`, `ManualMode`, `BoostState`, `Conflict`, `RouterSnapshot`. No HA service calls. |
+| `router.py` | Pure functions: `choose_route`, hysteresis, conflict comparison, boost helpers. Unit-testable without HA. |
+| `coordinator.py` | Event coordinator; subscribes to state changes; owns the state machine and store; serializes commands with a lock; watchdog. |
 | `climate.py` | `ClimateEntity` adapter; properties from snapshot; service methods delegate to coordinator. |
+| `vt_display.py` | Read-only VTherm display attributes for Lovelace cards. |
 | `binary_sensor.py` / `sensor.py` | Read-only entities from snapshot. |
-| `button.py` / `select.py` | Small command entities. |
+| `button.py` / `select.py` / `switch.py` / `lock.py` | Small command and lock entities. |
 | `services.py` | Service schemas/handlers; resolve target entry; validation; events. |
 | `config_flow.py` | Config/options/reconfigure; validation; unique IDs. |
 | `diagnostics.py` | Redacted config + snapshot + underlying state + conflict history. |
@@ -992,21 +1017,20 @@ climaterouter/
 {
   "domain": "climaterouter",
   "name": "ClimateRouter",
-  "codeowners": ["@gume75"],
+  "codeowners": ["@gume"],
   "config_flow": true,
-  "documentation": "https://github.com/gume75/climaterouter",
-  "issue_tracker": "https://github.com/gume75/climaterouter/issues",
+  "documentation": "https://github.com/gume/climaterouter",
+  "issue_tracker": "https://github.com/gume/climaterouter/issues",
   "iot_class": "local_polling",
   "integration_type": "hub",
-  "version": "0.1.0",
+  "version": "0.8.1",
   "requirements": [],
-  "dependencies": ["climate"]
+  "dependencies": ["climate", "lock"]
 }
 ```
 
-`documentation`, `issue_tracker`, and `codeowners` are placeholders until the remote is assigned. `after_dependencies`
-on `versatile_thermostat` is intentionally not used; the integration waits for the configured entities at runtime
-instead, so it can be tested with mock climates.
+`after_dependencies` on `versatile_thermostat` is intentionally not used; the integration waits for the configured
+entities at runtime instead, so it can be tested with mock climates.
 
 ### 15.4 Setup/unload
 
@@ -1015,10 +1039,10 @@ instead, so it can be tested with mock climates.
 - `async_setup_entry`:
   - build config from `entry.data` + `entry.options`;
   - create coordinator and load persisted store;
-  - `await coordinator.async_config_entry_first_refresh()`;
-  - store coordinator in `entry.runtime_data`;
-  - forward platforms: `climate`, `binary_sensor`, `sensor`, `button`, `select`;
-  - start watchdog.
+  - `await coordinator.async_initialize()`;
+  - store coordinator in `entry.runtime_data` and `hass.data`;
+  - forward platforms: `climate`, `binary_sensor`, `sensor`, `select`, `button`, `lock`, `switch`;
+  - register the update listener.
 - `async_unload_entry`:
   - unload platforms;
   - cancel listeners/timers;
@@ -1028,12 +1052,12 @@ instead, so it can be tested with mock climates.
 
 ### 15.5 Config flow
 
-- `async_step_user`: entity pickers, thresholds, advanced options.
-- `async_step_options`: edit non-entity options; entity changes trigger reload.
-- `async_step_reconfigure`: change entities/options.
+- `async_step_user`: sectioned form with entity pickers, thresholds, and advanced options.
+- `async_step_options`: section menu; each section saves immediately, **Finish** closes.
+- `async_step_reconfigure`: change entities and all options in one form.
 - Unique ID: `f"{radiator_entity_id}|{ac_entity_id}"`.
-- Strings/translations for labels, descriptions, errors, and abort reasons.
-- Validation helpers shared with options flow.
+- Strings/translations for labels, descriptions, field help, errors, and abort reasons.
+- Validation helpers shared with the options flow.
 
 ### 15.6 Services and events
 
@@ -1043,15 +1067,18 @@ Events:
 
 | Event | Data |
 |---|---|
-| `climaterouter_route_changed` | `entry_id`, `old_target`, `new_target`, `reason`, `outdoor_temperature`, `manual_switch`. |
+| `climaterouter_route_changed` | `entry_id`, `old_target`, `new_target`, `reason`, `outdoor_temperature`. Fires only when the active target changes. |
 | `climaterouter_handover_started` | `entry_id`, `from_target`, `to_target`, `reason`, `old_action`. |
 | `climaterouter_handover_completed` | `entry_id`, `from_target`, `to_target`, `duration_s`. |
 | `climaterouter_handover_aborted` | `entry_id`, `from_target`, `to_target`, `error`. |
-| `climaterouter_override_started` | `entry_id`, `kind`, `value`, `duration_minutes`, `until`. |
-| `climaterouter_override_ended` | `entry_id`, `kind`, `cause` (`expired`/`cancelled`/`replaced`/`off`). |
+| `climaterouter_manual_mode_started` | `entry_id`, `desired`, `duration_minutes`, `until`. |
+| `climaterouter_manual_mode_ended` | `entry_id`, `cause` (`expired`/`cancelled`/`replaced`/`off`). |
+| `climaterouter_manual_timer_changed` | `entry_id`, `minutes`, `until`. |
 | `climaterouter_conflict_detected` | `entry_id`, `conflict` dict. |
 | `climaterouter_conflict_cleared` | `entry_id`, `conflict` dict. |
 | `climaterouter_boost_started` / `_ended` | `entry_id`, `until`, `targets`. |
+
+The old `climaterouter_override_started` / `_ended` names are no longer fired; use the manual-mode events.
 
 ### 15.7 Diagnostics
 
@@ -1060,7 +1087,7 @@ Events:
 - entry data/options (thresholds, entity IDs);
 - `ready`, active/pending target, route reason;
 - desired state;
-- override state;
+- manual mode state;
 - boost state;
 - per-target state (mode, action, preset, target/current temp, availability, guard summary);
 - conflicts (current + last 50);
@@ -1073,9 +1100,9 @@ IDs can be redacted behind a constant.
 ### 15.8 Performance and reliability
 
 - Event-driven; no polling of devices.
-- `async_track_state_change_event` for the two climates, outdoor sensor, manual switch, and route override.
-- Watchdog every 30 s for override expiry, stale inputs, pending handovers, and conflict clearing.
-- Debounce route evaluation (1 s) and manual switch (5 s).
+- `async_track_state_change_event` for the two climates, outdoor sensor, and route override.
+- Watchdog every 30 s for manual/boost expiry, stale inputs, pending handovers, and conflict clearing.
+- Route evaluation is immediate; explicit command/handover work is serialized.
 - Serialize all command/handover work with an `asyncio.Lock`; never run two handovers concurrently.
 - Bound conflict/event history to avoid memory growth.
 - Avoid state-write loops by tracking internal contexts and expected states.
@@ -1091,7 +1118,7 @@ See [`TESTING.md`](TESTING.md) for the full matrix. Summary:
 ### 16.1 Unit tests (`router.py`, pure)
 
 - Threshold routing and hysteresis.
-- Manual switch and route override precedence.
+- Route override precedence.
 - `off` and `cool` precedence.
 - Capability/availability fallback.
 - Override baseline/expiry helpers.
@@ -1142,12 +1169,12 @@ See [`TESTING.md`](TESTING.md) for the full matrix. Summary:
 
 ## 17. Milestones and acceptance criteria
 
-### M0 — Plan and repository (current)
+### M0 — Plan and repository
 
 - [x] Local git repository initialized on `main`.
 - [x] README, plan, architecture, conflict, testing, setup, and ADR docs.
 - [x] HACS metadata and license.
-- [ ] Remote assigned by owner (pending).
+- [x] Remote assigned (`gume/climaterouter`).
 
 **Acceptance:** the plan is reviewable; no integration code is required yet.
 
@@ -1164,7 +1191,7 @@ and passes lint/tests.
 
 ### M2 — Core proxy and routing
 
-- [x] `models.py`/`router.py` pure routing with hysteresis, manual switch, route override, `off`/`cool`.
+- [x] `models.py`/`router.py` pure routing with hysteresis, route override, `off`/`cool`.
 - [x] State mirroring from active target.
 - [x] Forward `set_temperature`, `set_hvac_mode`, `set_preset_mode`, `turn_on`, `turn_off`.
 - [x] Active/pending/route-reason sensors and active/heating/cooling binary sensors.
@@ -1179,34 +1206,36 @@ and passes lint/tests.
 - [x] Never turn off an active target on route change.
 - [x] Handover events and binary sensor.
 - [x] Startup reconciliation.
+- [x] Live verification in the test HA (through 0.5.0).
 - [ ] Integration tests for handover.
 
-**Acceptance:** outdoor/manual route changes wait for idle; old target is off before new target starts; no
+**Acceptance:** outdoor/route-override changes wait for idle; old target is off before new target starts; no
 interrupted heating in tests.
 
-### M4 — Manual override
+### M4 — Manual mode (proxy-owned)
 
-- [x] `set_manual_override` / `cancel_manual_override`.
-- [x] Baseline capture/restore, absolute deadline, persistence.
-- [x] Override survives handover and restart.
-- [x] Schedule commands update baseline while override holds.
-- [x] Override binary sensor and remaining sensor.
+- [x] `ManualMode` model with desired state, baseline, absolute deadline, and timer metadata.
+- [x] UI moves and `enter_manual_mode`; repeat moves do not reset the timer.
+- [x] `set_manual_timer`, `return_to_schedule`, deprecated aliases.
+- [x] Manual-mode switch, timer select, return button, binary sensor, remaining/until sensors.
+- [x] Manual mode survives handover and restart; schedule commands update the baseline.
+- [x] Lock B (`manual_blocks_schedule`) rejects automation commands.
+- [x] Live verification in the test HA (through 0.8.0).
 - [ ] Integration tests for expiry, cancel, off, restart, handover.
-- [ ] Live verification in the test HA.
 
-**Acceptance:** a 45-minute override returns to the latest schedule command; `off` cancels immediately.
+**Acceptance:** a 45-minute manual session returns to the latest schedule command; `off` ends it immediately.
 
 ### M5 — Observability and conflict handling
 
 - [x] Conflict detection with own-context suppression and guard classification.
 - [x] Conflict binary sensor, count, attributes, events, clear button.
-- [x] Stale outdoor/manual switch sensors.
-- [x] Target mismatch diagnostic.
+- [x] Stale outdoor sensor detection; the external manual-switch input was removed in 0.8.0.
+- [x] Target mismatch diagnostic (setpoints and presets).
 - [x] Conflict policies (`monitor`, `reassert`, `adopt`).
 - [x] Diagnostics and documentation.
 - [x] Tests for external changes, guards, both-on, unavailable (pure classifier).
+- [x] Live verification in the test HA (through 0.8.0).
 - [ ] Integration tests for policy behaviour and conflict lifecycle (needs the HA test harness).
-- [ ] Live verification in the test HA.
 
 **Acceptance:** direct VTherm changes are visible and logged, not silently fought; guards are allowed; no loops.
 
@@ -1220,12 +1249,23 @@ interrupted heating in tests.
 - [x] Unit tests for the boost model and pure routing.
 - [x] README/setup/dashboard examples updated for boost.
 - [x] Hassfest and HACS validation workflow (`.github/workflows/validate.yml`).
+- [x] Live verification in the test HA (through 0.8.0).
 - [ ] Integration tests for boost start/expiry/cancel/resume (needs the HA test harness).
-- [ ] Live verification in the test HA.
-- [ ] `v0.4.0` tag/release (owner action).
+- [ ] `v0.4.0` tag exists; later version tags/releases are owner actions.
 
 **Acceptance:** boost is safely disabled by default; enabling it activates both targets for a bounded time; HACS
 and hassfest pass.
+
+### M7 — Proxy rework and display hardening (0.7.0–0.8.1)
+
+- [x] Native UI lock with optional code and persisted auto-relock deadline.
+- [x] Proxy-owned manual mode and timer replacing the bounded override.
+- [x] Split Lock A (UI) from Lock B (manual/schedule).
+- [x] Sectioned setup/options/reconfigure flows with brief field descriptions.
+- [x] Read-only VTherm display attributes; identity attributes are opt-in.
+- [x] State-dependent radiator/AC icons on the target sensors.
+- [x] Live verification through 0.8.0; 0.8.1 still needs a release/tag and a live check.
+- [ ] Integration tests for the flows, locks, and manual mode.
 
 ---
 
@@ -1249,28 +1289,31 @@ and hassfest pass.
 
 ---
 
-## 19. Open questions / decisions to confirm
+## 19. Decisions and remaining questions
 
-These are intentionally listed for review before implementation. Defaults are proposed; the plan can proceed with
-them unless changed.
+Most of the original open questions are settled in the 0.8.x implementation:
 
-1. **Manual switch semantics.** Is the existing switch a boolean "force AC" switch, or a 3-state selector
-   (`auto`/`radiator`/`ac`)? The plan supports both; default boolean `on` = AC.
-2. **Default thresholds.** The plan uses `cold=7 °C`, `mild=9 °C` for hysteresis. Set both to `8 °C` for the
-   literal `>8 → AC; ≤8 → radiator` rule.
-3. **Override ownership.** Use the proxy-level override (recommended) or delegate to VTherm's timed preset/manual
-   override? Proxy-level is required for cross-target consistency.
-4. **Conflict default.** `monitor` (recommended) vs `reassert`. Monitor avoids loops but requires the user to
-   notice the conflict sensor.
-5. **HVAC modes.** Expose only `off`/`heat` (safe) or `off`/`heat`/`cool`? The plan exposes `cool` when the AC
-   supports it.
-6. **Boost scope.** v1 scaffold only, disabled by default. Confirm the safety interlock (heat-only, both capable).
-7. **Fan/swing/humidity.** Include optional pass-through in v1 or defer to v2? The plan treats them as optional.
-8. **Multiple routers.** Support multiple config entries from the start (recommended) or single instance only?
-9. **Entity naming.** `climate.climaterouter` for the first entry; subsequent entries get suffixes. Confirm.
-10. **VTherm manual override setting.** Recommend `manual_override_duration_min = 0` when using proxy override.
-11. **Scheduler direct-control policy.** Document and enforce "proxy only"; no technical way to prevent direct
-    underlying calls, so conflicts are the enforcement signal.
+1. **Manual routing input.** The external switch was removed. Routing is forced only through
+   `select.<name>_route_override` (`auto`/`radiator`/`ac`).
+2. **Default thresholds.** `cold=7 °C`, `mild=9 °C`, with hysteresis and a 2 °C deadband.
+3. **Override ownership.** Proxy-owned manual mode. VTherm timed presets are not used; an underlying timed preset is
+   reported as an `underlying_override` conflict/guard.
+4. **Conflict default.** `monitor`, with `reassert` and `adopt` as opt-in policies.
+5. **HVAC modes.** `off`/`heat`, plus `cool` when the AC target supports it.
+6. **Boost scope.** Feature-flagged `both` only, heat-only, both targets available, no pending handover.
+7. **Fan/swing/humidity.** Still deferred; the desired-state model carries `fan_mode`/`swing_mode`, but the climate
+   entity does not expose those features yet.
+8. **Multiple routers.** Multiple config entries are supported; there is no group entity.
+9. **Entity naming.** The first entry gets the natural names; later entries get suffixes.
+10. **VTherm manual override setting.** Recommend `manual_override_duration_min = 0` when using proxy manual mode.
+11. **Scheduler direct-control policy.** Document and enforce "proxy only"; conflicts are the enforcement signal.
+
+Remaining decisions:
+
+- Keep the 2026.11 version floor or add an older-version import fallback?
+- Implement `handover_max_wait` (automatic interruption of a stuck handover) or keep the manual force-handover?
+- Add fan/swing/humidity pass-through in a later release?
+- Upstream Equinox support for a configurable lock service/entity.
 
 ---
 
@@ -1295,10 +1338,10 @@ The proxy supports the standard climate actions Scheduler exposes:
 
 ### 20.2 Example service calls
 
-Timed temperature override:
+Timed temperature manual mode:
 
 ```yaml
-action: climaterouter.set_manual_override
+action: climaterouter.enter_manual_mode
 target:
   entity_id: climate.climaterouter
 data:
@@ -1306,10 +1349,10 @@ data:
   duration_minutes: 45
 ```
 
-Timed preset override:
+Timed preset manual mode:
 
 ```yaml
-action: climaterouter.set_manual_override
+action: climaterouter.enter_manual_mode
 target:
   entity_id: climate.climaterouter
 data:
@@ -1317,7 +1360,17 @@ data:
   duration_minutes: 90
 ```
 
-Force AC for two hours:
+Change or switch off the manual timer:
+
+```yaml
+action: climaterouter.set_manual_timer
+target:
+  entity_id: climate.climaterouter
+data:
+  minutes: 0
+```
+
+Force AC:
 
 ```yaml
 action: climaterouter.set_route_override
@@ -1325,13 +1378,12 @@ target:
   entity_id: climate.climaterouter
 data:
   route: ac
-  duration_minutes: 120
 ```
 
-Cancel override:
+Return to schedule:
 
 ```yaml
-action: climaterouter.cancel_manual_override
+action: climaterouter.return_to_schedule
 target:
   entity_id: climate.climaterouter
 ```
@@ -1339,24 +1391,24 @@ target:
 ### 20.3 Dashboard ideas
 
 - Thermostat card for `climate.climaterouter`.
-- Entity cards for radiator active, AC active, heating, cooling, handover pending, override.
+- Entity cards for radiator active, AC active, heating, cooling, handover pending, manual mode.
 - Gauge/history for outdoor temperature and active target.
-- Buttons: "Override 30 min", "Cancel override", "Force AC", "Auto route".
+- Buttons: "Manual 30 min", "Return to schedule", "Force AC", "Auto route".
 - Conditional card showing conflicts with `binary_sensor.climaterouter_conflict`.
 - Markdown card showing `sensor.route_reason` and `sensor.pending_target`.
 
 ### 20.4 Acceptance checklist for the finished integration
 
-- [ ] Scheduler can create a time scheme using only `climate.climaterouter`.
-- [ ] `set_temperature`, `set_hvac_mode`, `set_preset_mode`, `turn_on`, `turn_off` work.
-- [ ] Outdoor crossing causes a handover only when the old target is idle.
-- [ ] Old target is off before the new target starts.
-- [ ] No target is turned off while actively heating/cooling due to a route change.
-- [ ] Manual override returns to the latest schedule command.
-- [ ] Override survives handover and restart.
-- [ ] Direct underlying changes are detected and visible.
-- [ ] Guards (window/power/safety/presence) are not fought.
-- [ ] Outdoor/manual switch staleness is visible.
-- [ ] Both-target-on is detected.
-- [ ] Boost is feature-flagged and safe.
-- [ ] Diagnostics, translations, HACS/hassfest, and tests pass.
+- [x] Scheduler can create a time scheme using only `climate.climaterouter`.
+- [x] `set_temperature`, `set_hvac_mode`, `set_preset_mode`, `turn_on`, `turn_off` work.
+- [x] Outdoor crossing causes a handover only when the old target is idle.
+- [x] Old target is off before the new target starts.
+- [x] No target is turned off while actively heating/cooling due to a route change.
+- [x] Manual mode returns to the latest schedule command.
+- [x] Manual mode survives handover and restart.
+- [x] Direct underlying changes are detected and visible.
+- [x] Guards (window/power/safety/presence) are not fought.
+- [x] Outdoor sensor staleness is visible.
+- [x] Both-target-on is detected.
+- [x] Boost is feature-flagged and safe.
+- [ ] Diagnostics, translations, HACS/hassfest, and tests pass (0.8.1 still needs a tag and a live check).

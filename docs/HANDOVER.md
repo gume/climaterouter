@@ -39,42 +39,45 @@
 | `87274cd` | `chore: bump version to 0.8.0` |
 | `e4c6678` | `docs: record the 0.8.0 proxy rework and manual-mode entities` |
 | `2caed71` | `feat: show radiator/AC icons on the target sensors` |
+| `28cd5b3` | `docs: record the 0.8.1 target-sensor icons` |
+| `5a7b28e` | `fix: persist last_handover and align config saves` |
+| `8c2abc3` | `feat: add brief help text to config and options fields` |
+| `baa2d49` | `test: guard translation parity and field descriptions` |
+| `50b6d16` | `docs: correct deprecated service descriptions` |
 
 Everything through `bf19c92` (version **0.5.0**) is pushed to `origin/main` and installed in the live test instance.
-Local commits `28fbf93` (version **0.6.0**, read-only VTherm display attributes), `e0634e2` (docs), `97c620e`
-(version **0.7.0**, native lock) and the proxy-rework series starting with `38e0ef0` are not pushed yet. The current
-checkout is version **0.8.1**. The assistant has no GitHub credentials.
+Local commits from `28fbf93` (version **0.6.0**, read-only VTherm display attributes) onward are not pushed yet. The
+current checkout is version **0.8.1**. The assistant has no GitHub credentials, and the owner creates tags/releases.
 
 ---
 
 ## 1. Where things stand
 
-Milestones M1–M6 from [`PLAN.md`](PLAN.md) are implemented. M1–M3 were validated manually in a real Home Assistant
-2026.11 container; M4–M6 still need live verification.
+Milestones M1–M6 from [`PLAN.md`](PLAN.md) are implemented. The owner reports live verification through version
+**0.8.0** in the test Home Assistant; 0.8.1 is not yet visible there because no matching tag/release exists.
 
 | Milestone | State | Notes |
 |---|---|---|
 | M1 — skeleton and config flow | Done | Config/options/reconfigure flows, device, proxy entity, services, diagnostics, translations, CI. |
-| M2 — proxy and routing | Done | Hysteresis, route override, `off`/`cool`, command forwarding, status entities. The external manual switch was removed in 0.8.0. |
+| M2 — proxy and routing | Done, live-verified | Hysteresis, route override, `off`/`cool`, command forwarding, status entities. The external manual switch was removed in 0.8.0. |
 | M3 — safe handover | Done, live-verified | Idle detection, off confirmation, timeout, queued desired state, startup reconciliation, events. The manual forced handover and command forwarding during `PENDING` were verified live in 0.5.0 (see section 6). |
-| M4 — manual mode | Implemented, not live-verified | Proxy-owned manual mode (temperature/preset/mode), optional timer with configurable default/maximum, baseline capture/restore, non-resetting repeat moves, persistence, handover carry-over, events, switch/select/button/sensors. Replaces the earlier bounded override. |
-| M5 — conflicts | Implemented, not live-verified | Setpoint/preset/mode mismatch, unavailable targets, underlying timed presets, both-on and inactive-target-on detection; own-context and guard suppression; `monitor`/`reassert`/`adopt` policies, auto-resolve switches, events, history and clear button. Unit coverage is limited to the pure classifier. |
-| M6 — boost | Implemented, not live-verified | Feature-flagged both-target boost with heat-only/availability/handover interlocks, persistence, expiry, start/end events, active/remaining entities, and a handover back to single-target routing. |
+| M4 — manual mode | Done, live-verified through 0.8.0 | Proxy-owned manual mode (temperature/preset/mode), optional timer with configurable default/maximum, baseline capture/restore, non-resetting repeat moves, persistence, handover carry-over, events, switch/select/button/sensors. Replaces the earlier bounded override. |
+| M5 — conflicts | Done, live-verified through 0.8.0 | Setpoint/preset/mode mismatch, unavailable targets, underlying timed presets, both-on and inactive-target-on detection; own-context and guard suppression; `monitor`/`reassert`/`adopt` policies, auto-resolve switches, events, history and clear button. Unit coverage is limited to the pure classifier. |
+| M6 — boost | Done, live-verified through 0.8.0 | Feature-flagged both-target boost with heat-only/availability/handover interlocks, persistence, expiry, start/end events, active/remaining entities, and a handover back to single-target routing. |
 
-The post-M6 **native lock** (0.7.0) is implemented and unit-tested at the source-matrix level; live verification is
-still outstanding (see §8).
+The post-M6 **native lock** (0.7.0) and the **proxy rework** (0.8.0) are live-verified through 0.8.0. The rework
+includes proxy-owned manual mode and timer, two separate locks, sectioned config/options flows, and VTherm display
+compatibility split into harmless versus identity keys. Iteration 1 (`38e0ef0`) removed the external manual-switch
+routing input; iteration 2 (`ce6d163`) added the proxy-owned manual mode model, timer, persistence, and services;
+iteration 3 (`a028adf`) exposed the standard-card entities; iteration 4 (`40f510c`) split the accidental-touch UI
+lock (Lock A) from the manual/schedule lock (Lock B); iteration 5 (`e60bbfc`) rebuilt the config, options, and
+reconfigure forms as sections with a menu-based options flow; iteration 6 (`07e04f4`) made the VTherm identity
+attributes opt-in.
 
-A larger **proxy rework** landed in 0.8.0: proxy-owned manual mode and timer, two separate locks, sectioned
-config/options flows, and VTherm display compatibility split into harmless versus identity keys. Iteration 1
-(`38e0ef0`) removed the external manual-switch routing input; iteration 2 (`ce6d163`) added the proxy-owned manual
-mode model, timer, persistence, and services; iteration 3 (`a028adf`) exposed the standard-card entities; iteration
-4 (`40f510c`) split the accidental-touch UI lock (Lock A) from the manual/schedule lock (Lock B); iteration 5
-(`e60bbfc`) rebuilt the config, options, and reconfigure forms as sections with a menu-based options flow;
-iteration 6 (`07e04f4`) made the VTherm identity attributes opt-in. Everything is unit-tested locally but still
-needs live verification in the test instance.
-
-Version **0.8.1** is a cosmetic follow-up: the active/pending target sensors now show a radiator or AC icon based on
-their state instead of the generic eye icon.
+Version **0.8.1** is the follow-up batch: state-dependent radiator/AC icons on the target sensors, brief
+explanations under the config/options fields, persisted `last_handover`, preset comparison in the target-mismatch
+sensor, consistent config storage (schema-only `entry.data`, empty `entry.options`), a translation-sync test, and
+the plan/handover alignment.
 
 The next developer should start with section 8 (Next steps).
 
@@ -104,13 +107,14 @@ custom_components/climaterouter/
 ├── config_flow.py       # user/options/reconfigure flows and validation
 ├── services.yaml
 ├── strings.json         # source of translations
-└── translations/en.json # must be kept in sync manually
+└── translations/en.json # kept in sync; test_translations.py guards drift
 
 tests/
 ├── conftest.py          # stubs the `climaterouter` package; no HA needed
 ├── test_router.py       # routing precedence, hysteresis, fallback (pure)
 ├── test_models.py       # config parsing, desired-state round-trip, lock source matrix
-└── test_vt_display.py   # card-facing VTherm attribute selection and lock exclusion
+├── test_vt_display.py   # card-facing VTherm attribute selection and lock exclusion
+└── test_translations.py # strings/en.json parity and field-description coverage
 
 .github/workflows/ci.yml # ruff + pytest on Python 3.13
 test_environment/        # Docker HA lab, fake_hvac, docs/TEST_ENVIRONMENT.md
@@ -386,11 +390,15 @@ All three flows share the same sectioned schema (`config_flow.py`):
 - Setup and reconfigure show every section in one form. Sections other than Thermostats start collapsed.
 - The options flow is a menu: each entry opens that section, submits and saves immediately, then returns to the
   menu. **Finish** closes the flow. This avoids a single long options form.
+- Every field has a brief `data_description` helper text in `strings.json` and `translations/en.json`;
+  `tests/test_translations.py` enforces that both files match and that no field is missing help.
+- Every save writes a cleaned, schema-only config into `entry.data` and clears `entry.options`. The coordinator
+  still merges `{**entry.data, **entry.options}`.
 - `default_manual_minutes=0` means new manual sessions start without a countdown. It must not exceed
   `max_manual_minutes`.
 - The former `default_override_minutes` / `max_override_minutes` keys and the `lock_users` / `lock_automations`
   flags are no longer part of the schema. `RouterConfig.from_mapping` still reads the old override keys as a
-  fallback for entries created before 0.8.0; they are dropped the next time the options are saved.
+  fallback for entries created before 0.8.0; the schema-only save drops them from `entry.data`.
 - There is no manual-switch configuration: routing is forced only through the built-in route-override `select`.
 
 ---
@@ -407,8 +415,11 @@ Defined in `test_environment/`; full instructions in [`TEST_ENVIRONMENT.md`](TES
   The mount has been removed and ClimateRouter is now a Marketplace-managed custom repository
   (`gume/climaterouter`, repository id `1448098130`). The local `test_environment/` Compose lab is reference only and
   cannot be started from this host.
-- The Marketplace installs from the default branch (`main`) because the repository has no GitHub release. `main` at
-  `bf19c92` reports version **0.5.0** in the live instance.
+- The Marketplace installs from the default branch (`main`). The owner has updated and tested the integration
+  through version **0.8.0**. Update detection appears to require a matching tag/release: the local repository only
+  has tag `v0.4.0`, which explains why the 0.8.1 push is not offered as an update. The owner must create and push
+  `v0.8.1` (or a release) before the 0.8.1 build can be installed.
+- The owner tests remotely with a long-lived Home Assistant token; the component itself is not bind-mounted.
 - Live-entering v0.4.0 exposed a real service bug: HA 2026.11 changed `async_extract_entity_ids()` to take only the
   `ServiceCall`. The previous `(hass, call)` call made every `climaterouter.*` service fail with
   `AttributeError: 'HomeAssistant' object has no attribute 'hass'`. Fixed in `2b9b300` (version 0.4.1) and verified
@@ -427,9 +438,9 @@ Defined in `test_environment/`; full instructions in [`TEST_ENVIRONMENT.md`](TES
   - `conflict_policy=monitor`, `auto_resolve_idle_targets=true`, `auto_resolve_simultaneous=true`;
   - `default_manual_minutes=60`, `max_manual_minutes=1440`, `manual_blocks_schedule=true`,
     `expose_vtherm_identity=false`, `temperature_tolerance=0.2`, `boost_enabled=false`.
-  The entry was created before 0.8.0 and still stores the removed external manual-switch key. That key is ignored;
-  open **Configure** once after updating and use the sectioned forms (or save a section) to rewrite the stored
-  options in the new shape.
+  The entry was created before 0.8.0 and may still store the removed external manual-switch key. That key is ignored;
+  open **Configure** once after updating and save any section to rewrite the stored config in the new shape. The
+  schema-only save also drops the key from `entry.data`.
 - Live router entities use the `living_room_climaterouter` slug, e.g.
   `climate.living_room_climaterouter`, `sensor.living_room_climaterouter_active_target`,
   `binary_sensor.living_room_climaterouter_conflict`.
@@ -473,8 +484,8 @@ brand assets yet).
 
 ## 6. What was verified manually
 
-Run against the live container through the REST API, with the proxy wired to the two fake ACs during M1–M3. The
-current live entry uses the two VTherm entities described in section 4 and runs version **0.5.0**.
+Run against the live Home Assistant through the REST/WebSocket API with a long-lived token. M1–M3 used the two fake
+ACs; later versions use the two VTherm entities described in section 4.
 
 | Scenario | Result |
 |---|---|
@@ -492,11 +503,13 @@ current live entry uses the two VTherm entities described in section 4 and runs 
 | No prior command, underlying target already on | adopted, no commands sent |
 | Diagnostics endpoint | OK |
 
-The M4 manual override, M5 conflict and M6 boost implementations have **not** been exercised in the live instance
-yet. The read-only VTherm display pass-through (**0.6.0**), the native lock (**0.7.0**) and the 0.8.0 proxy rework
-(manual mode/timer, split locks, sectioned flows, opt-in VTherm identity) also still need live verification. Not
-yet covered by automated tests: config flow, coordinator, handover, manual expiry/return/handover/restart, conflict
-policies, boost safety/expiry/return, lock enforcement/persistence, persistence, event payloads.
+The owner reports live verification through version **0.8.0** for M4 manual mode, M5 conflicts, M6 boost, the native
+lock, the 0.8.0 proxy rework, and the read-only VTherm display pass-through. Detailed per-scenario results were not
+recorded in this file. Version **0.8.1** (target icons, field help, persistence/flow fixes) still needs a tag and a
+live check.
+
+Not yet covered by automated tests: config flow, coordinator, handover, manual expiry/return/handover/restart,
+conflict policies, boost safety/expiry/return, lock enforcement/persistence, persistence, event payloads.
 
 ---
 
@@ -508,29 +521,31 @@ policies, boost safety/expiry/return, lock enforcement/persistence, persistence,
    before lowering the floor.
 2. **No automated integration tests.** `tests/` covers only the pure domain/routing layer. CI deliberately does not
    install HA to stay fast.
-3. **Manual mode is implemented but only unit-tested at the model layer.** Coordinator auto-entry, timer
-   expiry/return, handover/restart carry-over and Lock B enforcement still need live verification and integration
-   tests. A user temperature/preset move started while the proxy has no mode/active target updates the baseline but
-   does not by itself start heating; start the proxy (`heat`/`cool`) first.
-4. **M5 is implemented but only unit-tested at the classifier layer.** Coordinator policy behaviour (context
-   suppression, settle windows, reassert grace, adopt, auto-resolve, history/clear) still needs integration tests
-   and live verification. Detection deliberately pauses during handover and during the post-command settle window,
-   so very short mismatches may never be reported. `_guess_source()` is heuristic.
-5. **Boost is feature-flagged and only supports `targets=both`.** It is implemented but has no coordinator
-   integration tests and no live verification. It requires heat mode, both targets available and no pending
-   handover. The return to single-target routing reuses the handover state machine, so the dropped target is only
-   stopped once idle; if it never becomes idle the normal off-confirm timeout applies.
+3. **Manual mode is live-verified through 0.8.0 but has no integration tests.** Coordinator auto-entry, timer
+   expiry/return, handover/restart carry-over and Lock B enforcement still need automated coverage. A user
+   temperature/preset move started while the proxy has no mode/active target updates the baseline but does not by
+   itself start heating; start the proxy (`heat`/`cool`) first.
+4. **M5 is live-verified through 0.8.0 but has no coordinator integration tests.** Policy behaviour (context
+   suppression, settle windows, reassert grace, adopt, auto-resolve, history/clear) is only covered by the pure
+   classifier. Detection deliberately pauses during handover and during the post-command settle window, so very
+   short mismatches may never be reported. `_guess_source()` is heuristic.
+5. **Boost is live-verified through 0.8.0 but has no coordinator integration tests.** It is feature-flagged and only
+   supports `targets=both`. It requires heat mode, both targets available and no pending handover. The return to
+   single-target routing reuses the handover state machine, so the dropped target is only stopped once idle; if it
+   never becomes idle the normal off-confirm timeout applies.
 6. **`handover_max_wait` from the plan is not implemented.** `off_confirm_timeout` bounds the off confirmation, and
    the manual `force_handover` button/service can end a stuck handover. There is still no automatic timeout that
    interrupts an active old target.
-7. **`last_handover` is not persisted**, so `sensor.last_handover` is `unknown` after a restart.
-8. **`route_changed` fires only when the active target changes**, not when only `route_reason` changes.
-9. **Options flow writes sections into `entry.options`** (the entry data stays as originally created). The
-   coordinator merges `{**entry.data, **entry.options}`. Reconfigure writes everything into `entry.data` and clears
-   options. This works but is inconsistent; simplify when touching the flow.
-10. **`strings.json` and `translations/en.json` are duplicated** and must be edited together.
-11. `binary_sensor.target_mismatch` only compares the two targets' setpoints; it is not the full M5 mismatch
+7. **`command_confirm_timeout` is not implemented.** The optimistic window uses `settle_time`; there is no separate
+   per-command confirmation timeout.
+8. **`route_changed` fires only when the active target changes**, not when only `route_reason` changes. This is
+   intentional (the event name describes the target); the payload still includes the current reason.
+9. **`strings.json` and `translations/en.json` are duplicated.** `tests/test_translations.py` now fails if they drift
+   and also requires a `data_description` for every config/options field.
+10. `binary_sensor.target_mismatch` compares the two targets' setpoints and presets; it is not the full M5 mismatch
     detector. Use `binary_sensor.<name>_conflict` for the desired-vs-actual comparison.
+11. **Fan/swing/humidity pass-through is not exposed.** `DesiredState` carries `fan_mode`/`swing_mode`, but the
+    climate entity only advertises temperature, preset, turn-on and turn-off.
 12. **Equinox's lock button still cannot drive the native lock.** Equinox hard-codes
     `versatile_thermostat.lock`/`unlock` on the card entity, and those are VTherm platform entity services, so a
     ClimateRouter proxy cannot receive them. `vt_display.py` therefore never forwards `is_lock_configured` or
@@ -544,35 +559,23 @@ policies, boost safety/expiry/return, lock enforcement/persistence, persistence,
 
 ### 8.1 Immediate
 
-1. Owner: push the current working tree (versions **0.6.0**–**0.8.1**: read-only VTherm display attributes, the
-   native lock, the proxy-owned manual mode, the split locks, and the target-sensor icons), then update ClimateRouter
-   through the **Marketplace** in the test HA (custom repository `gume/climaterouter`, repository id `1448098130`) and
-   restart Home Assistant. Do not re-add the old `custom_components/climaterouter` bind mount: it makes the folder a
-   mount point (`EBUSY`) and the Marketplace cannot back it up before replacing it.
-2. Open **Configure** once after the update and re-save the sections, so the entry drops the removed manual-switch
-   key and uses the new sectioned options. Confirm the collapsed sections render correctly, that the options menu
-   returns after each section save, and that **Finish** closes it.
-3. Verify in the live instance that the proxy exposes `is_over_switch`/`power_percent` while the radiator is active
-   and the Equinox gauge/status icons appear. Verify the lock button is absent (`hide_lock_button: true`) and that
-   `is_lock_configured` is not exposed. Confirm the active/pending target sensors show the radiator/AC icon (0.8.1).
-4. Enable the UI lock and Lock B in the options, set a short auto-relock delay and verify in the live instance: the
-   `lock.<name>_lock` entity appears, user commands are blocked while automation/schedule commands continue, the
-   code is enforced on unlock, auto-relock fires, restart keeps the remaining deadline, and manual mode rejects
-   automation commands while still accepting user adjustments. Record the results here.
-4. Exercise the manual mode in the live instance: move the temperature in the UI, confirm it starts manual
-   mode and does not reset on further moves; change/switch off the timer with the select; let it expire; return to
-   schedule with the button and the service; cause a handover while manual mode is active and confirm the value and
-   deadline survive; make an automation call while manual mode is active and confirm Lock B rejects it. Record the
-   results here.
-5. Exercise M5 in the live instance: change the active VTherm setpoint externally with `conflict_policy: monitor`;
-   confirm the conflict binary sensor/count/attributes and both events; repeat under `reassert` and `adopt`; turn
-   the inactive VTherm on manually; make a target unavailable. Record the results here.
-6. Exercise M6 in the live instance (enable `boost_enabled` first): start heat, call `set_boost` for a short
-   duration, confirm both VTherms run and `active_target=both`; cancel and let it expire; confirm the dropped
-   target stops only when idle and normal routing resumes. Also confirm boost is rejected before heat and while a
-   handover is pending. Record the results here.
-7. Decide whether to keep the 2026.11 version floor or add an older-version import fallback (section 7.1).
-8. Request upstream Equinox support for a configurable lock service/entity; the card button still cannot target the
+1. Owner: push the current working tree and create/push tag `v0.8.1` (or a GitHub release). The Marketplace only
+   offered updates up to 0.8.0; the local repository has no tag after `v0.4.0`, which is the likely reason the
+   0.8.1 push was not visible. Then update ClimateRouter through the **Marketplace** in the test HA (custom
+   repository `gume/climaterouter`, repository id `1448098130`) and restart Home Assistant. Do not re-add the old
+   `custom_components/climaterouter` bind mount: it makes the folder a mount point (`EBUSY`) and the Marketplace
+   cannot back it up before replacing it.
+2. Open **Configure** once after the update and save any section. The schema-only save drops the removed
+   manual-switch key from `entry.data`. Confirm the collapsed sections render correctly, that the brief
+   explanations appear under the fields, that the options menu returns after each section save, and that **Finish**
+   closes it.
+3. Verify the 0.8.1 changes in the live instance:
+   - `sensor.<name>_active_target` and `sensor.<name>_pending_target` show the radiator/AC icon;
+   - `sensor.<name>_last_handover` survives a restart;
+   - `binary_sensor.<name>_target_mismatch` also reacts to differing presets;
+   - diagnostics show the cleaned config and an empty `options` block.
+4. Decide whether to keep the 2026.11 version floor or add an older-version import fallback (section 7.1).
+5. Request upstream Equinox support for a configurable lock service/entity; the card button still cannot target the
    proxy's native lock.
 
 ### 8.2 Automated tests
@@ -599,7 +602,7 @@ with a Python version matching the supported HA. Suggested coverage:
 - [x] Persistence, handover carry-over, Lock B (`manual_blocks_schedule`) automation rejection.
 - [x] Unit tests for the model helpers (`with_manual_mode`, serialization, expiry/remaining, migration).
 - [ ] Integration tests for auto-entry, timer change/off, return, restart and handover (needs HA test harness).
-- [ ] Live verification in the 2026.11 test instance.
+- [x] Live verification in the 2026.11 test instance (through 0.8.0).
 
 ### 8.4 M5 — conflict handling (implemented in this checkout)
 
@@ -612,7 +615,7 @@ with a Python version matching the supported HA. Suggested coverage:
 - [x] Handle both-targets-on, unavailable targets, stale outdoor sensor and target mismatch.
 - [x] Unit tests for the pure classifier (`target_conflict`) and `Conflict.to_dict()`.
 - [ ] Integration tests for policy behaviour (needs the HA test harness).
-- [ ] Live verification in the 2026.11 test instance.
+- [x] Live verification in the 2026.11 test instance (through 0.8.0).
 
 ### 8.5 M6 — boost and release (implemented in this checkout)
 
@@ -625,8 +628,23 @@ with a Python version matching the supported HA. Suggested coverage:
 - [x] Unit tests for `BoostState` and pure boost routing.
 - [x] Add hassfest and HACS validation workflow (`.github/workflows/validate.yml`, brands ignored).
 - [ ] Integration tests for boost start/expiry/cancel/restart and return handover.
-- [ ] Live verification in the test HA.
-- [ ] Tag/release `v0.4.0` (owner action).
+- [x] Live verification in the test HA (through 0.8.0).
+- [x] `v0.4.0` tag exists; later version tags/releases are owner actions.
+
+### 8.6 0.7.0–0.8.1 proxy rework and follow-up
+
+- [x] Native UI lock with optional code and persisted auto-relock deadline.
+- [x] Proxy-owned manual mode and timer replacing the bounded override.
+- [x] Split Lock A (UI) from Lock B (manual/schedule).
+- [x] Sectioned setup/options/reconfigure flows with brief field descriptions.
+- [x] Read-only VTherm display attributes; identity attributes are opt-in.
+- [x] State-dependent radiator/AC icons on the target sensors.
+- [x] Persist `last_handover`; compare presets in `binary_sensor.target_mismatch`.
+- [x] Schema-only config saves (drop removed keys, keep `entry.options` empty).
+- [x] Translation-sync and field-description tests.
+- [x] Live verification through 0.8.0.
+- [ ] Tag/release **v0.8.1** and verify the follow-up batch live.
+- [ ] Integration tests for the flows, locks, and manual mode.
 
 ---
 
@@ -649,6 +667,9 @@ with a Python version matching the supported HA. Suggested coverage:
   Docker keeps old logs. Poll `/api/states` for `climate.climaterouter*` instead.
 - **Local Python is 3.10.** Keep `str, Enum` + `# noqa: UP042` and `timezone.utc` + `# noqa: UP017` unless you
   raise the local/tooling baseline. CI uses 3.13.
+- **Ruff format drift.** A current `ruff` (0.17.x) wants to reformat several pre-existing blocks even though the
+  code was formatted with an older version. Pin ruff or reformat in a separate commit; do not mix it into a feature
+  change.
 - **The `.storage` test entries are not in git.** A fresh clone has no `ClimateRouter Test` or
   `Fake HVAC Lab 2`.
 
