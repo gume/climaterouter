@@ -37,7 +37,7 @@ def _serialize_snapshot(snapshot: RouterSnapshot) -> dict[str, Any]:
         "route_reason": snapshot.route_reason,
         "handover_state": snapshot.handover_state.value,
         "desired": snapshot.desired.to_dict(),
-        "override": snapshot.override.to_dict() if snapshot.override else None,
+        "manual_mode": snapshot.manual_mode.to_dict() if snapshot.manual_mode else None,
         "boost_until": snapshot.boost_until.isoformat() if snapshot.boost_until else None,
         "boost_targets": sorted(target.value for target in snapshot.boost_targets),
         "outdoor_temperature": snapshot.outdoor_temperature,

@@ -52,8 +52,9 @@ from .const import (
     EVENT_HANDOVER_ABORTED,
     EVENT_HANDOVER_COMPLETED,
     EVENT_HANDOVER_STARTED,
-    EVENT_OVERRIDE_ENDED,
-    EVENT_OVERRIDE_STARTED,
+    EVENT_MANUAL_MODE_ENDED,
+    EVENT_MANUAL_MODE_STARTED,
+    EVENT_MANUAL_TIMER_CHANGED,
     EVENT_ROUTE_CHANGED,
     STORAGE_KEY,
     STORAGE_VERSION,
@@ -74,7 +75,7 @@ from .models import (
     Conflict,
     DesiredState,
     HandoverState,
-    OverrideState,
+    ManualMode,
     RouteDecision,
     RouteInputs,
     RouterConfig,
@@ -115,8 +116,8 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
 
         self._baseline = DesiredState()
         self._desired = DesiredState()
-        self._override: OverrideState | None = None
-        self._override_unsub: Any | None = None
+        self._manual: ManualMode | None = None
+        self._manual_unsub: Any | None = None
         self._boost: BoostState | None = None
         self._boost_unsub: Any | None = None
         self._active_targets: frozenset[Target] = frozenset()
@@ -165,8 +166,8 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         """Load persisted state, subscribe to inputs, and start the watchdog."""
         await self._async_load_store()
         self._refresh_inputs()
-        if self._override is not None:
-            self._schedule_override_expiry()
+        if self._manual is not None:
+            self._schedule_manual_expiry()
         if self._boost is not None:
             self._schedule_boost_expiry()
         if self._auto_relock_at is not None:
@@ -215,7 +216,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             timer()
         self._unsubs.clear()
         self._timers.clear()
-        self._cancel_override_timer()
+        self._cancel_manual_timer()
         self._cancel_boost_timer()
         self._cancel_auto_relock()
         await self._store.async_save(self._data_to_save())
@@ -223,6 +224,28 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
     # ------------------------------------------------------------------
     # Commands received from the proxy entity
     # ------------------------------------------------------------------
+    @staticmethod
+    def _is_user_context(context: Context | None) -> bool:
+        """Return whether a command came from a user (UI/service), not a schedule."""
+        return context is not None and context.user_id is not None
+
+    def _apply_setpoint(
+        self,
+        desired: DesiredState,
+        *,
+        temperature: float | None,
+        preset_mode: str | None,
+    ) -> None:
+        """Apply a temperature or preset to one desired-state object."""
+        if preset_mode is not None:
+            desired.setpoint_kind = SetpointKind.PRESET
+            desired.preset_mode = preset_mode
+            desired.target_temperature = None
+        if temperature is not None:
+            desired.setpoint_kind = SetpointKind.TEMPERATURE
+            desired.target_temperature = float(temperature)
+            desired.preset_mode = None
+
     async def async_set_temperature(
         self,
         temperature: float | None = None,
@@ -235,23 +258,69 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         if temperature is None and hvac_mode is None and preset_mode is None:
             raise HomeAssistantError("No temperature, preset, or mode supplied")
 
-        if hvac_mode is not None:
-            self._apply_mode(hvac_mode)
-        if preset_mode is not None:
-            self._baseline.setpoint_kind = SetpointKind.PRESET
-            self._baseline.preset_mode = preset_mode
-            self._baseline.target_temperature = None
-        if temperature is not None:
-            self._baseline.setpoint_kind = SetpointKind.TEMPERATURE
-            self._baseline.target_temperature = float(temperature)
-            self._baseline.preset_mode = None
+        from_user = self._is_user_context(context)
+        has_setpoint = temperature is not None or preset_mode is not None
+
+        if hvac_mode == HVAC_OFF:
+            # An explicit off is a safety command and always ends manual mode.
+            self._end_manual("off")
+            self._apply_mode(HVAC_OFF)
+            await self._async_command_received()
+            return
+
+        if self._manual is not None and from_user:
+            # A user move during manual mode updates the manual value only. It
+            # must not touch the schedule baseline and must not reset the timer.
+            if hvac_mode is not None:
+                if hvac_mode not in MODES:
+                    raise HomeAssistantError(f"Unsupported HVAC mode: {hvac_mode}")
+                self._manual.desired.hvac_mode = hvac_mode
+            self._apply_setpoint(
+                self._manual.desired,
+                temperature=temperature,
+                preset_mode=preset_mode,
+            )
+        elif self._manual is None and from_user and has_setpoint and (
+            self._baseline.hvac_mode not in (None, HVAC_OFF)
+        ):
+            # First user setpoint move starts manual mode. Capture the current
+            # schedule first so "return to schedule" restores it, not the move.
+            desired = self._baseline.copy()
+            if hvac_mode is not None:
+                if hvac_mode not in MODES:
+                    raise HomeAssistantError(f"Unsupported HVAC mode: {hvac_mode}")
+                desired.hvac_mode = hvac_mode
+            self._apply_setpoint(
+                desired,
+                temperature=temperature,
+                preset_mode=preset_mode,
+            )
+            self._start_manual(dt_util.utcnow(), desired=desired)
+        else:
+            # Schedule/automation command, or a mode-only user command: update
+            # the baseline while an existing manual mode keeps winning.
+            if hvac_mode is not None:
+                self._apply_mode(hvac_mode)
+            self._apply_setpoint(
+                self._baseline,
+                temperature=temperature,
+                preset_mode=preset_mode,
+            )
 
         await self._async_command_received()
 
     async def async_set_hvac_mode(self, hvac_mode: str, context: Context | None = None) -> None:
         """Handle an explicit HVAC mode change."""
         self._ensure_unlocked(context)
-        self._apply_mode(hvac_mode)
+        if hvac_mode not in MODES:
+            raise HomeAssistantError(f"Unsupported HVAC mode: {hvac_mode}")
+        if hvac_mode == HVAC_OFF:
+            self._end_manual("off")
+            self._apply_mode(HVAC_OFF)
+        elif self._manual is not None and self._is_user_context(context):
+            self._manual.desired.hvac_mode = hvac_mode
+        else:
+            self._apply_mode(hvac_mode)
         await self._async_command_received()
 
     async def async_set_preset_mode(
@@ -259,9 +328,16 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
     ) -> None:
         """Handle a preset change."""
         self._ensure_unlocked(context)
-        self._baseline.setpoint_kind = SetpointKind.PRESET
-        self._baseline.preset_mode = preset_mode
-        self._baseline.target_temperature = None
+        if self._manual is not None and self._is_user_context(context):
+            self._apply_setpoint(self._manual.desired, temperature=None, preset_mode=preset_mode)
+        elif self._manual is None and self._is_user_context(context) and (
+            self._baseline.hvac_mode not in (None, HVAC_OFF)
+        ):
+            desired = self._baseline.copy()
+            self._apply_setpoint(desired, temperature=None, preset_mode=preset_mode)
+            self._start_manual(dt_util.utcnow(), desired=desired)
+        else:
+            self._apply_setpoint(self._baseline, temperature=None, preset_mode=preset_mode)
         await self._async_command_received()
 
     async def async_turn_on(self, context: Context | None = None) -> None:
@@ -274,6 +350,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
     async def async_turn_off(self, context: Context | None = None) -> None:
         """Turn everything off immediately."""
         self._ensure_unlocked(context)
+        self._end_manual("off")
         self._baseline.hvac_mode = HVAC_OFF
         await self._async_command_received()
 
@@ -359,19 +436,154 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
     async def _async_command_received(self) -> None:
         """Record the command, persist it, and evaluate the route."""
         self._last_command = dt_util.utcnow()
-        if self._baseline.hvac_mode == HVAC_OFF and self._override is not None:
-            # An explicit off is a safety command and ends any override.
-            self._end_override("off")
-        if self._override is not None:
-            # Schedule commands update the baseline; the override keeps winning.
-            self._override.baseline = self._baseline.copy()
+        if self._baseline.hvac_mode == HVAC_OFF and self._manual is not None:
+            # An explicit off is a safety command and ends manual mode.
+            self._end_manual("off")
+        if self._manual is not None:
+            # Keep the last schedule command for return-to-schedule.
+            self._manual.baseline = self._baseline.copy()
         self._sync_desired()
         self._store.async_delay_save(self._data_to_save, 1)
         await self.async_evaluate(explicit=True)
 
     # ------------------------------------------------------------------
-    # Manual override
+    # Manual mode
     # ------------------------------------------------------------------
+    def _ensure_manual_baseline(self) -> None:
+        """Adopt the active target when no schedule command is known yet."""
+        if not self._baseline.is_empty:
+            return
+        active = self._single_active() or self._first_on_target()
+        if active is not None:
+            self._baseline = self._adopt_desired(active)
+
+    def _manual_deadline(self, minutes: int, now: datetime) -> datetime:
+        """Validate a manual duration and return its absolute deadline."""
+        if minutes < 1 or minutes > self.config.max_manual_minutes:
+            raise HomeAssistantError(
+                f"Manual duration must be between 1 and "
+                f"{self.config.max_manual_minutes} minutes"
+            )
+        return now + timedelta(minutes=minutes)
+
+    async def _async_start_manual(
+        self,
+        desired: DesiredState,
+        *,
+        duration_minutes: int | None = None,
+        context: Context | None = None,
+    ) -> None:
+        """Start manual mode, preserving an existing timer when updating."""
+        self._ensure_unlocked(context)
+        now = dt_util.utcnow()
+        self._ensure_manual_baseline()
+
+        if self._manual is None:
+            if duration_minutes is None:
+                duration = self.config.default_manual_minutes
+                until = self._manual_deadline(duration, now) if duration > 0 else None
+            elif int(duration_minutes) <= 0:
+                until = None
+            else:
+                until = self._manual_deadline(int(duration_minutes), now)
+            self._manual = ManualMode(
+                desired=desired.copy(),
+                started_at=now,
+                until=until,
+                baseline=self._baseline.copy(),
+            )
+            self.hass.bus.async_fire(
+                EVENT_MANUAL_MODE_STARTED,
+                {
+                    "entry_id": self.entry.entry_id,
+                    "until": until.isoformat() if until else None,
+                    "desired": self._manual.desired.to_dict(),
+                },
+            )
+        else:
+            # An additional move updates the value but never resets the timer
+            # unless a new duration is supplied explicitly.
+            self._manual.desired = desired.copy()
+            if duration_minutes is not None:
+                self._manual.started_at = now
+                self._manual.until = (
+                    None
+                    if int(duration_minutes) <= 0
+                    else self._manual_deadline(int(duration_minutes), now)
+                )
+
+        self._manual.baseline = self._baseline.copy()
+        self._last_command = now
+        self._sync_desired()
+        self._schedule_manual_expiry()
+        self._store.async_delay_save(self._data_to_save, 1)
+        await self.async_evaluate(explicit=True)
+
+    def _start_manual(
+        self,
+        now: datetime,
+        *,
+        desired: DesiredState,
+    ) -> None:
+        """Create manual mode from a UI move without awaiting evaluation."""
+        self._ensure_manual_baseline()
+        duration = self.config.default_manual_minutes
+        until = self._manual_deadline(duration, now) if duration > 0 else None
+        self._manual = ManualMode(
+            desired=desired.copy(),
+            started_at=now,
+            until=until,
+            baseline=self._baseline.copy(),
+        )
+        self._schedule_manual_expiry()
+        self._store.async_delay_save(self._data_to_save, 1)
+        self.hass.bus.async_fire(
+            EVENT_MANUAL_MODE_STARTED,
+            {
+                "entry_id": self.entry.entry_id,
+                "until": until.isoformat() if until else None,
+                "desired": self._manual.desired.to_dict(),
+            },
+        )
+
+    async def async_enter_manual_mode(
+        self,
+        *,
+        temperature: float | None = None,
+        preset_mode: str | None = None,
+        hvac_mode: str | None = None,
+        duration_minutes: int | None = None,
+        context: Context | None = None,
+    ) -> None:
+        """Enter or update manual mode through a service call."""
+        self._ensure_unlocked(context)
+        supplied = [value is not None for value in (temperature, preset_mode, hvac_mode)]
+        if sum(supplied) > 1:
+            raise HomeAssistantError(
+                "Only one of temperature, preset_mode, or hvac_mode can be supplied"
+            )
+
+        if hvac_mode == HVAC_OFF:
+            await self.async_return_to_schedule(cause="off")
+            await self.async_set_hvac_mode(HVAC_OFF, context=context)
+            return
+        if hvac_mode is not None and hvac_mode not in MODES:
+            raise HomeAssistantError(f"Unsupported HVAC mode: {hvac_mode}")
+
+        if self._manual is not None:
+            desired = self._manual.desired.copy()
+        else:
+            self._ensure_manual_baseline()
+            desired = self._baseline.copy()
+        if hvac_mode is not None:
+            desired.hvac_mode = hvac_mode
+        self._apply_setpoint(desired, temperature=temperature, preset_mode=preset_mode)
+        await self._async_start_manual(
+            desired,
+            duration_minutes=duration_minutes,
+            context=context,
+        )
+
     async def async_set_manual_override(
         self,
         *,
@@ -381,131 +593,100 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         duration_minutes: int | None = None,
         context: Context | None = None,
     ) -> None:
-        """Start or replace a bounded manual override."""
+        """Backward-compatible alias for entering manual mode."""
+        await self.async_enter_manual_mode(
+            temperature=temperature,
+            preset_mode=preset_mode,
+            hvac_mode=hvac_mode,
+            duration_minutes=duration_minutes,
+            context=context,
+        )
+
+    async def async_set_manual_timer(
+        self,
+        minutes: int | None = None,
+        context: Context | None = None,
+    ) -> None:
+        """Set the manual countdown; ``None`` or ``0`` switches it off."""
         self._ensure_unlocked(context)
-        supplied = [value is not None for value in (temperature, preset_mode, hvac_mode)]
-        if sum(supplied) != 1:
-            raise HomeAssistantError(
-                "Exactly one of temperature, preset_mode, or hvac_mode is required"
-            )
-
-        if hvac_mode == HVAC_OFF:
-            await self.async_cancel_manual_override(cause="off")
-            await self.async_set_hvac_mode(HVAC_OFF)
-            return
-        if hvac_mode is not None and hvac_mode not in MODES:
-            raise HomeAssistantError(f"Unsupported HVAC mode: {hvac_mode}")
-
-        duration = (
-            self.config.default_override_minutes
-            if duration_minutes is None
-            else int(duration_minutes)
-        )
-        if duration < 1 or duration > self.config.max_override_minutes:
-            raise HomeAssistantError(
-                f"Override duration must be between 1 and {self.config.max_override_minutes} minutes"
-            )
-
+        if self._manual is None:
+            raise HomeAssistantError("Manual mode is not active")
         now = dt_util.utcnow()
-        if self._override is not None:
-            # Keep the original baseline, but close the previous episode first.
-            self._end_override("replaced")
-
-        baseline = self._baseline.copy()
-        if baseline.is_empty:
-            active = self._single_active() or self._first_on_target()
-            if active is not None:
-                baseline = self._adopt_desired(active)
-        self._baseline = baseline
-
-        if temperature is not None:
-            kind = "temperature"
-            value: Any = float(temperature)
-        elif preset_mode is not None:
-            kind = "preset"
-            value = str(preset_mode)
+        if minutes is None or int(minutes) <= 0:
+            self._manual.until = None
         else:
-            kind = "hvac_mode"
-            value = str(hvac_mode)
-
-        self._override = OverrideState(
-            kind=kind,
-            value=value,
-            until=now + timedelta(minutes=duration),
-            baseline=self._baseline.copy(),
-            started_at=now,
-        )
-        self._last_command = now
-        self._sync_desired()
-        self._schedule_override_expiry()
+            self._manual.until = self._manual_deadline(int(minutes), now)
+        self._schedule_manual_expiry()
         self._store.async_delay_save(self._data_to_save, 1)
-
         self.hass.bus.async_fire(
-            EVENT_OVERRIDE_STARTED,
+            EVENT_MANUAL_TIMER_CHANGED,
             {
                 "entry_id": self.entry.entry_id,
-                "kind": kind,
-                "value": value,
-                "duration_minutes": duration,
-                "until": self._override.until.isoformat(),
+                "until": self._manual.until.isoformat() if self._manual.until else None,
+                "minutes": minutes,
             },
         )
-        await self.async_evaluate(explicit=True)
+        self._publish()
 
-    async def async_cancel_manual_override(self, cause: str = "cancelled") -> None:
-        """Cancel an active manual override and restore the baseline."""
-        if self._override is None:
+    async def async_return_to_schedule(self, cause: str = "return_to_schedule") -> None:
+        """End manual mode and restore the latest schedule command."""
+        if self._manual is None:
             return
-        self._end_override(cause)
+        self._end_manual(cause)
         self._store.async_delay_save(self._data_to_save, 1)
         await self.async_evaluate()
 
-    def _end_override(self, cause: str) -> None:
-        """Clear the override without forwarding; callers evaluate afterwards."""
-        if self._override is None:
+    async def async_cancel_manual_override(self, cause: str = "cancelled") -> None:
+        """Backward-compatible alias for returning to the schedule."""
+        await self.async_return_to_schedule(cause=cause)
+
+    def _end_manual(self, cause: str) -> None:
+        """Clear manual mode without forwarding; callers evaluate afterwards."""
+        if self._manual is None:
             return
-        override = self._override
-        self._cancel_override_timer()
-        self._override = None
+        manual = self._manual
+        self._cancel_manual_timer()
+        self._manual = None
         self._sync_desired()
         self.hass.bus.async_fire(
-            EVENT_OVERRIDE_ENDED,
+            EVENT_MANUAL_MODE_ENDED,
             {
                 "entry_id": self.entry.entry_id,
-                "kind": override.kind,
                 "cause": cause,
+                "desired": manual.desired.to_dict(),
+                "started_at": manual.started_at.isoformat(),
             },
         )
 
     def _sync_desired(self) -> None:
-        """Recompute the effective desired state from baseline and override."""
-        self._desired = self._baseline.with_override(self._override)
+        """Recompute the effective desired state from baseline and manual mode."""
+        self._desired = self._baseline.with_manual_mode(self._manual)
 
-    async def _async_override_expired(self, _now: datetime) -> None:
-        self._override_unsub = None
-        if self._override is None:
+    async def _async_manual_expired(self, _now: datetime) -> None:
+        self._manual_unsub = None
+        if self._manual is None:
             return
-        if not self._override.is_expired(dt_util.utcnow()):
-            self._schedule_override_expiry()
+        if not self._manual.is_expired(dt_util.utcnow()):
+            self._schedule_manual_expiry()
             return
-        self._end_override("expired")
+        self._end_manual("expired")
         self._store.async_delay_save(self._data_to_save, 1)
         await self.async_evaluate()
 
-    def _schedule_override_expiry(self) -> None:
+    def _schedule_manual_expiry(self) -> None:
         """Schedule the exact deadline in addition to the watchdog check."""
-        self._cancel_override_timer()
-        if self._override is None:
+        self._cancel_manual_timer()
+        if self._manual is None or self._manual.until is None:
             return
-        delay = (self._override.until - dt_util.utcnow()).total_seconds()
-        self._override_unsub = async_call_later(
-            self.hass, max(delay, 0), self._async_override_expired
+        delay = (self._manual.until - dt_util.utcnow()).total_seconds()
+        self._manual_unsub = async_call_later(
+            self.hass, max(delay, 0), self._async_manual_expired
         )
 
-    def _cancel_override_timer(self) -> None:
-        if self._override_unsub is not None:
-            self._override_unsub()
-            self._override_unsub = None
+    def _cancel_manual_timer(self) -> None:
+        if self._manual_unsub is not None:
+            self._manual_unsub()
+            self._manual_unsub = None
 
     # ------------------------------------------------------------------
     # Boost
@@ -1504,8 +1685,8 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
     async def _async_watchdog(self, _now: datetime) -> None:
         if not self._ready:
             return
-        if self._override is not None and self._override.is_expired(dt_util.utcnow()):
-            await self._async_override_expired(dt_util.utcnow())
+        if self._manual is not None and self._manual.is_expired(dt_util.utcnow()):
+            await self._async_manual_expired(dt_util.utcnow())
         if self._boost is not None and self._boost.is_expired(dt_util.utcnow()):
             await self._async_boost_expired(dt_util.utcnow())
         now = time.monotonic()
@@ -1650,7 +1831,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             route_reason=self._route_reason,
             handover_state=self._handover_state,
             desired=self._desired,
-            override=self._override,
+            manual_mode=self._manual,
             boost_until=self._boost.until if self._boost is not None else None,
             boost_targets=self._boost.targets if self._boost is not None else frozenset(),
             conflicts=tuple(self._conflicts.values()),
@@ -1739,11 +1920,14 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         desired = data.get("desired")
         if isinstance(desired, dict):
             self._baseline = DesiredState.from_dict(desired)
-        override_data = data.get("override")
-        if isinstance(override_data, dict):
-            override = OverrideState.from_dict(override_data)
-            if override is not None and not override.is_expired(dt_util.utcnow()):
-                self._override = override
+        manual_data = data.get("manual_mode")
+        if not isinstance(manual_data, dict):
+            # Migrate the 0.7.x key.
+            manual_data = data.get("override")
+        if isinstance(manual_data, dict):
+            manual = ManualMode.from_dict(manual_data)
+            if manual is not None and not manual.is_expired(dt_util.utcnow()):
+                self._manual = manual
         boost_data = data.get("boost")
         if isinstance(boost_data, dict):
             boost = BoostState.from_dict(boost_data)
@@ -1769,7 +1953,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         return {
             "version": STORAGE_VERSION,
             "desired": self._baseline.to_dict(),
-            "override": self._override.to_dict() if self._override is not None else None,
+            "manual_mode": self._manual.to_dict() if self._manual is not None else None,
             "boost": self._boost.to_dict() if self._boost is not None else None,
             "last_route": self._last_route.value if self._last_route else None,
             "locked": self._locked,

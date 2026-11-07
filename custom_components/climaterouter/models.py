@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Literal
+from typing import Any
 
 HVAC_OFF = "off"
 HVAC_HEAT = "heat"
@@ -145,27 +145,15 @@ class DesiredState:
             swing_mode=self.swing_mode,
         )
 
-    def with_override(self, override: OverrideState | None) -> DesiredState:
-        """Return a copy with an active manual override applied.
+    def with_manual_mode(self, manual: ManualMode | None) -> DesiredState:
+        """Return the effective desired state under a manual mode.
 
-        The override value wins over the stored baseline. ``hvac_mode``
-        overrides only change the mode and keep the baseline setpoint.
+        Manual mode is proxy-owned: its desired state wins over the schedule
+        baseline regardless of whether the timer is bounded or infinite.
         """
-        result = self.copy()
-        if override is None:
-            return result
-
-        if override.kind == "temperature":
-            result.setpoint_kind = SetpointKind.TEMPERATURE
-            result.target_temperature = float(override.value)
-            result.preset_mode = None
-        elif override.kind == "preset":
-            result.setpoint_kind = SetpointKind.PRESET
-            result.preset_mode = str(override.value)
-            result.target_temperature = None
-        elif override.kind == "hvac_mode":
-            result.hvac_mode = str(override.value)
-        return result
+        if manual is None:
+            return self.copy()
+        return manual.desired.copy()
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize for the store."""
@@ -197,21 +185,33 @@ class DesiredState:
 
 
 @dataclass
-class OverrideState:
-    """A bounded manual override."""
+class ManualMode:
+    """A proxy-owned manual mode with an optional countdown.
 
-    kind: Literal["temperature", "preset", "hvac_mode"]
-    value: Any
-    until: datetime
-    baseline: DesiredState
+    ``until`` is ``None`` when the timer is switched off (infinite manual
+    mode). ``desired`` is the state the proxy should apply while manual mode
+    is active; ``baseline`` keeps the last schedule command so the proxy can
+    return to it when manual mode ends.
+    """
+
+    desired: DesiredState
     started_at: datetime
+    until: datetime | None = None
+    baseline: DesiredState = field(default_factory=DesiredState)
+
+    @property
+    def has_deadline(self) -> bool:
+        """Return whether a countdown is active."""
+        return self.until is not None
 
     def is_expired(self, now: datetime) -> bool:
         """Return whether the absolute deadline has passed."""
-        return now >= self.until
+        return self.until is not None and now >= self.until
 
-    def remaining_minutes(self, now: datetime) -> int:
-        """Return the whole minutes left, rounded up for a useful countdown."""
+    def remaining_minutes(self, now: datetime) -> int | None:
+        """Return the whole minutes left, or ``None`` for an infinite timer."""
+        if self.until is None:
+            return None
         seconds = (self.until - now).total_seconds()
         if seconds <= 0:
             return 0
@@ -220,35 +220,64 @@ class OverrideState:
     def to_dict(self) -> dict[str, Any]:
         """Serialize for the store."""
         return {
-            "kind": self.kind,
-            "value": self.value,
-            "until": self.until.isoformat(),
+            "desired": self.desired.to_dict(),
+            "until": self.until.isoformat() if self.until else None,
             "started_at": self.started_at.isoformat(),
             "baseline": self.baseline.to_dict(),
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> OverrideState | None:
-        """Deserialize an override from the store, tolerating bad data."""
-        kind = data.get("kind")
-        if kind not in ("temperature", "preset", "hvac_mode"):
-            return None
+    def from_dict(cls, data: dict[str, Any]) -> ManualMode | None:
+        """Deserialize manual mode, tolerating bad data and old overrides."""
         try:
-            until = datetime.fromisoformat(str(data["until"]))
             started_at = datetime.fromisoformat(str(data["started_at"]))
         except (KeyError, TypeError, ValueError):
             return None
-        if until.tzinfo is None or started_at.tzinfo is None:
+        if started_at.tzinfo is None:
             return None
-        baseline = data.get("baseline")
+
+        until: datetime | None = None
+        raw_until = data.get("until")
+        if raw_until is not None:
+            try:
+                parsed_until = datetime.fromisoformat(str(raw_until))
+            except (TypeError, ValueError):
+                return None
+            if parsed_until.tzinfo is None:
+                return None
+            until = parsed_until
+
+        baseline_data = data.get("baseline")
+        baseline = (
+            DesiredState.from_dict(baseline_data)
+            if isinstance(baseline_data, dict)
+            else DesiredState()
+        )
+        desired_data = data.get("desired")
+        if isinstance(desired_data, dict):
+            desired = DesiredState.from_dict(desired_data)
+        else:
+            # Migrate a 0.7.x bounded override: ``kind`` + ``value``.
+            desired = baseline.copy()
+            kind = data.get("kind")
+            value = data.get("value")
+            if kind == "temperature":
+                desired.setpoint_kind = SetpointKind.TEMPERATURE
+                desired.target_temperature = float(value)
+                desired.preset_mode = None
+            elif kind == "preset":
+                desired.setpoint_kind = SetpointKind.PRESET
+                desired.preset_mode = str(value)
+                desired.target_temperature = None
+            elif kind == "hvac_mode":
+                desired.hvac_mode = str(value)
+            else:
+                return None
         return cls(
-            kind=kind,
-            value=data.get("value"),
-            until=until,
-            baseline=DesiredState.from_dict(baseline)
-            if isinstance(baseline, dict)
-            else DesiredState(),
+            desired=desired,
             started_at=started_at,
+            until=until,
+            baseline=baseline,
         )
 
 
@@ -341,7 +370,7 @@ class RouterSnapshot:
     route_reason: str = "off"
     handover_state: HandoverState = HandoverState.OFF
     desired: DesiredState = field(default_factory=DesiredState)
-    override: OverrideState | None = None
+    manual_mode: ManualMode | None = None
     boost_until: datetime | None = None
     boost_targets: frozenset[Target] = frozenset()
     conflicts: tuple[Conflict, ...] = ()
@@ -380,6 +409,16 @@ class RouterSnapshot:
             return next(iter(self.active_targets)).value
         return "none"
 
+    @property
+    def manual_active(self) -> bool:
+        """Return whether proxy-owned manual mode is active."""
+        return self.manual_mode is not None
+
+    @property
+    def manual_until(self) -> datetime | None:
+        """Return the manual-mode deadline, or ``None`` for infinite mode."""
+        return self.manual_mode.until if self.manual_mode is not None else None
+
 
 @dataclass(frozen=True)
 class RouteDecision:
@@ -416,6 +455,8 @@ DEFAULT_CONFLICT_POLICY = "monitor"
 DEFAULT_OUTDOOR_STALE_AFTER = 3600
 DEFAULT_OVERRIDE_MINUTES = 60
 DEFAULT_MAX_OVERRIDE_MINUTES = 1440
+DEFAULT_MANUAL_MINUTES = 60
+DEFAULT_MAX_MANUAL_MINUTES = 1440
 DEFAULT_BOOST_MINUTES = 30
 DEFAULT_MAX_BOOST_MINUTES = 180
 DEFAULT_TEMPERATURE_TOLERANCE = 0.2
@@ -443,6 +484,8 @@ class RouterConfig:
     outdoor_stale_after: int = DEFAULT_OUTDOOR_STALE_AFTER
     default_override_minutes: int = DEFAULT_OVERRIDE_MINUTES
     max_override_minutes: int = DEFAULT_MAX_OVERRIDE_MINUTES
+    default_manual_minutes: int = DEFAULT_MANUAL_MINUTES
+    max_manual_minutes: int = DEFAULT_MAX_MANUAL_MINUTES
     temperature_tolerance: float = DEFAULT_TEMPERATURE_TOLERANCE
     boost_enabled: bool = False
     lock_enabled: bool = False
@@ -492,6 +535,14 @@ class RouterConfig:
             outdoor_stale_after=_int("outdoor_stale_after", DEFAULT_OUTDOOR_STALE_AFTER),
             default_override_minutes=_int("default_override_minutes", DEFAULT_OVERRIDE_MINUTES),
             max_override_minutes=_int("max_override_minutes", DEFAULT_MAX_OVERRIDE_MINUTES),
+            default_manual_minutes=_int(
+                "default_manual_minutes",
+                _int("default_override_minutes", DEFAULT_MANUAL_MINUTES),
+            ),
+            max_manual_minutes=_int(
+                "max_manual_minutes",
+                _int("max_override_minutes", DEFAULT_MAX_MANUAL_MINUTES),
+            ),
             temperature_tolerance=_float("temperature_tolerance", DEFAULT_TEMPERATURE_TOLERANCE),
             boost_enabled=_bool("boost_enabled", False),
             lock_enabled=_bool("lock_enabled", False),

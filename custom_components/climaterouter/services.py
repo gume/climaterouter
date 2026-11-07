@@ -16,11 +16,14 @@ from .const import (
     SERVICE_CANCEL_MANUAL_OVERRIDE,
     SERVICE_CLEAR_CONFLICTS,
     SERVICE_CLEAR_ROUTE_OVERRIDE,
+    SERVICE_ENTER_MANUAL_MODE,
     SERVICE_FORCE_HANDOVER,
     SERVICE_LOCK,
     SERVICE_RECALCULATE,
+    SERVICE_RETURN_TO_SCHEDULE,
     SERVICE_SET_BOOST,
     SERVICE_SET_MANUAL_OVERRIDE,
+    SERVICE_SET_MANUAL_TIMER,
     SERVICE_SET_ROUTE_OVERRIDE,
     SERVICE_UNLOCK,
 )
@@ -39,6 +42,19 @@ SET_MANUAL_OVERRIDE_SCHEMA = cv.make_entity_service_schema(
         vol.Optional("temperature"): vol.Coerce(float),
         vol.Optional("preset_mode"): cv.string,
         vol.Optional("hvac_mode"): vol.In([HVAC_OFF, HVAC_HEAT, HVAC_COOL]),
+    }
+)
+ENTER_MANUAL_MODE_SCHEMA = cv.make_entity_service_schema(
+    {
+        vol.Optional("duration_minutes"): vol.All(vol.Coerce(int), vol.Range(min=0)),
+        vol.Optional("temperature"): vol.Coerce(float),
+        vol.Optional("preset_mode"): cv.string,
+        vol.Optional("hvac_mode"): vol.In([HVAC_OFF, HVAC_HEAT, HVAC_COOL]),
+    }
+)
+SET_MANUAL_TIMER_SCHEMA = cv.make_entity_service_schema(
+    {
+        vol.Optional("minutes"): vol.All(vol.Coerce(int), vol.Range(min=0)),
     }
 )
 SET_BOOST_SCHEMA = cv.make_entity_service_schema(
@@ -95,27 +111,54 @@ def async_register_services(hass: HomeAssistant) -> None:
         for coordinator in await _async_coordinators(hass, call):
             await coordinator.async_force_handover()
 
-    async def handle_set_manual_override(call: ServiceCall) -> None:
+    async def _handle_manual_args(call: ServiceCall, *, alias: bool) -> None:
         temperature = call.data.get("temperature")
         preset_mode = call.data.get("preset_mode")
         hvac_mode = call.data.get("hvac_mode")
-        if sum(value is not None for value in (temperature, preset_mode, hvac_mode)) != 1:
+        if sum(value is not None for value in (temperature, preset_mode, hvac_mode)) > 1:
             raise ServiceValidationError(
-                "Exactly one of temperature, preset_mode, or hvac_mode is required"
+                "Only one of temperature, preset_mode, or hvac_mode can be supplied"
             )
         duration = call.data.get("duration_minutes")
         for coordinator in await _async_coordinators(hass, call):
-            await coordinator.async_set_manual_override(
-                temperature=temperature,
-                preset_mode=preset_mode,
-                hvac_mode=hvac_mode,
-                duration_minutes=duration,
-                context=call.context,
-            )
+            if alias:
+                await coordinator.async_set_manual_override(
+                    temperature=temperature,
+                    preset_mode=preset_mode,
+                    hvac_mode=hvac_mode,
+                    duration_minutes=duration,
+                    context=call.context,
+                )
+            else:
+                await coordinator.async_enter_manual_mode(
+                    temperature=temperature,
+                    preset_mode=preset_mode,
+                    hvac_mode=hvac_mode,
+                    duration_minutes=duration,
+                    context=call.context,
+                )
+
+    async def handle_enter_manual_mode(call: ServiceCall) -> None:
+        await _handle_manual_args(call, alias=False)
+
+    async def handle_set_manual_override(call: ServiceCall) -> None:
+        await _handle_manual_args(call, alias=True)
 
     async def handle_cancel_manual_override(call: ServiceCall) -> None:
         for coordinator in await _async_coordinators(hass, call):
             await coordinator.async_cancel_manual_override()
+
+    async def handle_return_to_schedule(call: ServiceCall) -> None:
+        for coordinator in await _async_coordinators(hass, call):
+            await coordinator.async_return_to_schedule()
+
+    async def handle_set_manual_timer(call: ServiceCall) -> None:
+        minutes = call.data.get("minutes")
+        for coordinator in await _async_coordinators(hass, call):
+            await coordinator.async_set_manual_timer(
+                minutes=minutes,
+                context=call.context,
+            )
 
     async def handle_set_boost(call: ServiceCall) -> None:
         duration = call.data.get("duration_minutes")
@@ -169,14 +212,32 @@ def async_register_services(hass: HomeAssistant) -> None:
     )
     hass.services.async_register(
         DOMAIN,
+        SERVICE_ENTER_MANUAL_MODE,
+        handle_enter_manual_mode,
+        schema=ENTER_MANUAL_MODE_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
         SERVICE_SET_MANUAL_OVERRIDE,
         handle_set_manual_override,
         schema=SET_MANUAL_OVERRIDE_SCHEMA,
     )
     hass.services.async_register(
         DOMAIN,
+        SERVICE_SET_MANUAL_TIMER,
+        handle_set_manual_timer,
+        schema=SET_MANUAL_TIMER_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
         SERVICE_CANCEL_MANUAL_OVERRIDE,
         handle_cancel_manual_override,
+        schema=EMPTY_ENTITY_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_RETURN_TO_SCHEDULE,
+        handle_return_to_schedule,
         schema=EMPTY_ENTITY_SCHEMA,
     )
     hass.services.async_register(

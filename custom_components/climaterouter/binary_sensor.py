@@ -81,10 +81,10 @@ SENSOR_SPECS: tuple[
     ),
     (
         "manual_override",
-        "Manual override",
+        "Manual mode",
         None,
         None,
-        lambda snapshot: snapshot.override is not None,
+        lambda snapshot: snapshot.manual_mode is not None,
     ),
     (
         "boost_active",

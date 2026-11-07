@@ -32,10 +32,10 @@ def _pending_target(snapshot: RouterSnapshot) -> str:
     return snapshot.pending_target.value if snapshot.pending_target else "none"
 
 
-def _override_remaining(snapshot: RouterSnapshot) -> int:
-    if snapshot.override is None:
-        return 0
-    return snapshot.override.remaining_minutes(dt_util.utcnow())
+def _override_remaining(snapshot: RouterSnapshot) -> int | None:
+    if snapshot.manual_mode is None:
+        return None
+    return snapshot.manual_mode.remaining_minutes(dt_util.utcnow())
 
 
 def _boost_remaining(snapshot: RouterSnapshot) -> int:

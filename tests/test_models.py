@@ -8,7 +8,7 @@ from climaterouter.models import (
     BoostState,
     Conflict,
     DesiredState,
-    OverrideState,
+    ManualMode,
     RouterConfig,
     SetpointKind,
     Target,
@@ -22,6 +22,21 @@ def test_router_config_defaults() -> None:
     assert config.cold_threshold == 7.0
     assert config.mild_threshold == 9.0
     assert config.boost_enabled is False
+    assert config.default_manual_minutes == 60
+    assert config.max_manual_minutes == 1440
+
+
+def test_router_config_manual_timer_falls_back_to_override_keys() -> None:
+    config = RouterConfig.from_mapping(
+        {"default_override_minutes": "15", "max_override_minutes": "120"}
+    )
+    assert config.default_manual_minutes == 15
+    assert config.max_manual_minutes == 120
+    explicit = RouterConfig.from_mapping(
+        {"default_manual_minutes": 5, "max_manual_minutes": 30}
+    )
+    assert explicit.default_manual_minutes == 5
+    assert explicit.max_manual_minutes == 30
 
 
 def test_router_config_parses_types() -> None:
@@ -62,7 +77,7 @@ def test_desired_state_copy_is_independent() -> None:
     assert desired.target_temperature == 21.5
 
 
-def test_override_applies_to_desired_state() -> None:
+def test_manual_mode_applies_to_desired_state() -> None:
     now = datetime.now(timezone.utc)
     baseline = DesiredState(
         hvac_mode="heat",
@@ -70,56 +85,40 @@ def test_override_applies_to_desired_state() -> None:
         preset_mode="comfort",
     )
 
-    temperature_override = OverrideState(
-        kind="temperature",
-        value=22.5,
+    manual = ManualMode(
+        desired=DesiredState(
+            hvac_mode="heat",
+            setpoint_kind=SetpointKind.TEMPERATURE,
+            target_temperature=22.5,
+        ),
         until=now + timedelta(minutes=45),
         baseline=baseline,
         started_at=now,
     )
-    effective = baseline.with_override(temperature_override)
+    effective = baseline.with_manual_mode(manual)
     assert effective.hvac_mode == "heat"
     assert effective.setpoint_kind == SetpointKind.TEMPERATURE
     assert effective.target_temperature == 22.5
     assert effective.preset_mode is None
     # The baseline itself must stay untouched.
     assert baseline.preset_mode == "comfort"
-
-    preset_override = OverrideState(
-        kind="preset",
-        value="eco",
-        until=now + timedelta(minutes=45),
-        baseline=baseline,
-        started_at=now,
-    )
-    effective = baseline.with_override(preset_override)
-    assert effective.setpoint_kind == SetpointKind.PRESET
-    assert effective.preset_mode == "eco"
-    assert effective.target_temperature is None
-
-    mode_override = OverrideState(
-        kind="hvac_mode",
-        value="cool",
-        until=now + timedelta(minutes=45),
-        baseline=baseline,
-        started_at=now,
-    )
-    effective = baseline.with_override(mode_override)
-    assert effective.hvac_mode == "cool"
-    assert effective.preset_mode == "comfort"
+    assert baseline.with_manual_mode(None) == baseline
 
 
-def test_override_roundtrip_and_expiry() -> None:
+def test_manual_mode_roundtrip_and_expiry() -> None:
     now = datetime.now(timezone.utc)
-    override = OverrideState(
-        kind="temperature",
-        value=22.5,
+    manual = ManualMode(
+        desired=DesiredState(
+            hvac_mode="heat",
+            setpoint_kind=SetpointKind.TEMPERATURE,
+            target_temperature=22.5,
+        ),
         until=now + timedelta(minutes=45),
         baseline=DesiredState(hvac_mode="heat", setpoint_kind=SetpointKind.NONE),
         started_at=now,
     )
-    restored = OverrideState.from_dict(override.to_dict())
-    assert restored == override
+    restored = ManualMode.from_dict(manual.to_dict())
+    assert restored == manual
     assert restored is not None
     assert not restored.is_expired(now)
     assert restored.is_expired(now + timedelta(minutes=46))
@@ -127,17 +126,61 @@ def test_override_roundtrip_and_expiry() -> None:
     assert restored.remaining_minutes(now + timedelta(minutes=46)) == 0
 
 
-def test_override_from_dict_rejects_invalid_data() -> None:
-    assert OverrideState.from_dict({}) is None
-    assert OverrideState.from_dict({"kind": "temperature", "until": "not-a-date"}) is None
+def test_manual_mode_infinite_timer() -> None:
+    now = datetime.now(timezone.utc)
+    manual = ManualMode(
+        desired=DesiredState(hvac_mode="heat"),
+        started_at=now,
+        until=None,
+    )
+    assert not manual.has_deadline
+    assert not manual.is_expired(now + timedelta(days=365))
+    assert manual.remaining_minutes(now) is None
+    restored = ManualMode.from_dict(manual.to_dict())
+    assert restored == manual
+    assert restored is not None
+    assert restored.until is None
+
+
+def test_manual_mode_migrates_legacy_override() -> None:
+    now = datetime.now(timezone.utc)
+    legacy = {
+        "kind": "temperature",
+        "value": 20,
+        "until": (now + timedelta(minutes=30)).isoformat(),
+        "started_at": now.isoformat(),
+        "baseline": DesiredState(
+            hvac_mode="heat",
+            setpoint_kind=SetpointKind.PRESET,
+            preset_mode="comfort",
+        ).to_dict(),
+    }
+    migrated = ManualMode.from_dict(legacy)
+    assert migrated is not None
+    assert migrated.desired.setpoint_kind == SetpointKind.TEMPERATURE
+    assert migrated.desired.target_temperature == 20.0
+    assert migrated.baseline.preset_mode == "comfort"
+
+
+def test_manual_mode_from_dict_rejects_invalid_data() -> None:
+    assert ManualMode.from_dict({}) is None
+    assert ManualMode.from_dict({"started_at": "not-a-date"}) is None
     assert (
-        OverrideState.from_dict(
+        ManualMode.from_dict(
             {
-                "kind": "temperature",
-                "value": 20,
-                "until": "2026-11-06T18:00:00",
                 "started_at": "2026-11-06T17:00:00",
-                "baseline": {},
+                "until": "2026-11-06T18:00:00",
+                "desired": {},
+            }
+        )
+        is None
+    )
+    assert (
+        ManualMode.from_dict(
+            {
+                "started_at": "2026-11-06T17:00:00+00:00",
+                "until": "not-a-date",
+                "desired": {},
             }
         )
         is None

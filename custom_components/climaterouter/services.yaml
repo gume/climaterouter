@@ -50,6 +50,83 @@ force_handover:
       integration: climaterouter
       domain: climate
 
+enter_manual_mode:
+  name: Enter manual mode
+  description: Enter proxy-owned manual mode, optionally with a setpoint and timer.
+  target:
+    entity:
+      integration: climaterouter
+      domain: climate
+  fields:
+    temperature:
+      name: Temperature
+      description: Manual target temperature.
+      required: false
+      example: 22.5
+      selector:
+        number:
+          min: 5
+          max: 35
+          step: 0.5
+          unit_of_measurement: "°C"
+          mode: box
+    preset_mode:
+      name: Preset
+      description: Manual preset mode.
+      required: false
+      example: comfort
+      selector:
+        text:
+    hvac_mode:
+      name: HVAC mode
+      description: Manual HVAC mode.
+      required: false
+      selector:
+        select:
+          options:
+            - heat
+            - cool
+            - "off"
+    duration_minutes:
+      name: Duration
+      description: Timer length in minutes; 0 keeps manual mode active until it is switched off.
+      required: false
+      example: 60
+      selector:
+        number:
+          min: 0
+          max: 1440
+          unit_of_measurement: min
+          mode: box
+
+set_manual_timer:
+  name: Set manual timer
+  description: Set or switch off the manual-mode countdown without changing the setpoint.
+  target:
+    entity:
+      integration: climaterouter
+      domain: climate
+  fields:
+    minutes:
+      name: Minutes
+      description: Timer length in minutes; 0 or an empty value switches the timer off.
+      required: false
+      example: 60
+      selector:
+        number:
+          min: 0
+          max: 1440
+          unit_of_measurement: min
+          mode: box
+
+return_to_schedule:
+  name: Return to schedule
+  description: End manual mode and restore the latest schedule command.
+  target:
+    entity:
+      integration: climaterouter
+      domain: climate
+
 set_manual_override:
   name: Set manual override
   description: Apply a temperature or preset for a bounded time, then restore the latest schedule command.
@@ -101,7 +178,7 @@ set_manual_override:
 
 cancel_manual_override:
   name: Cancel manual override
-  description: Cancel the active override and restore the latest schedule command.
+  description: Deprecated alias for returning to the schedule.
   target:
     entity:
       integration: climaterouter
