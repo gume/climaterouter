@@ -29,10 +29,12 @@
 | `28fbf93` | `feat: expose read-only VTherm attributes for Lovelace cards` |
 | `e0634e2` | `docs: record the card attribute commit` |
 | `97c620e` | `feat: add native ClimateRouter lock` |
+| `38e0ef0` | `refactor: remove the external manual switch routing input` |
 
 Everything through `bf19c92` (version **0.5.0**) is pushed to `origin/main` and installed in the live test instance.
-Local commits `28fbf93` (version **0.6.0**, read-only VTherm display attributes), `e0634e2` (docs) and `97c620e`
-(version **0.7.0**, native lock) are not pushed yet. The assistant has no GitHub credentials.
+Local commits `28fbf93` (version **0.6.0**, read-only VTherm display attributes), `e0634e2` (docs), `97c620e`
+(version **0.7.0**, native lock) and the proxy-rework series starting with `38e0ef0` are not pushed yet. The
+assistant has no GitHub credentials.
 
 ---
 
@@ -44,7 +46,7 @@ Milestones M1–M6 from [`PLAN.md`](PLAN.md) are implemented. M1–M3 were valid
 | Milestone | State | Notes |
 |---|---|---|
 | M1 — skeleton and config flow | Done | Config/options/reconfigure flows, device, proxy entity, services, diagnostics, translations, CI. |
-| M2 — proxy and routing | Done | Hysteresis, manual switch, route override, `off`/`cool`, command forwarding, status entities. |
+| M2 — proxy and routing | Done | Hysteresis, route override, `off`/`cool`, command forwarding, status entities. The external manual switch was removed in 0.8.0. |
 | M3 — safe handover | Done, live-verified | Idle detection, off confirmation, timeout, queued desired state, startup reconciliation, events. The manual forced handover and command forwarding during `PENDING` were verified live in 0.5.0 (see section 6). |
 | M4 — manual override | Implemented, not live-verified | Temperature/preset/mode override, absolute deadline, baseline capture/restore, persistence, handover forwarding, events, binary sensor, remaining sensor and cancel button. Unit coverage is limited to the pure model helpers. |
 | M5 — conflicts | Implemented, not live-verified | Setpoint/preset/mode mismatch, unavailable targets, underlying timed presets, stale manual switch, both-on and inactive-target-on detection; own-context and guard suppression; `monitor`/`reassert`/`adopt` policies, auto-resolve switches, events, history and clear button. Unit coverage is limited to the pure classifier. |
@@ -52,6 +54,10 @@ Milestones M1–M6 from [`PLAN.md`](PLAN.md) are implemented. M1–M3 were valid
 
 The post-M6 **native lock** (0.7.0) is implemented and unit-tested at the source-matrix level; live verification is
 still outstanding (see §8).
+
+A larger **proxy rework** is in progress: proxy-owned manual mode and timer, two separate locks, sectioned
+config/options flows, and VTherm display compatibility split into harmless versus identity keys. Iteration 1
+(`38e0ef0`) removed the external manual-switch routing input; only the built-in route-override select remains.
 
 The next developer should start with section 8 (Next steps).
 
