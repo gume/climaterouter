@@ -33,6 +33,7 @@
 | `ce6d163` | `feat: add proxy-owned manual mode with optional timer` |
 | `a028adf` | `feat: expose manual mode switch, timer select, sensors, and return button` |
 | `40f510c` | `feat: split the proxy UI lock from the manual schedule lock` |
+| `e60bbfc` | `feat: sectioned config/options flows with the new manual and display options` |
 
 Everything through `bf19c92` (version **0.5.0**) is pushed to `origin/main` and installed in the live test instance.
 Local commits `28fbf93` (version **0.6.0**, read-only VTherm display attributes), `e0634e2` (docs), `97c620e`
@@ -52,7 +53,7 @@ Milestones M1–M6 from [`PLAN.md`](PLAN.md) are implemented. M1–M3 were valid
 | M2 — proxy and routing | Done | Hysteresis, route override, `off`/`cool`, command forwarding, status entities. The external manual switch was removed in 0.8.0. |
 | M3 — safe handover | Done, live-verified | Idle detection, off confirmation, timeout, queued desired state, startup reconciliation, events. The manual forced handover and command forwarding during `PENDING` were verified live in 0.5.0 (see section 6). |
 | M4 — manual override | Implemented, not live-verified | Temperature/preset/mode override, absolute deadline, baseline capture/restore, persistence, handover forwarding, events, binary sensor, remaining sensor and cancel button. Unit coverage is limited to the pure model helpers. |
-| M5 — conflicts | Implemented, not live-verified | Setpoint/preset/mode mismatch, unavailable targets, underlying timed presets, stale manual switch, both-on and inactive-target-on detection; own-context and guard suppression; `monitor`/`reassert`/`adopt` policies, auto-resolve switches, events, history and clear button. Unit coverage is limited to the pure classifier. |
+| M5 — conflicts | Implemented, not live-verified | Setpoint/preset/mode mismatch, unavailable targets, underlying timed presets, both-on and inactive-target-on detection; own-context and guard suppression; `monitor`/`reassert`/`adopt` policies, auto-resolve switches, events, history and clear button. Unit coverage is limited to the pure classifier. |
 | M6 — boost | Implemented, not live-verified | Feature-flagged both-target boost with heat-only/availability/handover interlocks, persistence, expiry, start/end events, active/remaining entities, and a handover back to single-target routing. |
 
 The post-M6 **native lock** (0.7.0) is implemented and unit-tested at the source-matrix level; live verification is
@@ -62,7 +63,8 @@ A larger **proxy rework** is in progress: proxy-owned manual mode and timer, two
 config/options flows, and VTherm display compatibility split into harmless versus identity keys. Iteration 1
 (`38e0ef0`) removed the external manual-switch routing input; iteration 2 (`ce6d163`) added the proxy-owned manual
 mode model, timer, persistence, and services; iteration 3 (`a028adf`) exposed the standard-card entities; iteration
-4 (`40f510c`) split the accidental-touch UI lock (Lock A) from the manual/schedule lock (Lock B).
+4 (`40f510c`) split the accidental-touch UI lock (Lock A) from the manual/schedule lock (Lock B); iteration 5
+(`e60bbfc`) rebuilt the config, options, and reconfigure forms as sections with a menu-based options flow.
 
 The next developer should start with section 8 (Next steps).
 
@@ -342,6 +344,30 @@ itself; it is not mirrored to either VTherm.
   `lock_manager`, or `is_locked`, so Equinox does not render a broken lock button. Diagnostics expose both lock
   states and redact `lock_code`.
 
+### 3.11 Config, options and reconfigure flows
+
+All three flows share the same sectioned schema (`config_flow.py`):
+
+| Section | Contents |
+|---|---|
+| Thermostats | name, radiator, AC, outdoor sensor |
+| Routing | thresholds, dwell, handover/off/startup/settle timings, fallback |
+| Manual mode | `default_manual_minutes`, `max_manual_minutes`, `manual_blocks_schedule` |
+| Conflicts | policy, auto-resolve flags, outdoor staleness, setpoint tolerance |
+| Boost | `boost_enabled` |
+| UI lock | `lock_enabled`, `lock_code`, `auto_relock_sec` |
+| Lovelace display | `expose_vtherm_identity` |
+
+- Setup and reconfigure show every section in one form. Sections other than Thermostats start collapsed.
+- The options flow is a menu: each entry opens that section, submits and saves immediately, then returns to the
+  menu. **Finish** closes the flow. This avoids a single long options form.
+- `default_manual_minutes=0` means new manual sessions start without a countdown. It must not exceed
+  `max_manual_minutes`.
+- The former `default_override_minutes` / `max_override_minutes` keys and the `lock_users` / `lock_automations`
+  flags are no longer part of the schema. `RouterConfig.from_mapping` still reads the old override keys as a
+  fallback for entries created before 0.8.0; they are dropped the next time the options are saved.
+- There is no manual-switch configuration: routing is forced only through the built-in route-override `select`.
+
 ---
 
 ## 4. Test lab state
@@ -371,12 +397,14 @@ Defined in `test_environment/`; full instructions in [`TEST_ENVIRONMENT.md`](TES
 - Router entry **`ClimateRouter`** (entry id `01M6SAYNX19FHJ5KQAEYMM3K9N`), read from diagnostics:
   - radiator `climate.living_room_room_radiator`, AC `climate.living_room_room_ac`;
   - outdoor sensor `sensor.living_room_fake_outdoor_temperature`;
-  - manual switch `input_boolean.climaterouter_manul` (`on` targets the AC);
   - `cold_threshold=-5`, `mild_threshold=0`, `min_route_dwell=600`, `handover_idle_confirm=30`,
     `off_confirm_timeout=30`, `startup_grace=10`, `settle_time=10`;
   - `conflict_policy=monitor`, `auto_resolve_idle_targets=true`, `auto_resolve_simultaneous=true`;
-  - `default_override_minutes=60`, `max_override_minutes=1440`, `temperature_tolerance=0.2`,
-    `boost_enabled=false`.
+  - `default_manual_minutes=60`, `max_manual_minutes=1440`, `manual_blocks_schedule=true`,
+    `expose_vtherm_identity=false`, `temperature_tolerance=0.2`, `boost_enabled=false`.
+  The entry was created before 0.8.0 and still stores the removed external manual-switch key. That key is ignored;
+  open **Configure** once after updating and use the sectioned forms (or save a section) to rewrite the stored
+  options in the new shape.
 - Live router entities use the `living_room_climaterouter` slug, e.g.
   `climate.living_room_climaterouter`, `sensor.living_room_climaterouter_active_target`,
   `binary_sensor.living_room_climaterouter_conflict`.
@@ -472,7 +500,7 @@ persistence, event payloads.
    interrupts an active old target.
 7. **`last_handover` is not persisted**, so `sensor.last_handover` is `unknown` after a restart.
 8. **`route_changed` fires only when the active target changes**, not when only `route_reason` changes.
-9. **Options flow writes every field into `entry.options`** (the entry data stays as originally created). The
+9. **Options flow writes sections into `entry.options`** (the entry data stays as originally created). The
    coordinator merges `{**entry.data, **entry.options}`. Reconfigure writes everything into `entry.data` and clears
    options. This works but is inconsistent; simplify when touching the flow.
 10. **`strings.json` and `translations/en.json` are duplicated** and must be edited together.
@@ -491,21 +519,26 @@ persistence, event payloads.
 
 ### 8.1 Immediate
 
-1. Owner: push the current working tree (versions **0.6.0** and **0.7.0**: read-only VTherm display attributes and
-   the native lock), then update ClimateRouter through the **Marketplace** in the test HA (custom repository
-   `gume/climaterouter`, repository id `1448098130`) and restart Home Assistant. Do not re-add the old
-   `custom_components/climaterouter` bind mount: it makes the folder a mount point (`EBUSY`) and the Marketplace
-   cannot back it up before replacing it.
-2. Verify in the live instance that the proxy exposes `is_over_switch`/`power_percent` while the radiator is active
+1. Owner: push the current working tree (versions **0.6.0**–**0.8.0**: read-only VTherm display attributes, the
+   native lock, the proxy-owned manual mode, and the split locks), then update ClimateRouter through the
+   **Marketplace** in the test HA (custom repository `gume/climaterouter`, repository id `1448098130`) and restart
+   Home Assistant. Do not re-add the old `custom_components/climaterouter` bind mount: it makes the folder a mount
+   point (`EBUSY`) and the Marketplace cannot back it up before replacing it.
+2. Open **Configure** once after the update and re-save the sections, so the entry drops the removed manual-switch
+   key and uses the new sectioned options. Confirm the collapsed sections render correctly, that the options menu
+   returns after each section save, and that **Finish** closes it.
+3. Verify in the live instance that the proxy exposes `is_over_switch`/`power_percent` while the radiator is active
    and the Equinox gauge/status icons appear. Verify the lock button is absent (`hide_lock_button: true`) and that
    `is_lock_configured` is not exposed.
-3. Enable the native lock in the options, set a short auto-relock delay and verify in the live instance: the
-   `lock.<name>_lock` entity appears, user/automation blocking matches the configured flags, the code is enforced
-   on unlock, auto-relock fires, restart keeps the remaining deadline, and disabling the lock removes the entity.
-   Record the results here.
-4. Exercise M4 in the live instance: start a short temperature override, confirm it reaches the active VTherm,
-   cause a handover while it is active, let it expire, and confirm the baseline is restored. Repeat with
-   `cancel_manual_override` and `hvac_mode: off`. Record the results here.
+4. Enable the UI lock and Lock B in the options, set a short auto-relock delay and verify in the live instance: the
+   `lock.<name>_lock` entity appears, user commands are blocked while automation/schedule commands continue, the
+   code is enforced on unlock, auto-relock fires, restart keeps the remaining deadline, and manual mode rejects
+   automation commands while still accepting user adjustments. Record the results here.
+4. Exercise the manual mode in the live instance: move the temperature in the UI, confirm it starts manual
+   mode and does not reset on further moves; change/switch off the timer with the select; let it expire; return to
+   schedule with the button and the service; cause a handover while manual mode is active and confirm the value and
+   deadline survive; make an automation call while manual mode is active and confirm Lock B rejects it. Record the
+   results here.
 5. Exercise M5 in the live instance: change the active VTherm setpoint externally with `conflict_policy: monitor`;
    confirm the conflict binary sensor/count/attributes and both events; repeat under `reassert` and `adopt`; turn
    the inactive VTherm on manually; make a target unavailable. Record the results here.
@@ -523,7 +556,7 @@ Add `pytest-homeassistant-custom-component` integration tests and update CI to i
 with a Python version matching the supported HA. Suggested coverage:
 
 - config flow: happy path, duplicate unique id, missing entity, threshold order, reconfigure, options reload;
-- coordinator: routing precedence, fallback on unavailable, stale outdoor hold, manual switch;
+- coordinator: routing precedence, fallback on unavailable, stale outdoor hold, route override;
 - handover: active → pending → idle → off → start; off-confirm timeout; route revert during pending;
 - startup: adopt one on-target; persisted desired state; targets not loaded yet;
 - persistence: desired state and last route across reload;
