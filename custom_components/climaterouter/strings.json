@@ -3,59 +3,148 @@
     "step": {
       "user": {
         "title": "ClimateRouter",
-        "description": "Choose the two underlying thermostats and the outdoor sensor. The radiator is used when it is cold, the AC when it is mild.",
-        "data": {
-          "name": "Name",
-          "radiator_entity_id": "Radiator thermostat (over_switch)",
-          "ac_entity_id": "AC thermostat (over_climate)",
-          "outdoor_sensor_entity_id": "Outdoor temperature sensor",
-          "cold_threshold": "Cold threshold",
-          "mild_threshold": "Mild threshold",
-          "min_route_dwell": "Minimum time between handovers",
-          "handover_idle_confirm": "Idle confirmation before handover",
-          "off_confirm_timeout": "Off confirmation timeout",
-          "startup_grace": "Startup grace period",
-          "settle_time": "Command settle time",
-          "conflict_policy": "Conflict policy",
-          "auto_resolve_idle_targets": "Turn off idle non-selected targets",
-          "auto_resolve_simultaneous": "Turn off idle targets when both are on",
-          "fallback_on_unavailable": "Fall back to the other target",
-          "outdoor_stale_after": "Outdoor sensor staleness",
-          "default_override_minutes": "Default override duration",
-          "max_override_minutes": "Maximum override duration",
-          "temperature_tolerance": "Setpoint tolerance",
-          "boost_enabled": "Enable boost (experimental)",
-          "lock_enabled": "Enable native lock",
-          "lock_code": "Lock code (4-8 digits, optional)",
-          "lock_users": "Block commands from users",
-          "lock_automations": "Block commands from automations",
-          "auto_relock_sec": "Auto-relock delay"
+        "description": "Configure the two underlying thermostats, routing, manual mode, conflicts, and display compatibility.",
+        "sections": {
+          "basic": {
+            "name": "Thermostats",
+            "description": "Choose the radiator and AC thermostats and the outdoor sensor.",
+            "data": {
+              "name": "Name",
+              "radiator_entity_id": "Radiator thermostat (over_switch)",
+              "ac_entity_id": "AC thermostat (over_climate)",
+              "outdoor_sensor_entity_id": "Outdoor temperature sensor"
+            }
+          },
+          "routing": {
+            "name": "Routing",
+            "description": "Outdoor hysteresis, handover safety, and timing.",
+            "data": {
+              "cold_threshold": "Cold threshold",
+              "mild_threshold": "Mild threshold",
+              "min_route_dwell": "Minimum time between handovers",
+              "handover_idle_confirm": "Idle confirmation before handover",
+              "off_confirm_timeout": "Off confirmation timeout",
+              "startup_grace": "Startup grace period",
+              "settle_time": "Command settle time",
+              "fallback_on_unavailable": "Fall back to the other target"
+            }
+          },
+          "manual": {
+            "name": "Manual mode",
+            "description": "Default and maximum manual timer, and the manual/schedule lock.",
+            "data": {
+              "default_manual_minutes": "Default manual timer (0 = no timer)",
+              "max_manual_minutes": "Maximum manual timer",
+              "manual_blocks_schedule": "Block schedule/automation commands while manual"
+            }
+          },
+          "conflicts": {
+            "name": "Conflicts",
+            "description": "How direct changes to the underlying thermostats are handled.",
+            "data": {
+              "conflict_policy": "Conflict policy",
+              "auto_resolve_idle_targets": "Turn off idle non-selected targets",
+              "auto_resolve_simultaneous": "Turn off idle targets when both are on",
+              "outdoor_stale_after": "Outdoor sensor staleness",
+              "temperature_tolerance": "Setpoint tolerance"
+            }
+          },
+          "boost": {
+            "name": "Boost",
+            "description": "Run both targets for a bounded time.",
+            "data": {
+              "boost_enabled": "Enable boost (experimental)"
+            }
+          },
+          "lock": {
+            "name": "UI lock",
+            "description": "Optional accidental-touch lock. Schedule and automation commands are never blocked.",
+            "data": {
+              "lock_enabled": "Enable the UI lock",
+              "lock_code": "UI lock code (4-8 digits, optional)",
+              "auto_relock_sec": "Auto-relock delay (0 = stay unlocked)"
+            }
+          },
+          "display": {
+            "name": "Lovelace display",
+            "description": "Optional VTherm identity attributes for cards that auto-detect VTherm. Leave off unless needed.",
+            "data": {
+              "expose_vtherm_identity": "Expose VTherm identity-detection attributes"
+            }
+          }
         }
       },
       "reconfigure": {
         "title": "Reconfigure ClimateRouter",
-        "description": "Change the underlying entities or the routing options.",
-        "data": {
-          "name": "Name",
-          "radiator_entity_id": "Radiator thermostat (over_switch)",
-          "ac_entity_id": "AC thermostat (over_climate)",
-          "outdoor_sensor_entity_id": "Outdoor temperature sensor",
-          "cold_threshold": "Cold threshold",
-          "mild_threshold": "Mild threshold",
-          "min_route_dwell": "Minimum time between handovers",
-          "handover_idle_confirm": "Idle confirmation before handover",
-          "off_confirm_timeout": "Off confirmation timeout",
-          "startup_grace": "Startup grace period",
-          "settle_time": "Command settle time",
-          "conflict_policy": "Conflict policy",
-          "auto_resolve_idle_targets": "Turn off idle non-selected targets",
-          "auto_resolve_simultaneous": "Turn off idle targets when both are on",
-          "fallback_on_unavailable": "Fall back to the other target",
-          "outdoor_stale_after": "Outdoor sensor staleness",
-          "default_override_minutes": "Default override duration",
-          "max_override_minutes": "Maximum override duration",
-          "temperature_tolerance": "Setpoint tolerance",
-          "boost_enabled": "Enable boost (experimental)"
+        "description": "Change the underlying entities or any option. Values are saved together.",
+        "sections": {
+          "basic": {
+            "name": "Thermostats",
+            "description": "Choose the radiator and AC thermostats and the outdoor sensor.",
+            "data": {
+              "name": "Name",
+              "radiator_entity_id": "Radiator thermostat (over_switch)",
+              "ac_entity_id": "AC thermostat (over_climate)",
+              "outdoor_sensor_entity_id": "Outdoor temperature sensor"
+            }
+          },
+          "routing": {
+            "name": "Routing",
+            "description": "Outdoor hysteresis, handover safety, and timing.",
+            "data": {
+              "cold_threshold": "Cold threshold",
+              "mild_threshold": "Mild threshold",
+              "min_route_dwell": "Minimum time between handovers",
+              "handover_idle_confirm": "Idle confirmation before handover",
+              "off_confirm_timeout": "Off confirmation timeout",
+              "startup_grace": "Startup grace period",
+              "settle_time": "Command settle time",
+              "fallback_on_unavailable": "Fall back to the other target"
+            }
+          },
+          "manual": {
+            "name": "Manual mode",
+            "description": "Default and maximum manual timer, and the manual/schedule lock.",
+            "data": {
+              "default_manual_minutes": "Default manual timer (0 = no timer)",
+              "max_manual_minutes": "Maximum manual timer",
+              "manual_blocks_schedule": "Block schedule/automation commands while manual"
+            }
+          },
+          "conflicts": {
+            "name": "Conflicts",
+            "description": "How direct changes to the underlying thermostats are handled.",
+            "data": {
+              "conflict_policy": "Conflict policy",
+              "auto_resolve_idle_targets": "Turn off idle non-selected targets",
+              "auto_resolve_simultaneous": "Turn off idle targets when both are on",
+              "outdoor_stale_after": "Outdoor sensor staleness",
+              "temperature_tolerance": "Setpoint tolerance"
+            }
+          },
+          "boost": {
+            "name": "Boost",
+            "description": "Run both targets for a bounded time.",
+            "data": {
+              "boost_enabled": "Enable boost (experimental)"
+            }
+          },
+          "lock": {
+            "name": "UI lock",
+            "description": "Optional accidental-touch lock. Schedule and automation commands are never blocked.",
+            "data": {
+              "lock_enabled": "Enable the UI lock",
+              "lock_code": "UI lock code (4-8 digits, optional)",
+              "auto_relock_sec": "Auto-relock delay (0 = stay unlocked)"
+            }
+          },
+          "display": {
+            "name": "Lovelace display",
+            "description": "Optional VTherm identity attributes for cards that auto-detect VTherm. Leave off unless needed.",
+            "data": {
+              "expose_vtherm_identity": "Expose VTherm identity-detection attributes"
+            }
+          }
         }
       }
     },
@@ -64,7 +153,7 @@
       "entity_not_found": "The selected entity does not exist.",
       "invalid_entity": "The selected entity has the wrong domain.",
       "threshold_order": "The cold threshold must not be higher than the mild threshold.",
-      "override_order": "The default override duration must not exceed the maximum.",
+      "manual_order": "The default manual timer must not exceed the maximum timer.",
       "invalid_tolerance": "The temperature tolerance must be greater than zero.",
       "invalid_duration": "Durations must be non-negative.",
       "invalid_lock_code": "The lock code must contain 4 to 8 digits."
@@ -79,12 +168,32 @@
     "step": {
       "init": {
         "title": "ClimateRouter options",
-        "description": "Adjust routing thresholds, timings, and conflict handling.",
+        "description": "Choose a section to edit. Each section is saved when you submit it; choose Finish when done.",
+        "menu_options": {
+          "basic": "Thermostats",
+          "routing": "Routing",
+          "manual": "Manual mode",
+          "conflicts": "Conflicts",
+          "boost": "Boost",
+          "lock": "UI lock",
+          "display": "Lovelace display",
+          "finish": "Finish"
+        }
+      },
+      "basic": {
+        "title": "Thermostats",
+        "description": "Choose the radiator and AC thermostats and the outdoor sensor.",
         "data": {
           "name": "Name",
           "radiator_entity_id": "Radiator thermostat (over_switch)",
           "ac_entity_id": "AC thermostat (over_climate)",
-          "outdoor_sensor_entity_id": "Outdoor temperature sensor",
+          "outdoor_sensor_entity_id": "Outdoor temperature sensor"
+        }
+      },
+      "routing": {
+        "title": "Routing",
+        "description": "Outdoor hysteresis, handover safety, and timing.",
+        "data": {
           "cold_threshold": "Cold threshold",
           "mild_threshold": "Mild threshold",
           "min_route_dwell": "Minimum time between handovers",
@@ -92,20 +201,50 @@
           "off_confirm_timeout": "Off confirmation timeout",
           "startup_grace": "Startup grace period",
           "settle_time": "Command settle time",
+          "fallback_on_unavailable": "Fall back to the other target"
+        }
+      },
+      "manual": {
+        "title": "Manual mode",
+        "description": "Default and maximum manual timer, and the manual/schedule lock.",
+        "data": {
+          "default_manual_minutes": "Default manual timer (0 = no timer)",
+          "max_manual_minutes": "Maximum manual timer",
+          "manual_blocks_schedule": "Block schedule/automation commands while manual"
+        }
+      },
+      "conflicts": {
+        "title": "Conflicts",
+        "description": "How direct changes to the underlying thermostats are handled.",
+        "data": {
           "conflict_policy": "Conflict policy",
           "auto_resolve_idle_targets": "Turn off idle non-selected targets",
           "auto_resolve_simultaneous": "Turn off idle targets when both are on",
-          "fallback_on_unavailable": "Fall back to the other target",
           "outdoor_stale_after": "Outdoor sensor staleness",
-          "default_override_minutes": "Default override duration",
-          "max_override_minutes": "Maximum override duration",
-          "temperature_tolerance": "Setpoint tolerance",
-          "boost_enabled": "Enable boost (experimental)",
-          "lock_enabled": "Enable native lock",
-          "lock_code": "Lock code (4-8 digits, optional)",
-          "lock_users": "Block commands from users",
-          "lock_automations": "Block commands from automations",
-          "auto_relock_sec": "Auto-relock delay"
+          "temperature_tolerance": "Setpoint tolerance"
+        }
+      },
+      "boost": {
+        "title": "Boost",
+        "description": "Run both targets for a bounded time.",
+        "data": {
+          "boost_enabled": "Enable boost (experimental)"
+        }
+      },
+      "lock": {
+        "title": "UI lock",
+        "description": "Optional accidental-touch lock. Schedule and automation commands are never blocked.",
+        "data": {
+          "lock_enabled": "Enable the UI lock",
+          "lock_code": "UI lock code (4-8 digits, optional)",
+          "auto_relock_sec": "Auto-relock delay (0 = stay unlocked)"
+        }
+      },
+      "display": {
+        "title": "Lovelace display",
+        "description": "Optional VTherm identity attributes for cards that auto-detect VTherm. Leave off unless needed.",
+        "data": {
+          "expose_vtherm_identity": "Expose VTherm identity-detection attributes"
         }
       }
     },
@@ -114,7 +253,7 @@
       "entity_not_found": "The selected entity does not exist.",
       "invalid_entity": "The selected entity has the wrong domain.",
       "threshold_order": "The cold threshold must not be higher than the mild threshold.",
-      "override_order": "The default override duration must not exceed the maximum.",
+      "manual_order": "The default manual timer must not exceed the maximum timer.",
       "invalid_tolerance": "The temperature tolerance must be greater than zero.",
       "invalid_duration": "Durations must be non-negative.",
       "invalid_lock_code": "The lock code must contain 4 to 8 digits."
@@ -147,31 +286,75 @@
       "name": "Force handover",
       "description": "Complete a pending handover immediately, without waiting for the old target to become idle."
     },
-    "set_manual_override": {
-      "name": "Set manual override",
-      "description": "Apply a temperature or preset for a bounded time, then restore the latest schedule command.",
+    "enter_manual_mode": {
+      "name": "Enter manual mode",
+      "description": "Enter proxy-owned manual mode, optionally with a value and timer.",
       "fields": {
         "duration_minutes": {
           "name": "Duration",
-          "description": "How long the override lasts. Defaults to the configured override duration."
+          "description": "Timer length in minutes; 0 keeps manual mode active until switched off."
+        },
+        "minutes": {
+          "name": "Minutes",
+          "description": "Timer length in minutes; 0 or an empty value switches the timer off."
         },
         "temperature": {
           "name": "Temperature",
-          "description": "Target temperature for the override."
+          "description": "Manual target temperature."
         },
         "preset_mode": {
           "name": "Preset",
-          "description": "Preset to apply for the override."
+          "description": "Manual preset mode."
         },
         "hvac_mode": {
           "name": "HVAC mode",
-          "description": "Optional mode override. Use off to cancel the override and turn the proxy off."
+          "description": "Manual HVAC mode. Use off to end manual mode and turn the proxy off."
+        }
+      }
+    },
+    "set_manual_timer": {
+      "name": "Set manual timer",
+      "description": "Set or switch off the manual-mode countdown without changing the setpoint.",
+      "fields": {
+        "minutes": {
+          "name": "Minutes",
+          "description": "Timer length in minutes; 0 or an empty value switches the timer off."
+        }
+      }
+    },
+    "return_to_schedule": {
+      "name": "Return to schedule",
+      "description": "End manual mode and restore the latest schedule command."
+    },
+    "set_manual_override": {
+      "name": "Set manual override (deprecated)",
+      "description": "Deprecated alias for enter_manual_mode.",
+      "fields": {
+        "duration_minutes": {
+          "name": "Duration",
+          "description": "Timer length in minutes; 0 keeps manual mode active until switched off."
+        },
+        "minutes": {
+          "name": "Minutes",
+          "description": "Timer length in minutes; 0 or an empty value switches the timer off."
+        },
+        "temperature": {
+          "name": "Temperature",
+          "description": "Manual target temperature."
+        },
+        "preset_mode": {
+          "name": "Preset",
+          "description": "Manual preset mode."
+        },
+        "hvac_mode": {
+          "name": "HVAC mode",
+          "description": "Manual HVAC mode. Use off to end manual mode and turn the proxy off."
         }
       }
     },
     "cancel_manual_override": {
-      "name": "Cancel manual override",
-      "description": "Cancel the active override and restore the latest schedule command."
+      "name": "Cancel manual override (deprecated)",
+      "description": "Deprecated alias for return_to_schedule."
     },
     "set_boost": {
       "name": "Set boost",
@@ -192,12 +375,12 @@
       "description": "End boost immediately and return to normal routing."
     },
     "lock": {
-      "name": "Lock",
-      "description": "Lock the router so user and automation commands are rejected."
+      "name": "Lock UI",
+      "description": "Lock user commands on the proxy. Schedule and automation commands continue."
     },
     "unlock": {
-      "name": "Unlock",
-      "description": "Unlock the router. A code is required when one is configured.",
+      "name": "Unlock UI",
+      "description": "Unlock user commands. A code is required when one is configured.",
       "fields": {
         "code": {
           "name": "Code",

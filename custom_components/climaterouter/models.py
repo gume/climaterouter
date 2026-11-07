@@ -481,8 +481,6 @@ DEFAULT_STARTUP_GRACE = 10
 DEFAULT_SETTLE_TIME = 10
 DEFAULT_CONFLICT_POLICY = "monitor"
 DEFAULT_OUTDOOR_STALE_AFTER = 3600
-DEFAULT_OVERRIDE_MINUTES = 60
-DEFAULT_MAX_OVERRIDE_MINUTES = 1440
 DEFAULT_MANUAL_MINUTES = 60
 DEFAULT_MAX_MANUAL_MINUTES = 1440
 DEFAULT_BOOST_MINUTES = 30
@@ -510,8 +508,6 @@ class RouterConfig:
     auto_resolve_simultaneous: bool = False
     fallback_on_unavailable: bool = True
     outdoor_stale_after: int = DEFAULT_OUTDOOR_STALE_AFTER
-    default_override_minutes: int = DEFAULT_OVERRIDE_MINUTES
-    max_override_minutes: int = DEFAULT_MAX_OVERRIDE_MINUTES
     default_manual_minutes: int = DEFAULT_MANUAL_MINUTES
     max_manual_minutes: int = DEFAULT_MAX_MANUAL_MINUTES
     temperature_tolerance: float = DEFAULT_TEMPERATURE_TOLERANCE
@@ -520,6 +516,7 @@ class RouterConfig:
     lock_code: str = ""
     auto_relock_sec: int = DEFAULT_AUTO_RELOCK_SEC
     manual_blocks_schedule: bool = True
+    expose_vtherm_identity: bool = False
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> RouterConfig:
@@ -560,8 +557,6 @@ class RouterConfig:
             auto_resolve_simultaneous=_bool("auto_resolve_simultaneous", False),
             fallback_on_unavailable=_bool("fallback_on_unavailable", True),
             outdoor_stale_after=_int("outdoor_stale_after", DEFAULT_OUTDOOR_STALE_AFTER),
-            default_override_minutes=_int("default_override_minutes", DEFAULT_OVERRIDE_MINUTES),
-            max_override_minutes=_int("max_override_minutes", DEFAULT_MAX_OVERRIDE_MINUTES),
             default_manual_minutes=_int(
                 "default_manual_minutes",
                 _int("default_override_minutes", DEFAULT_MANUAL_MINUTES),
@@ -576,6 +571,7 @@ class RouterConfig:
             lock_code=str(data.get("lock_code") or ""),
             auto_relock_sec=_int("auto_relock_sec", DEFAULT_AUTO_RELOCK_SEC),
             manual_blocks_schedule=_bool("manual_blocks_schedule", True),
+            expose_vtherm_identity=_bool("expose_vtherm_identity", False),
         )
 
 
