@@ -1,6 +1,6 @@
 # Handover — ClimateRouter
 
-**Date:** 2026-11-06
+**Date:** 2026-11-07
 **Branch:** `main`
 **Relevant commits:**
 
@@ -38,11 +38,12 @@
 | `4ebab35` | `fix: seed the manual baseline before the first UI move` |
 | `87274cd` | `chore: bump version to 0.8.0` |
 | `e4c6678` | `docs: record the 0.8.0 proxy rework and manual-mode entities` |
+| `2caed71` | `feat: show radiator/AC icons on the target sensors` |
 
 Everything through `bf19c92` (version **0.5.0**) is pushed to `origin/main` and installed in the live test instance.
 Local commits `28fbf93` (version **0.6.0**, read-only VTherm display attributes), `e0634e2` (docs), `97c620e`
 (version **0.7.0**, native lock) and the proxy-rework series starting with `38e0ef0` are not pushed yet. The current
-checkout is version **0.8.0**. The assistant has no GitHub credentials.
+checkout is version **0.8.1**. The assistant has no GitHub credentials.
 
 ---
 
@@ -71,6 +72,9 @@ mode model, timer, persistence, and services; iteration 3 (`a028adf`) exposed th
 (`e60bbfc`) rebuilt the config, options, and reconfigure forms as sections with a menu-based options flow;
 iteration 6 (`07e04f4`) made the VTherm identity attributes opt-in. Everything is unit-tested locally but still
 needs live verification in the test instance.
+
+Version **0.8.1** is a cosmetic follow-up: the active/pending target sensors now show a radiator or AC icon based on
+their state instead of the generic eye icon.
 
 The next developer should start with section 8 (Next steps).
 
@@ -216,6 +220,8 @@ Events fired on the HA bus:
 - `hvac_modes` always contains `off`/`heat`; `cool` is offered when the AC target advertises it.
 - Presets are the intersection of both targets' presets, or the union when the intersection is empty, plus `none`.
 - `min_temp`, `max_temp` and `target_temperature_step` come from the active target (or the AC/first available one).
+- `sensor.<name>_active_target` and `sensor.<name>_pending_target` use a state-dependent icon (`mdi:radiator` for
+  radiator, `mdi:air-conditioner` for AC, `mdi:hvac` for both, `mdi:hvac-off` for none) instead of the generic eye.
 
 ### 3.6 Manual mode (proxy-owned)
 
@@ -538,17 +544,17 @@ policies, boost safety/expiry/return, lock enforcement/persistence, persistence,
 
 ### 8.1 Immediate
 
-1. Owner: push the current working tree (versions **0.6.0**–**0.8.0**: read-only VTherm display attributes, the
-   native lock, the proxy-owned manual mode, and the split locks), then update ClimateRouter through the
-   **Marketplace** in the test HA (custom repository `gume/climaterouter`, repository id `1448098130`) and restart
-   Home Assistant. Do not re-add the old `custom_components/climaterouter` bind mount: it makes the folder a mount
-   point (`EBUSY`) and the Marketplace cannot back it up before replacing it.
+1. Owner: push the current working tree (versions **0.6.0**–**0.8.1**: read-only VTherm display attributes, the
+   native lock, the proxy-owned manual mode, the split locks, and the target-sensor icons), then update ClimateRouter
+   through the **Marketplace** in the test HA (custom repository `gume/climaterouter`, repository id `1448098130`) and
+   restart Home Assistant. Do not re-add the old `custom_components/climaterouter` bind mount: it makes the folder a
+   mount point (`EBUSY`) and the Marketplace cannot back it up before replacing it.
 2. Open **Configure** once after the update and re-save the sections, so the entry drops the removed manual-switch
    key and uses the new sectioned options. Confirm the collapsed sections render correctly, that the options menu
    returns after each section save, and that **Finish** closes it.
 3. Verify in the live instance that the proxy exposes `is_over_switch`/`power_percent` while the radiator is active
    and the Equinox gauge/status icons appear. Verify the lock button is absent (`hide_lock_button: true`) and that
-   `is_lock_configured` is not exposed.
+   `is_lock_configured` is not exposed. Confirm the active/pending target sensors show the radiator/AC icon (0.8.1).
 4. Enable the UI lock and Lock B in the options, set a short auto-relock delay and verify in the live instance: the
    `lock.<name>_lock` entity appears, user commands are blocked while automation/schedule commands continue, the
    code is enforced on unlock, auto-relock fires, restart keeps the remaining deadline, and manual mode rejects
