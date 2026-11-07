@@ -35,6 +35,9 @@
 | `40f510c` | `feat: split the proxy UI lock from the manual schedule lock` |
 | `e60bbfc` | `feat: sectioned config/options flows with the new manual and display options` |
 | `07e04f4` | `feat: gate VTherm identity attributes behind expose_vtherm_identity` |
+| `4ebab35` | `fix: seed the manual baseline before the first UI move` |
+| `87274cd` | `chore: bump version to 0.8.0` |
+| `e4c6678` | `docs: record the 0.8.0 proxy rework and manual-mode entities` |
 
 Everything through `bf19c92` (version **0.5.0**) is pushed to `origin/main` and installed in the live test instance.
 Local commits `28fbf93` (version **0.6.0**, read-only VTherm display attributes), `e0634e2` (docs), `97c620e`
@@ -579,16 +582,17 @@ with a Python version matching the supported HA. Suggested coverage:
 - services: target resolution, route override, clear override;
 - entity state: optimistic window, mirroring, attributes.
 
-### 8.3 M4 — manual override (implemented in this checkout)
+### 8.3 M4 — proxy-owned manual mode (implemented in this checkout)
 
-- [x] `climaterouter.set_manual_override` / `cancel_manual_override` with the schema from `PLAN.md` §11.
-- [x] Baseline `DesiredState`, absolute UTC deadline, persistence, restore on expiry/cancel.
-- [x] Schedule commands update the baseline while the override keeps winning.
-- [x] Override is re-applied after a handover and persisted across restart (expired deadlines are discarded).
-- [x] `binary_sensor.manual_override`, `sensor.override_remaining`, cancel button.
-- [x] `climaterouter_override_started` / `climaterouter_override_ended` events.
-- [x] Unit tests for the model helpers (`with_override`, serialization, expiry/remaining).
-- [ ] Integration tests for expiry, cancel, off, restart and handover (needs HA test harness).
+- [x] `ManualMode` model with desired state, optional absolute deadline (`None` = infinite), baseline and timer
+      metadata; legacy bounded overrides migrate on load.
+- [x] UI temperature/preset moves start manual mode; repeat moves update the value without resetting the timer.
+- [x] `climaterouter.enter_manual_mode`, `set_manual_timer`, `return_to_schedule`; deprecated aliases retained.
+- [x] `switch.manual_mode`, `select.manual_timer`, `button.return_to_schedule`, `binary_sensor.manual_mode`,
+      `sensor.manual_remaining`, `sensor.manual_until`, diagnostic `sensor.manual_timer_minutes`.
+- [x] Persistence, handover carry-over, Lock B (`manual_blocks_schedule`) automation rejection.
+- [x] Unit tests for the model helpers (`with_manual_mode`, serialization, expiry/remaining, migration).
+- [ ] Integration tests for auto-entry, timer change/off, return, restart and handover (needs HA test harness).
 - [ ] Live verification in the 2026.11 test instance.
 
 ### 8.4 M5 — conflict handling (implemented in this checkout)
