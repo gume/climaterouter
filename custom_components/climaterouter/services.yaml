@@ -128,8 +128,8 @@ return_to_schedule:
       domain: climate
 
 set_manual_override:
-  name: Set manual override
-  description: Apply a temperature or preset for a bounded time, then restore the latest schedule command.
+  name: Set manual override (deprecated)
+  description: Deprecated alias for enter_manual_mode.
   target:
     entity:
       integration: climaterouter
@@ -137,18 +137,18 @@ set_manual_override:
   fields:
     duration_minutes:
       name: Duration
-      description: How long the override lasts. Defaults to the configured override duration.
+      description: Timer length in minutes; 0 keeps manual mode active until it is switched off.
       required: false
       example: 45
       selector:
         number:
-          min: 1
+          min: 0
           max: 1440
           unit_of_measurement: min
           mode: box
     temperature:
       name: Temperature
-      description: Target temperature for the override.
+      description: Manual target temperature.
       required: false
       example: 22.5
       selector:
@@ -160,14 +160,14 @@ set_manual_override:
           mode: box
     preset_mode:
       name: Preset
-      description: Preset to apply for the override.
+      description: Manual preset mode.
       required: false
       example: comfort
       selector:
         text:
     hvac_mode:
       name: HVAC mode
-      description: Optional mode override. Use off to cancel the override and turn the proxy off.
+      description: Manual HVAC mode. Use off to end manual mode and turn the proxy off.
       required: false
       selector:
         select:
@@ -177,8 +177,8 @@ set_manual_override:
             - "off"
 
 cancel_manual_override:
-  name: Cancel manual override
-  description: Deprecated alias for returning to the schedule.
+  name: Cancel manual override (deprecated)
+  description: Deprecated alias for return_to_schedule.
   target:
     entity:
       integration: climaterouter
@@ -222,7 +222,7 @@ cancel_boost:
 
 lock:
   name: Lock
-  description: Lock the router so user and automation commands are rejected.
+  description: Lock user commands on the proxy. Schedule and automation commands continue.
   target:
     entity:
       integration: climaterouter
