@@ -184,7 +184,10 @@ class RouterClimate(RouterEntity, ClimateEntity):
             entity_state = self.hass.states.get(state.entity_id)
             if entity_state is not None:
                 attributes.append(entity_state.attributes)
-        return build_vt_display_attributes(attributes)
+        return build_vt_display_attributes(
+            attributes,
+            include_identity=self.coordinator.config.expose_vtherm_identity,
+        )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

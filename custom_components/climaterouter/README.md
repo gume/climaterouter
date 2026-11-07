@@ -21,9 +21,11 @@ Implemented milestones (see [`docs/PLAN.md`](../../docs/PLAN.md)):
 ## Lovelace cards
 
 The proxy exposes a read-only subset of the active target's VTherm attributes (`vt_display.py`), so Equinox and
-similar cards can show the regulation percentage and the window/presence/safety status of the active target. The
-lock is deliberately not exposed: Equinox calls `versatile_thermostat.lock`/`unlock` on the card entity, which a
-proxy cannot receive. Set `hide_lock_button: true` when the card targets the proxy.
+similar cards can show the regulation percentage of the active target. VTherm identity-detection attributes
+(`is_*_configured` and `specific_states`) are only exposed when the `expose_vtherm_identity` option is enabled,
+because they make cards render controls the proxy cannot operate. The lock is deliberately not exposed: Equinox
+calls `versatile_thermostat.lock`/`unlock` on the card entity, which a proxy cannot receive. Set
+`hide_lock_button: true` when the card targets the proxy.
 
 ## Entities
 

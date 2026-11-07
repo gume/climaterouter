@@ -53,16 +53,21 @@ The proxy is deliberately thin:
 ### Lovelace cards (Equinox / VTherm)
 
 The proxy forwards a **read-only** subset of the active target's VTherm attributes, so cards that render VTherm
-extras (for example Equinox) can show the radiator's power percentage, window/presence/safety messages and similar
-status. The AC is an `over_climate` thermostat and has no regulation percentage, so the power gauge only appears
-while the radiator is active.
+extras (for example Equinox) can show the radiator's power percentage and similar status. The AC is an
+`over_climate` thermostat and has no regulation percentage, so the power gauge only appears while the radiator is
+active.
+
+VTherm identity-detection keys (the `is_*_configured` flags and `specific_states`) are **off by default**. They
+make some cards switch into their full VTherm mode, which renders controls backed by `versatile_thermostat.*`
+services that cannot run on the proxy. Enable **Expose VTherm identity-detection attributes** in the options only
+for a card that needs them.
 
 The Equinox **lock button still cannot drive the proxy's lock**: Equinox calls
 `versatile_thermostat.lock`/`unlock` on the card entity, and those services only work on real VTherm entities.
-Keep `hide_lock_button: true` on the card when it targets `climate.climaterouter` and use the native
-`lock.climaterouter_lock` entity (or `climaterouter.lock` / `climaterouter.unlock`) instead. The native lock is
-enabled in the integration options and optionally blocks user commands, automation commands, or both. See
-[`docs/HANDOVER.md`](docs/HANDOVER.md) §3.9 for the alternatives.
+Keep `hide_lock_button: true` on the card when it targets `climate.climaterouter` and use the UI lock entity
+`lock.climaterouter_lock` (or `climaterouter.lock` / `climaterouter.unlock`) instead. The UI lock only blocks
+user-initiated commands; schedule and automation traffic keeps running. See
+[`docs/HANDOVER.md`](docs/HANDOVER.md) §3.9 and §3.10.
 
 ## Planned capabilities
 

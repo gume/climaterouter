@@ -7,6 +7,15 @@ currently active target(s), which keeps indicators such as the power/valve
 percentage and the window/presence/safety messages useful without turning the
 proxy into a second VTherm.
 
+Two groups of keys are distinguished:
+
+* **Display keys** (regulation percentages, managers, configuration) are always
+  forwarded; they only supply data for read-only indicators.
+* **Identity keys** (the ``is_*_configured`` flags and ``specific_states``) make
+  some cards switch into their full VTherm mode. That mode renders controls
+  backed by ``versatile_thermostat.*`` services, which cannot run on the proxy,
+  so they are only forwarded when ``expose_vtherm_identity`` is enabled.
+
 The lock feature is deliberately **not** forwarded. Equinox implements its lock
 button by calling ``versatile_thermostat.lock``/``unlock`` on the card entity.
 Those services only work on real VTherm platform entities, so exposing
@@ -18,13 +27,19 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-_SIMPLE_KEYS = (
+_DISPLAY_KEYS = (
     "is_over_switch",
     "is_over_valve",
     "is_over_climate",
     "power_percent",
     "valve_open_percent",
     "on_percent",
+)
+
+# These flags make some cards (for example HOLM) switch into their full
+# Versatile Thermostat mode. ClimateRouter cannot serve the VTherm-only
+# services those controls call, so the flags are opt-in.
+_IDENTITY_FLAG_KEYS = (
     "is_power_configured",
     "is_presence_configured",
     "is_motion_configured",
@@ -82,6 +97,8 @@ def _score(attributes: Mapping[str, Any]) -> int:
 
 def build_vt_display_attributes(
     active_attributes: Iterable[Mapping[str, Any]],
+    *,
+    include_identity: bool = False,
 ) -> dict[str, Any]:
     """Build the read-only VTherm attributes shown by the proxy.
 
@@ -89,6 +106,12 @@ def build_vt_display_attributes(
     currently active targets. When two targets are active (boost), the one with
     the most useful regulation information wins, so the power gauge reflects the
     device that actually reports a percentage.
+
+    Harmless display keys (regulation percentages, managers and the
+    configuration block) are always forwarded. The ``is_*_configured`` flags and
+    the curated ``specific_states`` block are only forwarded when
+    ``include_identity`` is true: they make some cards switch into their full
+    VTherm mode, which renders controls the proxy cannot operate.
     """
     candidates = list(active_attributes)
     if not candidates:
@@ -98,9 +121,14 @@ def build_vt_display_attributes(
     primary = max(candidates, key=_score)
     result: dict[str, Any] = {}
 
-    for key in _SIMPLE_KEYS:
+    for key in _DISPLAY_KEYS:
         if key in primary:
             result[key] = primary[key]
+
+    if include_identity:
+        for key in _IDENTITY_FLAG_KEYS:
+            if key in primary:
+                result[key] = primary[key]
 
     for key in _MANAGER_KEYS:
         if (manager := _as_dict(primary.get(key))) is not None:
@@ -109,7 +137,9 @@ def build_vt_display_attributes(
     if (configuration := _as_dict(primary.get("configuration"))) is not None:
         result["configuration"] = _copy_mapping(configuration, _CONFIGURATION_KEYS)
 
-    if (specific_states := _as_dict(primary.get("specific_states"))) is not None:
+    if include_identity and (
+        specific_states := _as_dict(primary.get("specific_states"))
+    ) is not None:
         # ``is_locked`` is intentionally omitted: the proxy has no lock command
         # that Equinox could call, and a locked-looking card could not be
         # unlocked from the same UI.

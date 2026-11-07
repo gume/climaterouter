@@ -209,8 +209,10 @@ class MockClimate(ClimateEntity):
 | Test | Expected |
 |---|---|
 | No active targets | No VTherm attributes. |
-| Active `over_switch` target | `is_over_switch`, `power_percent`, managers and curated `specific_states` are forwarded. |
-| Lock configured on the target | `is_lock_configured`, `lock_manager` and `specific_states.is_locked` are **not** forwarded. |
+| Active `over_switch` target | `is_over_switch`, `power_percent`, managers and `configuration` are always forwarded. |
+| Identity keys, default | `is_*_configured` flags and `specific_states` are **not** forwarded. |
+| Identity keys, `include_identity=True` | Flags and the curated `specific_states` are forwarded. |
+| Lock configured on the target | `is_lock_configured`, `lock_manager` and `specific_states.is_locked` are **never** forwarded. |
 | Boost / both targets active | The target with a regulation percentage supplies the gauge. |
 | Active `over_climate` target | No `power_percent`, matching the real VTherm. |
 | Plain climate target | No VTherm attributes. |

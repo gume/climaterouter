@@ -290,13 +290,26 @@ Events fired on the HA bus:
 ### 3.9 Lovelace card compatibility (Equinox)
 
 Equinox 0.4.4 builds its VTherm view model only when the climate entity exposes VTherm attributes
-(`is_over_*`, `configuration`, `specific_states`, ...). The proxy now forwards a **read-only** subset from the
-active target (`vt_display.py`):
+(`is_over_*`, `configuration`, `specific_states`, ...). The proxy forwards a **read-only** subset from the active
+target (`vt_display.py`), split into two groups:
+
+**Always forwarded (harmless display data):**
 
 - `is_over_switch` / `is_over_valve` / `is_over_climate`, `power_percent`, `valve_open_percent`, `on_percent`;
 - `configuration` (`type`, `have_valve_regulation`, `proportional_function`);
-- read-only managers and flags for power, presence, window, safety and heating-failure;
-- a curated `specific_states` with `messages`/`hvac_mode_reason` (without `is_locked`).
+- read-only managers for power, presence, window, safety and heating-failure;
+- `vtherm_over_valve` / `vtherm_over_climate_valve` regulation details.
+
+**Only with `expose_vtherm_identity` (default off):**
+
+- the `is_power_configured` / `is_presence_configured` / `is_motion_configured` / `is_window_configured` /
+  `is_window_auto_configured` / `is_safety_configured` / `is_heating_failure_detection_configured` /
+  `is_repair_incorrect_state_configured` flags;
+- a curated `specific_states` with `messages`/`hvac_mode_reason`/`hvac_off_reason` (without `is_locked`).
+
+The identity group makes some cards, HOLM in particular, switch into their full VTherm mode. Those modes render
+controls backed by `versatile_thermostat.*` services, which cannot run on a proxy, so they stay off unless a card
+explicitly needs them. Enabling the option re-enables the previous 0.6/0.7 behaviour.
 
 When two targets are active (boost), the target that reports a regulation percentage wins, so the gauge shows the
 radiator's `power_percent`. An `over_climate` target has no regulation percentage, matching the real VTherm.
