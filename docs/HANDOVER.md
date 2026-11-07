@@ -50,6 +50,8 @@
 | `d1190df` | `docs: record the Marketplace investigation commits` |
 | `e025cf4` | `fix: initialize the sensor icon attribute` |
 | `a1c4b66` | `docs: hand over the 0.8.1 live check and sensor fix` |
+| `0635928` | `docs: record the handover commit` |
+| `243f98f` | `docs: record the clean e025cf4 Marketplace install` |
 
 Everything through `e025cf4` is pushed to `origin/main`. The documentation commits after it are not pushed yet. The
 test instance runs a clean Marketplace install of `e025cf4` (version **0.8.1**). The assistant has no GitHub
