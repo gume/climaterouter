@@ -45,17 +45,18 @@
 | `baa2d49` | `test: guard translation parity and field descriptions` |
 | `50b6d16` | `docs: correct deprecated service descriptions` |
 | `b68bdbb` | `docs: align plan and handover with the 0.8.x implementation` |
+| `ade30ba` | `test: stop bind-mounting climaterouter in the Docker lab` |
 
-Everything through `bf19c92` (version **0.5.0**) is pushed to `origin/main` and installed in the live test instance.
-Local commits from `28fbf93` (version **0.6.0**, read-only VTherm display attributes) onward are not pushed yet. The
-current checkout is version **0.8.1**. The assistant has no GitHub credentials, and the owner creates tags/releases.
+Everything through `d3af8b4` is pushed to `origin/main` and the test instance is running **0.8.0** (`fd009ea`). The
+current checkout is version **0.8.1**. The assistant has no GitHub credentials; the owner pushes.
 
 ---
 
 ## 1. Where things stand
 
 Milestones M1–M6 from [`PLAN.md`](PLAN.md) are implemented. The owner reports live verification through version
-**0.8.0** in the test Home Assistant; 0.8.1 is not yet visible there because no matching tag/release exists.
+**0.8.0** in the test Home Assistant. The Marketplace now sees the 0.8.1 commits (`d3af8b4`) and offers the update;
+installing it is the next live check.
 
 | Milestone | State | Notes |
 |---|---|---|
@@ -414,12 +415,16 @@ Defined in `test_environment/`; full instructions in [`TEST_ENVIRONMENT.md`](TES
 - The live instance runs Home Assistant **2026.11**, where the built-in **Marketplace** replaced HACS. ClimateRouter
   was originally installed by bind-mounting the checkout into the container, so the Marketplace did not track it.
   The mount has been removed and ClimateRouter is now a Marketplace-managed custom repository
-  (`gume/climaterouter`, repository id `1448098130`). The local `test_environment/` Compose lab is reference only and
-  cannot be started from this host.
-- The Marketplace installs from the default branch (`main`). The owner has updated and tested the integration
-  through version **0.8.0**. Update detection appears to require a matching tag/release: the local repository only
-  has tag `v0.4.0`, which explains why the 0.8.1 push is not offered as an update. The owner must create and push
-  `v0.8.1` (or a release) before the 0.8.1 build can be installed.
+  (`gume/climaterouter`, repository id `1448098130`). The container runs on this host and mounts
+  `test_environment/config` as `/config`; that directory is git-ignored runtime state.
+- The Marketplace installs from the default branch (`main`) and identifies the version by the **short commit
+  hash**, not by a tag or release. The owner has updated and tested the integration through commit `fd009ea`
+  (version **0.8.0**).
+- Installed custom repositories refresh their commit metadata at Home Assistant startup and then every **48 hours**
+  (`marketplace/base.py`, `timedelta(hours=48)`). A push made after the last startup is therefore not visible until
+  Home Assistant restarts, the repository is refreshed from the Marketplace, or 48 hours pass. The assistant
+  restarted the container on 2026-11-07 and `last_commit` moved from `fd009ea` to `d3af8b4`, so the update is now
+  offered. No tag or release is required.
 - The owner tests remotely with a long-lived Home Assistant token; the component itself is not bind-mounted.
 - Live-entering v0.4.0 exposed a real service bug: HA 2026.11 changed `async_extract_entity_ids()` to take only the
   `ServiceCall`. The previous `(hass, call)` call made every `climaterouter.*` service fail with
@@ -506,8 +511,8 @@ ACs; later versions use the two VTherm entities described in section 4.
 
 The owner reports live verification through version **0.8.0** for M4 manual mode, M5 conflicts, M6 boost, the native
 lock, the 0.8.0 proxy rework, and the read-only VTherm display pass-through. Detailed per-scenario results were not
-recorded in this file. Version **0.8.1** (target icons, field help, persistence/flow fixes) still needs a tag and a
-live check.
+recorded in this file. Version **0.8.1** (target icons, field help, persistence/flow fixes) is offered by the
+Marketplace as commit `d3af8b4` and still needs a live check.
 
 Not yet covered by automated tests: config flow, coordinator, handover, manual expiry/return/handover/restart,
 conflict policies, boost safety/expiry/return, lock enforcement/persistence, persistence, event payloads.
@@ -539,15 +544,13 @@ conflict policies, boost safety/expiry/return, lock enforcement/persistence, per
    interrupts an active old target.
 7. **`command_confirm_timeout` is not implemented.** The optimistic window uses `settle_time`; there is no separate
    per-command confirmation timeout.
-8. **`route_changed` fires only when the active target changes**, not when only `route_reason` changes. This is
-   intentional (the event name describes the target); the payload still includes the current reason.
-9. **`strings.json` and `translations/en.json` are duplicated.** `tests/test_translations.py` now fails if they drift
+8. **`strings.json` and `translations/en.json` are duplicated.** `tests/test_translations.py` now fails if they drift
    and also requires a `data_description` for every config/options field.
-10. `binary_sensor.target_mismatch` compares the two targets' setpoints and presets; it is not the full M5 mismatch
-    detector. Use `binary_sensor.<name>_conflict` for the desired-vs-actual comparison.
-11. **Fan/swing/humidity pass-through is not exposed.** `DesiredState` carries `fan_mode`/`swing_mode`, but the
+9. `binary_sensor.target_mismatch` compares the two targets' setpoints and presets; it is not the full M5 mismatch
+   detector. Use `binary_sensor.<name>_conflict` for the desired-vs-actual comparison.
+10. **Fan/swing/humidity pass-through is not exposed.** `DesiredState` carries `fan_mode`/`swing_mode`, but the
     climate entity only advertises temperature, preset, turn-on and turn-off.
-12. **Equinox's lock button still cannot drive the native lock.** Equinox hard-codes
+11. **Equinox's lock button still cannot drive the native lock.** Equinox hard-codes
     `versatile_thermostat.lock`/`unlock` on the card entity, and those are VTherm platform entity services, so a
     ClimateRouter proxy cannot receive them. `vt_display.py` therefore never forwards `is_lock_configured` or
     `lock_manager`. Use `hide_lock_button: true` with the native `lock.<name>_lock` entity (0.7.0) or the
@@ -560,10 +563,10 @@ conflict policies, boost safety/expiry/return, lock enforcement/persistence, per
 
 ### 8.1 Immediate
 
-1. Owner: push the current working tree and create/push tag `v0.8.1` (or a GitHub release). The Marketplace only
-   offered updates up to 0.8.0; the local repository has no tag after `v0.4.0`, which is the likely reason the
-   0.8.1 push was not visible. Then update ClimateRouter through the **Marketplace** in the test HA (custom
-   repository `gume/climaterouter`, repository id `1448098130`) and restart Home Assistant. Do not re-add the old
+1. Owner: push the current working tree, then restart Home Assistant (or use the repository **Refresh** action in
+   the Marketplace) so the installed custom repository re-reads `last_commit`. The Marketplace is commit-based; no
+   tag or release is needed. Then install the offered update through the **Marketplace** (custom repository
+   `gume/climaterouter`, repository id `1448098130`) and restart Home Assistant. Do not re-add the old
    `custom_components/climaterouter` bind mount: it makes the folder a mount point (`EBUSY`) and the Marketplace
    cannot back it up before replacing it.
 2. Open **Configure** once after the update and save any section. The schema-only save drops the removed
@@ -630,7 +633,7 @@ with a Python version matching the supported HA. Suggested coverage:
 - [x] Add hassfest and HACS validation workflow (`.github/workflows/validate.yml`, brands ignored).
 - [ ] Integration tests for boost start/expiry/cancel/restart and return handover.
 - [x] Live verification in the test HA (through 0.8.0).
-- [x] `v0.4.0` tag exists; later version tags/releases are owner actions.
+- [x] The Marketplace installs from `main` by commit; tags/releases are optional owner actions.
 
 ### 8.6 0.7.0–0.8.1 proxy rework and follow-up
 
@@ -644,7 +647,7 @@ with a Python version matching the supported HA. Suggested coverage:
 - [x] Schema-only config saves (drop removed keys, keep `entry.options` empty).
 - [x] Translation-sync and field-description tests.
 - [x] Live verification through 0.8.0.
-- [ ] Tag/release **v0.8.1** and verify the follow-up batch live.
+- [ ] Install commit `d3af8b4` (0.8.1) through the Marketplace and verify the follow-up batch live.
 - [ ] Integration tests for the flows, locks, and manual mode.
 
 ---

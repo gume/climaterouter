@@ -1251,7 +1251,7 @@ interrupted heating in tests.
 - [x] Hassfest and HACS validation workflow (`.github/workflows/validate.yml`).
 - [x] Live verification in the test HA (through 0.8.0).
 - [ ] Integration tests for boost start/expiry/cancel/resume (needs the HA test harness).
-- [ ] `v0.4.0` tag exists; later version tags/releases are owner actions.
+- [x] The Marketplace installs from `main` by commit; tags/releases are optional owner actions.
 
 **Acceptance:** boost is safely disabled by default; enabling it activates both targets for a bounded time; HACS
 and hassfest pass.
@@ -1264,7 +1264,7 @@ and hassfest pass.
 - [x] Sectioned setup/options/reconfigure flows with brief field descriptions.
 - [x] Read-only VTherm display attributes; identity attributes are opt-in.
 - [x] State-dependent radiator/AC icons on the target sensors.
-- [x] Live verification through 0.8.0; 0.8.1 still needs a release/tag and a live check.
+- [x] Live verification through 0.8.0; 0.8.1 is offered by the Marketplace as `d3af8b4` and still needs a live check.
 - [ ] Integration tests for the flows, locks, and manual mode.
 
 ---
@@ -1411,4 +1411,4 @@ target:
 - [x] Outdoor sensor staleness is visible.
 - [x] Both-target-on is detected.
 - [x] Boost is feature-flagged and safe.
-- [ ] Diagnostics, translations, HACS/hassfest, and tests pass (0.8.1 still needs a tag and a live check).
+- [ ] Diagnostics, translations, HACS/hassfest, and tests pass (0.8.1 still needs a live check).

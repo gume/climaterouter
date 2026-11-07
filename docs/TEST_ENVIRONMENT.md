@@ -10,8 +10,8 @@ The lab has three layers:
 2. **Versatile Thermostat (VTherm)** — two real VTherm config entries, one `over_switch` radiator and one
    `over_climate` AC, both driven by the fake hardware. VTherm only supports config-flow setup, so this part is done
    once through the UI.
-3. **ClimateRouter** — the integration under development, mounted from this repository. It is added as a normal
-   config entry and exposes `climate.climaterouter`.
+3. **ClimateRouter** — the integration under development, installed through the **Marketplace** as a custom
+   repository (`gume/climaterouter`). It is added as a normal config entry and exposes `climate.climaterouter`.
 
 Scheduler Component is added last and should see only the proxy entity.
 
@@ -25,13 +25,16 @@ Scheduler Component is added last and should see only the proxy entity.
 - Linux is assumed by the port mapping below. Change the host port in `test_environment/docker-compose.yml` if
   `38123` is already in use.
 
-The repository must be checked out locally because the container bind-mounts both custom components:
+The repository must be checked out locally because the container bind-mounts the test-only `fake_hvac`
+component:
 
 ```text
 test_environment/config                      -> /config
-custom_components/climaterouter              -> /config/custom_components/climaterouter (read-only)
 test_environment/custom_components/fake_hvac -> /config/custom_components/fake_hvac (read-only)
 ```
+
+ClimateRouter itself is **not** bind-mounted. It is installed and updated through the Marketplace, so the folder
+`/config/custom_components/climaterouter` is managed by Home Assistant and must not be a mount point.
 
 ---
 
@@ -313,13 +316,14 @@ data:
 
 ## 6. Add ClimateRouter
 
-The integration implements milestones M1–M3: config flow, proxy routing and safe handover. It is mounted from this
-repository, so code changes only need a container restart.
+The integration is installed from the **Marketplace** as a custom repository. The Marketplace installs the latest
+commit on the default branch and shows that commit as the version (for example `d3af8b4`), so no tag or GitHub
+release is needed.
 
-1. Ensure the container is running and the integration appears under **Settings → Devices & services → Add
-   integration → ClimateRouter**. If it does not appear, check that the bind mount exists and restart the
-   container.
-2. Create an entry with:
+1. Open **Settings → Devices & services → Marketplace**, add the custom repository `gume/climaterouter` if it is
+   not listed, and install it.
+2. Restart Home Assistant after the install so the new custom component is loaded.
+3. Create an entry with:
    - name: `ClimateRouter`;
    - radiator entity: `climate.vtherm_radiator`;
    - AC entity: `climate.vtherm_ac`;
@@ -332,9 +336,9 @@ repository, so code changes only need a container restart.
      - `startup_grace: 5`
      - `settle_time: 2`
      - `outdoor_stale_after: 300`
-     - `default_override_minutes: 1`
-     - `max_override_minutes: 5`
-3. Finish and verify that `climate.climaterouter` and the diagnostic entities exist.
+     - `default_manual_minutes: 1`
+     - `max_manual_minutes: 5`
+4. Finish and verify that `climate.climaterouter` and the diagnostic entities exist.
 
 Until the two VTherms exist, the router can also be pointed directly at `climate.fake_ac` (radiator role) and a
 second fake system's AC (AC role). Services on `fake_hvac` then need a `name` field to say which system to change.
@@ -604,7 +608,8 @@ docker compose down --rmi local
 | Room temperature never changes | `simulation_enabled` is true, `update_interval > 0`, and the radiator/AC is actually on. Check `sensor.fake_thermal_power`. |
 | Routing never changes | The old target may still be heating. Check `binary_sensor.climaterouter_handover_pending`; make it idle or wait for the cycle to end. |
 | Override does not expire quickly | Override uses real time, not `time_scale`. Use `duration_minutes: 1` for tests. |
-| Entities disappear after restart | Check that the bind mounts still exist and that the container was not recreated with a different config path. |
+| Entities disappear after restart | Check that the `fake_hvac` bind mount still exists and that the container was not recreated with a different config path. |
+| Marketplace does not offer a new ClimateRouter commit | Installed custom repositories refresh their commit at Home Assistant startup and then every 48 hours. Restart Home Assistant, or use the repository **Refresh** action in the Marketplace, to pick up a new push. |
 | Port 38123 already in use | Stop the other Home Assistant instance or change the host port in `docker-compose.yml`. |
 
 ---

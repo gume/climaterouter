@@ -21,15 +21,18 @@ development in this checkout. Keep it up to date when the environment changes.
 
 ## Test Home Assistant
 
-- The test Home Assistant **is not this checkout**. It runs remotely/in a
-  container and is reachable only through HTTP at <http://localhost:38123>.
-- Do **not** try to reach the HA config directory or `.storage` from this host.
-  The supported development loop is: change code here → commit → owner pushes a
-  new version/tag → update the custom component through HACS in the test HA.
+- The test Home Assistant runs in the Docker container `climaterouter-ha`
+  (Compose project `climaterouter-test`) on this host, reachable at
+  <http://localhost:38123>. Its `/config` is the git-ignored
+  `test_environment/config/` directory.
+- Never commit or print runtime state from `test_environment/config/.storage`;
+  it contains credentials (for example the Marketplace GitHub token).
+- The supported development loop is: change code here → commit → owner pushes
+  `main` → refresh/restart the Marketplace in the test HA → install the update.
 - A real **Versatile Thermostat (VTherm)** setup is present in the test instance;
   the two configured VTherm entities are the intended radiator/AC targets.
-- The local Docker test environment in `test_environment/` cannot be started from
-  this host. It remains documentation/reference only.
+- The Docker lab in `test_environment/` is started and stopped with
+  `docker compose` from that directory.
 
 ## Testing against the live instance
 
@@ -42,7 +45,8 @@ development in this checkout. Keep it up to date when the environment changes.
   - `POST /api/services/climate/set_temperature`
   - `POST /api/services/homeassistant/restart`
   - `/api/config/config_entries/entry` (REST)
-  - WebSocket API for HACS/config-entry operations if needed.
+  - WebSocket API for Marketplace/config-entry operations if needed
+    (`marketplace/repository/refresh` forces a commit re-read).
 - Check the integration state with entities such as
   `climate.climaterouter`, `sensor.climaterouter_active_target`,
   `binary_sensor.climaterouter_handover_pending`, and the `climaterouter.*`
@@ -50,18 +54,23 @@ development in this checkout. Keep it up to date when the environment changes.
 
 ## Releasing / updating in the test HA
 
-HACS installs custom components from the GitHub repository. To make a new build
-visible in the test instance:
+ClimateRouter is installed through the Home Assistant **Marketplace** as the
+custom repository `gume/climaterouter`. The Marketplace installs the latest
+commit on `main` and shows the short commit hash as the version; no tag or
+release is required.
+
+To make a new build visible in the test instance:
 
 1. Finish and test the change locally (`pytest`, optional `ruff`).
 2. Bump the version in **both** places:
    - `custom_components/climaterouter/manifest.json`
    - `custom_components/climaterouter/const.py` (`VERSION`)
-3. Commit the change (no push).
-4. The owner pushes `main` and creates/pushes the matching tag/release
-   (for example `v0.2.0`). HACS uses the normal GitHub source archive; `hacs.json`
-   deliberately does not enable `zip_release`, so no release asset is required.
-5. In the test HA, update the repository through HACS and restart Home Assistant.
+3. Commit the change (no push); the owner pushes `main`.
+4. Refresh the Marketplace metadata. Installed custom repositories re-read
+   `last_commit` at Home Assistant startup and then only every **48 hours**, so
+   either restart Home Assistant or use the repository **Refresh** action in the
+   Marketplace.
+5. Install the offered update in the Marketplace and restart Home Assistant.
 6. Verify through the REST API and record the result in `docs/HANDOVER.md`.
 
 Do not claim a change is verified in the live instance until the API confirms it.
