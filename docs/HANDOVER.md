@@ -31,6 +31,7 @@
 | `97c620e` | `feat: add native ClimateRouter lock` |
 | `38e0ef0` | `refactor: remove the external manual switch routing input` |
 | `ce6d163` | `feat: add proxy-owned manual mode with optional timer` |
+| `a028adf` | `feat: expose manual mode switch, timer select, sensors, and return button` |
 
 Everything through `bf19c92` (version **0.5.0**) is pushed to `origin/main` and installed in the live test instance.
 Local commits `28fbf93` (version **0.6.0**, read-only VTherm display attributes), `e0634e2` (docs), `97c620e`
@@ -59,7 +60,7 @@ still outstanding (see §8).
 A larger **proxy rework** is in progress: proxy-owned manual mode and timer, two separate locks, sectioned
 config/options flows, and VTherm display compatibility split into harmless versus identity keys. Iteration 1
 (`38e0ef0`) removed the external manual-switch routing input; iteration 2 (`ce6d163`) added the proxy-owned manual
-mode model, timer, persistence, and services.
+mode model, timer, persistence, and services; iteration 3 (`a028adf`) exposed the standard-card entities.
 
 The next developer should start with section 8 (Next steps).
 
@@ -80,7 +81,8 @@ custom_components/climaterouter/
 ├── entity.py            # shared coordinator entity + DeviceInfo
 ├── binary_sensor.py     # active/heating/cooling/pending/conflict/stale/ready
 ├── sensor.py            # active/pending/reason/outdoor/timestamps/counts
-├── select.py            # route override (auto/radiator/ac)
+├── select.py            # route override + manual timer
+├── switch.py            # manual mode on/off
 ├── button.py            # recalculate, clear conflicts
 ├── lock.py              # optional native access lock
 ├── services.py          # service registration and entity resolution
@@ -228,8 +230,13 @@ Events fired on the HA bus:
   `set_manual_override` / `cancel_manual_override` names remain as aliases.
 - Events: `climaterouter_manual_mode_started`, `climaterouter_manual_mode_ended`, and
   `climaterouter_manual_timer_changed`.
-- The climate entity exposes `manual_mode` (and the legacy `override` key) plus `binary_sensor.<name>_manual_override`
-  and `sensor.<name>_override_remaining`; the remaining sensor is unknown when the timer is off.
+- Standard-card entities: `switch.<name>_manual_mode` (on = manual, off = return to schedule),
+  `select.<name>_manual_timer` (`off` or minutes), `button.<name>_return_to_schedule`,
+  `binary_sensor.<name>_manual_mode`, `sensor.<name>_manual_remaining`, `sensor.<name>_manual_until`, and a
+  diagnostic `sensor.<name>_manual_timer_minutes`.
+- The climate entity exposes `manual_mode`, `manual_active`, `manual_until`, `manual_timer_minutes`, and
+  `manual_remaining_minutes`; the legacy `override` attribute is still present for older cards. A timer that is off
+  reports `null`/unknown rather than a fake countdown.
 
 ### 3.7 Conflict detection (M5)
 
