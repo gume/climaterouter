@@ -55,12 +55,15 @@
 | `091c4dd` | `docs: record the clean-install commit` |
 | `01fd245` | `style: fix ruff lint and formatting failures` |
 | `b94e279` | `test: add config flow integration tests and CI HA harness` |
-| `a19f2d6` | `fix: expose temperature_unit alongside native_temperature_unit` |
+| `a19f2d6` | `fix: expose temperature_unit alongside native_temperature_unit` (superseded by `beda94c`) |
 | `fc921bf` | `test: cover coordinator routing, services, and entity platforms` |
 | `306ce39` | `docs: record the automated test suite and CI harness` |
 | `759bca5` | `fix: register the sectioned options flow explicitly` |
 | `e0e17db` | `test: cover duplicate, reconfigure, and options flows` |
 | `a41b7e5` | `test: cover fallback, startup adoption, persistence, and handover` |
+| `a20e1d9` | `docs: record the expanded integration test coverage` |
+| `834781e` | `ci: label the combined test step accurately` |
+| `beda94c` | `test: shim the legacy climate unit attribute for older HA harnesses` |
 
 Everything through `e025cf4` is pushed to `origin/main`. The documentation and test commits after it are not pushed
 yet. The test instance runs a clean Marketplace install of `e025cf4` (version **0.8.1**). The assistant has no
@@ -511,8 +514,9 @@ brand assets yet).
 
 The PyPI snapshot reachable from this host only offers `pytest-homeassistant-custom-component` 0.13.205, which pins
 Home Assistant 2025.1.4 rather than 2026.11. The integration tests therefore avoid version-specific assumptions and
-`tests/integration/conftest.py` bridges the one signature difference that matters (`async_extract_entity_ids`). They
-were run locally against that older harness; CI should use the newest release, which tracks 2026.11.
+`tests/integration/conftest.py` bridges the two differences that matter: the `async_extract_entity_ids` signature
+and the legacy `_attr_temperature_unit` attribute. They were run locally against that older harness; CI should use
+the newest release, which tracks 2026.11.
 
 Without the harness installed, `pytest` still passes the 56 pure tests and skips the integration directory.
 
