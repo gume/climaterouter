@@ -672,15 +672,13 @@ Status as of 2026-11-08:
 - [x] coordinator: cold/mild hysteresis, route override, manual-mode start/return, off safety.
 - [x] routing robustness: unavailable-target fallback, missing/stale outdoor hold.
 - [x] startup: adopt one already-running target.
-- [x] persistence: desired state survives unload/setup.
-- [x] handover: forced handover away from an active target.
 - [x] boost: both-target activation, cancel, feature-flag rejection.
 - [x] conflicts: setpoint mismatch under `monitor`.
 - [x] lock: user commands blocked, automations allowed, code validation.
 - [x] services: route override, enter manual mode, manual timer, return to schedule, argument validation.
 - [x] entity platforms: registry coverage, device info, conditional lock platform.
-- [x] handover: active → pending → idle → off → start, off-confirm timeout conflict, route revert while pending,
-      `handover_aborted` event payload.
+- [x] handover: forced handover away from an active target; active → pending → idle → off → start; off-confirm
+      timeout conflict; route revert while pending; `handover_aborted` event payload.
 - [x] startup: restored desired state while targets are missing, then routing resumes when they appear.
 - [x] persistence across reload: desired state, manual deadline/timer, boost deadline.
 - [x] entity behaviour: optimistic setpoint window and mirroring, unavailable proxy, select/button/switch actions.
