@@ -73,11 +73,6 @@ class RouterClimate(RouterEntity, ClimateEntity):
         return self.hass.config.units.temperature_unit
 
     @property
-    def temperature_unit(self) -> str:
-        """Expose the unit for HA versions that read it directly."""
-        return self.native_temperature_unit
-
-    @property
     def hvac_modes(self) -> list[HVACMode]:
         return [HVACMode(mode) for mode in self._snapshot.hvac_modes]
 
