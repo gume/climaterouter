@@ -136,8 +136,8 @@ user-initiated commands; schedule and automation traffic keeps running. See
 
 ## Requirements
 
-- Home Assistant 2026.11 or newer. The integration is developed and validated against 2026.11 (the `stable`
-  container at the time of writing); compatibility with older releases is not verified.
+- Home Assistant 2025.1.4 or newer. The integration is developed against 2026.11, and the automated suite is also
+  run against a 2025.1.4 harness. Releases between the two are expected to work but are not individually tested.
 - Two existing VTherm climate entities: one radiator (`over_switch`) and one AC (`over_climate`).
 - An outdoor temperature sensor.
 - Optional route override through the built-in `select.climaterouter_route_override` entity.
