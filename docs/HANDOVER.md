@@ -77,11 +77,12 @@
 | `514200b` | `test: cover climate optimism, availability, and auxiliary entities` |
 | `2c5c1de` | `fix: support Home Assistant 2025.1.4 and bump to 0.8.2` |
 | `724111f` | `test: capture handover-abort events synchronously` |
+| `9ee81e2` | `ci: update checkout and setup-python actions` |
+| `c560616` | `fix: satisfy hassfest manifest and config schema checks` |
 
-Everything through `e025cf4` is pushed to `origin/main`. The documentation, test-harness, HA 2025.1.4 compatibility
-and coverage-gate commits after it are local only. The test instance runs a clean Marketplace install of `e025cf4`
-(version **0.8.1**); the checkout now declares version **0.8.2**. The assistant has no GitHub credentials; the owner
-pushes.
+Everything through `9ee81e2` is pushed to `origin/main`. The hassfest/HACS fixes (`c560616`) and the documentation
+commit after it are local only. The test instance runs a clean Marketplace install of `e025cf4` (version **0.8.1**);
+the checkout now declares version **0.8.2**. The assistant has no GitHub credentials; the owner pushes.
 
 ---
 
@@ -646,6 +647,9 @@ both-targets-on startup conflicts, auto-relock persistence, remaining config val
    (sections 7.1 and 8.2). Revisit only if an intermediate release turns out to need its own adaptation.
 5. Request upstream Equinox support for a configurable lock service/entity; the card button still cannot target the
    proxy's native lock.
+6. Owner: add repository topics on GitHub (`gh repo edit gume/climaterouter --add-topic home-assistant --add-topic
+   home-assistant-custom-component --add-topic hacs --add-topic integration`). The HACS validation fails until the
+   repository has at least one topic.
 
 ### 8.2 Automated tests and CI
 
@@ -659,7 +663,7 @@ Status as of 2026-11-09:
 | Integration tests (HA harness) | 37 passed |
 | Full suite (HA harness) | 93 passed |
 | CI installs `requirements_test.txt` | yes (intentionally unpinned) |
-| GitHub CI run confirmed | first run failed on the event-capture race; fixed in `724111f`, rerun pending |
+| GitHub CI run confirmed | first run failed on the event-capture race and hassfest key order; fixed in `724111f` and `c560616`, rerun pending |
 | Measured statement coverage | **81 %** (gate 75 %) |
 
 `pytest-homeassistant-custom-component` is wired into `tests/conftest.py`, and the integration suite lives in
@@ -705,7 +709,9 @@ Low priority:
 - [ ] `vt_display.py` coverage is reported as 0 % due to the dual import path used by the pure and integration
       suites; confirm with a combined coverage run;
 - [ ] type checking and a Python version matrix in CI (the coverage gate is in place);
-- [ ] confirm the CI rerun after `724111f` passes.
+- [ ] confirm the CI rerun after `c560616` passes;
+- [ ] owner: add repository topics so the HACS validation passes (for example
+      `home-assistant`, `home-assistant-custom-component`, `hacs`, `integration`).
 
 #### Coverage snapshot
 
