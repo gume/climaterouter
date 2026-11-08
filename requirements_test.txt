@@ -1,3 +1,5 @@
+# Intentionally unpinned: CI tracks the release matching the HA version under
+# test. Pin only when a compatible harness release is known.
 pytest
 pytest-asyncio
 pytest-cov
