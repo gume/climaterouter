@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -219,6 +220,33 @@ async def test_desired_state_survives_reload(hass) -> None:
     assert reloaded.data.desired.hvac_mode == HVAC_HEAT
     assert reloaded.data.desired.target_temperature == 21
     assert reloaded.data.active_targets == frozenset({Target.RADIATOR})
+
+
+async def test_detects_setpoint_mismatch(hass, freezer) -> None:
+    """An external setpoint change is reported under the monitor policy."""
+    _entry, coordinator = await _setup(hass, outdoor=5.0, conflict_policy="monitor")
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+    await hass.async_block_till_done()
+
+    hass.states.async_set(
+        RADIATOR,
+        HVAC_HEAT,
+        {
+            "hvac_modes": [HVAC_HEAT],
+            "hvac_action": "heating",
+            "temperature": 25,
+            "min_temp": 7,
+            "max_temp": 35,
+        },
+    )
+    await hass.async_block_till_done()
+    freezer.tick(timedelta(seconds=3))
+    await coordinator.async_recalculate()
+    await hass.async_block_till_done()
+
+    conflicts = coordinator.data.conflicts
+    assert any(conflict.type == "setpoint_mismatch" for conflict in conflicts)
+    assert coordinator.data.conflict_count >= 1
 
 
 async def test_boost_runs_both_targets_and_cancels_back(hass) -> None:
