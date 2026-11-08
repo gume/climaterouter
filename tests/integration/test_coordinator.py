@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 from homeassistant.const import STATE_OFF
 from homeassistant.core import Context
+from homeassistant.exceptions import HomeAssistantError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.climaterouter.const import DOMAIN
@@ -217,6 +219,37 @@ async def test_desired_state_survives_reload(hass) -> None:
     assert reloaded.data.desired.hvac_mode == HVAC_HEAT
     assert reloaded.data.desired.target_temperature == 21
     assert reloaded.data.active_targets == frozenset({Target.RADIATOR})
+
+
+async def test_boost_runs_both_targets_and_cancels_back(hass) -> None:
+    """Boost activates both targets and cancelling returns to normal routing."""
+    _entry, coordinator = await _setup(hass, outdoor=5.0, boost_enabled=True)
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+    await hass.async_block_till_done()
+    assert coordinator.data.active_targets == frozenset({Target.RADIATOR})
+
+    await coordinator.async_set_boost(duration_minutes=10)
+    await hass.async_block_till_done()
+
+    assert coordinator.data.boost_until is not None
+    assert coordinator.data.active_targets == frozenset({Target.RADIATOR, Target.AC})
+    assert coordinator.data.handover_state == "boost"
+
+    await coordinator.async_cancel_boost()
+    await hass.async_block_till_done()
+
+    assert coordinator.data.boost_until is None
+    assert coordinator.data.active_targets == frozenset({Target.RADIATOR})
+    assert coordinator.data.handover_state == "steady"
+
+
+async def test_boost_requires_the_feature_flag(hass) -> None:
+    """Boost is rejected unless it is enabled in the options."""
+    _entry, coordinator = await _setup(hass, outdoor=5.0)
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+
+    with pytest.raises(HomeAssistantError):
+        await coordinator.async_set_boost(duration_minutes=10)
 
 
 async def test_force_handover_completes_despite_active_old_target(hass) -> None:
