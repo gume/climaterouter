@@ -97,9 +97,7 @@ def _defaults(current: Mapping[str, Any] | None = None) -> dict[str, Any]:
         CONF_NAME: current.get(CONF_NAME, "ClimateRouter"),
         CONF_RADIATOR_ENTITY_ID: current.get(CONF_RADIATOR_ENTITY_ID, vol.UNDEFINED),
         CONF_AC_ENTITY_ID: current.get(CONF_AC_ENTITY_ID, vol.UNDEFINED),
-        CONF_OUTDOOR_SENSOR_ENTITY_ID: current.get(
-            CONF_OUTDOOR_SENSOR_ENTITY_ID, vol.UNDEFINED
-        ),
+        CONF_OUTDOOR_SENSOR_ENTITY_ID: current.get(CONF_OUTDOOR_SENSOR_ENTITY_ID, vol.UNDEFINED),
         CONF_COLD_THRESHOLD: current.get(CONF_COLD_THRESHOLD, DEFAULT_COLD_THRESHOLD),
         CONF_MILD_THRESHOLD: current.get(CONF_MILD_THRESHOLD, DEFAULT_MILD_THRESHOLD),
         CONF_MIN_ROUTE_DWELL: current.get(CONF_MIN_ROUTE_DWELL, DEFAULT_MIN_ROUTE_DWELL),
@@ -138,9 +136,7 @@ def _defaults(current: Mapping[str, Any] | None = None) -> dict[str, Any]:
     }
 
 
-def _number(
-    minimum: float, maximum: float, step: float, unit: str | None = None
-) -> NumberSelector:
+def _number(minimum: float, maximum: float, step: float, unit: str | None = None) -> NumberSelector:
     return NumberSelector(
         NumberSelectorConfig(
             min=minimum,
@@ -159,9 +155,9 @@ def _basic_schema(defaults: Mapping[str, Any]) -> vol.Schema:
             vol.Required(
                 CONF_RADIATOR_ENTITY_ID, default=defaults[CONF_RADIATOR_ENTITY_ID]
             ): EntitySelector(EntitySelectorConfig(domain="climate")),
-            vol.Required(
-                CONF_AC_ENTITY_ID, default=defaults[CONF_AC_ENTITY_ID]
-            ): EntitySelector(EntitySelectorConfig(domain="climate")),
+            vol.Required(CONF_AC_ENTITY_ID, default=defaults[CONF_AC_ENTITY_ID]): EntitySelector(
+                EntitySelectorConfig(domain="climate")
+            ),
             vol.Required(
                 CONF_OUTDOOR_SENSOR_ENTITY_ID,
                 default=defaults[CONF_OUTDOOR_SENSOR_ENTITY_ID],
@@ -173,15 +169,15 @@ def _basic_schema(defaults: Mapping[str, Any]) -> vol.Schema:
 def _routing_schema(defaults: Mapping[str, Any]) -> vol.Schema:
     return vol.Schema(
         {
-            vol.Required(
-                CONF_COLD_THRESHOLD, default=defaults[CONF_COLD_THRESHOLD]
-            ): _number(-50, 60, 0.5, "°C"),
-            vol.Required(
-                CONF_MILD_THRESHOLD, default=defaults[CONF_MILD_THRESHOLD]
-            ): _number(-50, 60, 0.5, "°C"),
-            vol.Required(
-                CONF_MIN_ROUTE_DWELL, default=defaults[CONF_MIN_ROUTE_DWELL]
-            ): _number(0, 86400, 10, "s"),
+            vol.Required(CONF_COLD_THRESHOLD, default=defaults[CONF_COLD_THRESHOLD]): _number(
+                -50, 60, 0.5, "°C"
+            ),
+            vol.Required(CONF_MILD_THRESHOLD, default=defaults[CONF_MILD_THRESHOLD]): _number(
+                -50, 60, 0.5, "°C"
+            ),
+            vol.Required(CONF_MIN_ROUTE_DWELL, default=defaults[CONF_MIN_ROUTE_DWELL]): _number(
+                0, 86400, 10, "s"
+            ),
             vol.Required(
                 CONF_HANDOVER_IDLE_CONFIRM,
                 default=defaults[CONF_HANDOVER_IDLE_CONFIRM],
@@ -189,12 +185,12 @@ def _routing_schema(defaults: Mapping[str, Any]) -> vol.Schema:
             vol.Required(
                 CONF_OFF_CONFIRM_TIMEOUT, default=defaults[CONF_OFF_CONFIRM_TIMEOUT]
             ): _number(1, 3600, 1, "s"),
-            vol.Required(
-                CONF_STARTUP_GRACE, default=defaults[CONF_STARTUP_GRACE]
-            ): _number(0, 600, 1, "s"),
-            vol.Required(
-                CONF_SETTLE_TIME, default=defaults[CONF_SETTLE_TIME]
-            ): _number(0, 600, 1, "s"),
+            vol.Required(CONF_STARTUP_GRACE, default=defaults[CONF_STARTUP_GRACE]): _number(
+                0, 600, 1, "s"
+            ),
+            vol.Required(CONF_SETTLE_TIME, default=defaults[CONF_SETTLE_TIME]): _number(
+                0, 600, 1, "s"
+            ),
             vol.Required(
                 CONF_FALLBACK_ON_UNAVAILABLE,
                 default=defaults[CONF_FALLBACK_ON_UNAVAILABLE],
@@ -266,15 +262,13 @@ def _boost_schema(defaults: Mapping[str, Any]) -> vol.Schema:
 def _lock_schema(defaults: Mapping[str, Any]) -> vol.Schema:
     return vol.Schema(
         {
-            vol.Required(
-                CONF_LOCK_ENABLED, default=defaults[CONF_LOCK_ENABLED]
-            ): BooleanSelector(),
-            vol.Optional(
-                CONF_LOCK_CODE, default=defaults[CONF_LOCK_CODE]
-            ): TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD)),
-            vol.Required(
-                CONF_AUTO_RELOCK_SEC, default=defaults[CONF_AUTO_RELOCK_SEC]
-            ): _number(0, 3600, 1, "s"),
+            vol.Required(CONF_LOCK_ENABLED, default=defaults[CONF_LOCK_ENABLED]): BooleanSelector(),
+            vol.Optional(CONF_LOCK_CODE, default=defaults[CONF_LOCK_CODE]): TextSelector(
+                TextSelectorConfig(type=TextSelectorType.PASSWORD)
+            ),
+            vol.Required(CONF_AUTO_RELOCK_SEC, default=defaults[CONF_AUTO_RELOCK_SEC]): _number(
+                0, 3600, 1, "s"
+            ),
         }
     )
 
@@ -295,24 +289,14 @@ def _sectioned_schema(current: Mapping[str, Any] | None = None) -> vol.Schema:
     return vol.Schema(
         {
             vol.Required(SECTION_BASIC): section(_basic_schema(defaults)),
-            vol.Required(SECTION_ROUTING): section(
-                _routing_schema(defaults), {"collapsed": True}
-            ),
-            vol.Required(SECTION_MANUAL): section(
-                _manual_schema(defaults), {"collapsed": True}
-            ),
+            vol.Required(SECTION_ROUTING): section(_routing_schema(defaults), {"collapsed": True}),
+            vol.Required(SECTION_MANUAL): section(_manual_schema(defaults), {"collapsed": True}),
             vol.Required(SECTION_CONFLICTS): section(
                 _conflicts_schema(defaults), {"collapsed": True}
             ),
-            vol.Required(SECTION_BOOST): section(
-                _boost_schema(defaults), {"collapsed": True}
-            ),
-            vol.Required(SECTION_LOCK): section(
-                _lock_schema(defaults), {"collapsed": True}
-            ),
-            vol.Required(SECTION_DISPLAY): section(
-                _display_schema(defaults), {"collapsed": True}
-            ),
+            vol.Required(SECTION_BOOST): section(_boost_schema(defaults), {"collapsed": True}),
+            vol.Required(SECTION_LOCK): section(_lock_schema(defaults), {"collapsed": True}),
+            vol.Required(SECTION_DISPLAY): section(_display_schema(defaults), {"collapsed": True}),
         }
     )
 
@@ -372,9 +356,7 @@ def _validate_input(hass: HomeAssistant, data: Mapping[str, Any]) -> dict[str, s
     if cold > mild:
         errors[CONF_MILD_THRESHOLD] = "threshold_order"
 
-    default_manual = _as_int(
-        data.get(CONF_DEFAULT_MANUAL_MINUTES), DEFAULT_MANUAL_MINUTES
-    )
+    default_manual = _as_int(data.get(CONF_DEFAULT_MANUAL_MINUTES), DEFAULT_MANUAL_MINUTES)
     max_manual = _as_int(data.get(CONF_MAX_MANUAL_MINUTES), DEFAULT_MAX_MANUAL_MINUTES)
     if default_manual > 0 and default_manual > max_manual:
         errors[CONF_DEFAULT_MANUAL_MINUTES] = "manual_order"
@@ -405,9 +387,7 @@ class ClimateRouterConfigFlow(ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
-    async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Collect the router configuration in sections."""
         errors: dict[str, str] = {}
         current: dict[str, Any] | None = None
@@ -467,9 +447,7 @@ class ClimateRouterConfigFlow(ConfigFlow, domain=DOMAIN):
 class ClimateRouterOptionsFlow(OptionsFlow):
     """Sectioned options flow."""
 
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Show the options menu."""
         return self.async_show_menu(step_id="init", menu_options=OPTION_MENU)
 
@@ -502,9 +480,7 @@ class ClimateRouterOptionsFlow(OptionsFlow):
             errors=errors,
         )
 
-    async def async_step_basic(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_basic(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Edit entities and name."""
         return await self._async_section_step(SECTION_BASIC, _basic_schema, user_input)
 
@@ -512,13 +488,9 @@ class ClimateRouterOptionsFlow(OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Edit routing thresholds and timings."""
-        return await self._async_section_step(
-            SECTION_ROUTING, _routing_schema, user_input
-        )
+        return await self._async_section_step(SECTION_ROUTING, _routing_schema, user_input)
 
-    async def async_step_manual(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_manual(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Edit manual-mode defaults."""
         return await self._async_section_step(SECTION_MANUAL, _manual_schema, user_input)
 
@@ -526,19 +498,13 @@ class ClimateRouterOptionsFlow(OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Edit conflict handling."""
-        return await self._async_section_step(
-            SECTION_CONFLICTS, _conflicts_schema, user_input
-        )
+        return await self._async_section_step(SECTION_CONFLICTS, _conflicts_schema, user_input)
 
-    async def async_step_boost(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_boost(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Edit the boost feature flag."""
         return await self._async_section_step(SECTION_BOOST, _boost_schema, user_input)
 
-    async def async_step_lock(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_lock(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Edit the optional UI lock."""
         return await self._async_section_step(SECTION_LOCK, _lock_schema, user_input)
 
@@ -548,8 +514,6 @@ class ClimateRouterOptionsFlow(OptionsFlow):
         """Edit Lovelace compatibility options."""
         return await self._async_section_step(SECTION_DISPLAY, _display_schema, user_input)
 
-    async def async_step_finish(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_finish(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Persist the accumulated options and close the menu."""
         return self.async_create_entry(title="", data=dict(self.config_entry.options))

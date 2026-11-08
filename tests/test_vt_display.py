@@ -94,9 +94,7 @@ def test_identity_keys_can_be_enabled() -> None:
 def test_lock_is_never_forwarded() -> None:
     """Exposing the lock would show a card button that cannot work."""
     for include_identity in (False, True):
-        attributes = build_vt_display_attributes(
-            [OVER_SWITCH], include_identity=include_identity
-        )
+        attributes = build_vt_display_attributes([OVER_SWITCH], include_identity=include_identity)
 
         assert "is_lock_configured" not in attributes
         assert "lock_manager" not in attributes

@@ -154,9 +154,7 @@ def target_conflict(
         return ("hvac_mode_mismatch", expected.hvac_mode, state.hvac_mode)
 
     if expected.setpoint_kind is SetpointKind.TEMPERATURE:
-        if setpoint_differs(
-            expected.target_temperature, state.target_temperature, tolerance
-        ):
+        if setpoint_differs(expected.target_temperature, state.target_temperature, tolerance):
             return (
                 "setpoint_mismatch",
                 expected.target_temperature,

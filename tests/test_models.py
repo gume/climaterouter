@@ -33,9 +33,7 @@ def test_router_config_manual_timer_falls_back_to_override_keys() -> None:
     )
     assert config.default_manual_minutes == 15
     assert config.max_manual_minutes == 120
-    explicit = RouterConfig.from_mapping(
-        {"default_manual_minutes": 5, "max_manual_minutes": 30}
-    )
+    explicit = RouterConfig.from_mapping({"default_manual_minutes": 5, "max_manual_minutes": 30})
     assert explicit.default_manual_minutes == 5
     assert explicit.max_manual_minutes == 30
 
@@ -79,7 +77,7 @@ def test_desired_state_copy_is_independent() -> None:
 
 
 def test_manual_mode_applies_to_desired_state() -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)  # noqa: UP017
     baseline = DesiredState(
         hvac_mode="heat",
         setpoint_kind=SetpointKind.PRESET,
@@ -107,7 +105,7 @@ def test_manual_mode_applies_to_desired_state() -> None:
 
 
 def test_manual_mode_roundtrip_and_expiry() -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)  # noqa: UP017
     manual = ManualMode(
         desired=DesiredState(
             hvac_mode="heat",
@@ -128,7 +126,7 @@ def test_manual_mode_roundtrip_and_expiry() -> None:
 
 
 def test_manual_mode_infinite_timer() -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)  # noqa: UP017
     manual = ManualMode(
         desired=DesiredState(hvac_mode="heat"),
         started_at=now,
@@ -144,7 +142,7 @@ def test_manual_mode_infinite_timer() -> None:
 
 
 def test_manual_mode_migrates_legacy_override() -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)  # noqa: UP017
     legacy = {
         "kind": "temperature",
         "value": 20,
@@ -189,7 +187,7 @@ def test_manual_mode_from_dict_rejects_invalid_data() -> None:
 
 
 def test_boost_state_roundtrip_and_expiry() -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)  # noqa: UP017
     boost = BoostState(
         until=now + timedelta(minutes=30),
         started_at=now,
@@ -228,7 +226,7 @@ def test_boost_state_from_dict_tolerates_bad_data() -> None:
 
 
 def test_conflict_serialization_is_json_safe() -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)  # noqa: UP017
     conflict = Conflict(
         key="setpoint_mismatch:ac",
         type="setpoint_mismatch",
@@ -299,10 +297,5 @@ def test_manual_lock_blocks_only_automation_commands() -> None:
     assert manual_lock_blocks_context(**base, user_id=None) is True
     # The user must still be able to adjust the manual setpoint.
     assert manual_lock_blocks_context(**base, user_id="user-1") is False
-    assert (
-        manual_lock_blocks_context(**{**base, "manual_active": False}, user_id=None)
-        is False
-    )
-    assert (
-        manual_lock_blocks_context(**{**base, "enabled": False}, user_id=None) is False
-    )
+    assert manual_lock_blocks_context(**{**base, "manual_active": False}, user_id=None) is False
+    assert manual_lock_blocks_context(**{**base, "enabled": False}, user_id=None) is False

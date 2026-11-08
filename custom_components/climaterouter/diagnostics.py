@@ -83,7 +83,5 @@ async def async_get_config_entry_diagnostics(
         "targets_present": sorted(target.value for target in coordinator.data.targets),
         "active_targets": sorted(target.value for target in coordinator.data.active_targets),
         "conflict_count": coordinator.data.conflict_count,
-        "conflict_history": [
-            conflict.to_dict() for conflict in coordinator.conflict_history
-        ],
+        "conflict_history": [conflict.to_dict() for conflict in coordinator.conflict_history],
     }

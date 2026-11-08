@@ -137,9 +137,10 @@ def build_vt_display_attributes(
     if (configuration := _as_dict(primary.get("configuration"))) is not None:
         result["configuration"] = _copy_mapping(configuration, _CONFIGURATION_KEYS)
 
-    if include_identity and (
-        specific_states := _as_dict(primary.get("specific_states"))
-    ) is not None:
+    if (
+        include_identity
+        and (specific_states := _as_dict(primary.get("specific_states"))) is not None
+    ):
         # ``is_locked`` is intentionally omitted: the proxy has no lock command
         # that Equinox could call, and a locked-looking card could not be
         # unlocked from the same UI.
@@ -150,16 +151,12 @@ def build_vt_display_attributes(
     if (over_valve := _as_dict(primary.get("vtherm_over_valve"))) is not None:
         result["vtherm_over_valve"] = _copy_mapping(over_valve, _VALVE_KEYS)
 
-    if (
-        over_climate_valve := _as_dict(primary.get("vtherm_over_climate_valve"))
-    ) is not None:
+    if (over_climate_valve := _as_dict(primary.get("vtherm_over_climate_valve"))) is not None:
         curated_valve: dict[str, Any] = {
             "have_valve_regulation": bool(over_climate_valve.get("have_valve_regulation"))
         }
         if (regulation := _as_dict(over_climate_valve.get("valve_regulation"))) is not None:
-            curated_valve["valve_regulation"] = _copy_mapping(
-                regulation, _VALVE_REGULATION_KEYS
-            )
+            curated_valve["valve_regulation"] = _copy_mapping(regulation, _VALVE_REGULATION_KEYS)
         result["vtherm_over_climate_valve"] = curated_valve
 
     return result

@@ -286,7 +286,7 @@ class ManualMode:
         elif until is not None:
             timer_minutes = max(
                 1,
-                int(round((until - started_at).total_seconds() / 60)),
+                round((until - started_at).total_seconds() / 60),
             )
         else:
             timer_minutes = None

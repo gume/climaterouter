@@ -281,8 +281,11 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
                 temperature=temperature,
                 preset_mode=preset_mode,
             )
-        elif self._manual is None and from_user and has_setpoint and (
-            self._baseline.hvac_mode not in (None, HVAC_OFF)
+        elif (
+            self._manual is None
+            and from_user
+            and has_setpoint
+            and (self._baseline.hvac_mode not in (None, HVAC_OFF))
         ):
             # First user setpoint move starts manual mode. Capture the current
             # schedule first so "return to schedule" restores it, not the move.
@@ -325,15 +328,15 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             self._apply_mode(hvac_mode)
         await self._async_command_received()
 
-    async def async_set_preset_mode(
-        self, preset_mode: str, context: Context | None = None
-    ) -> None:
+    async def async_set_preset_mode(self, preset_mode: str, context: Context | None = None) -> None:
         """Handle a preset change."""
         self._ensure_unlocked(context)
         if self._manual is not None and self._is_user_context(context):
             self._apply_setpoint(self._manual.desired, temperature=None, preset_mode=preset_mode)
-        elif self._manual is None and self._is_user_context(context) and (
-            self._baseline.hvac_mode not in (None, HVAC_OFF)
+        elif (
+            self._manual is None
+            and self._is_user_context(context)
+            and (self._baseline.hvac_mode not in (None, HVAC_OFF))
         ):
             self._ensure_manual_baseline()
             desired = self._baseline.copy()
@@ -464,8 +467,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         """Validate a manual duration and return its absolute deadline."""
         if minutes < 1 or minutes > self.config.max_manual_minutes:
             raise HomeAssistantError(
-                f"Manual duration must be between 1 and "
-                f"{self.config.max_manual_minutes} minutes"
+                f"Manual duration must be between 1 and {self.config.max_manual_minutes} minutes"
             )
         return now + timedelta(minutes=minutes)
 
@@ -691,9 +693,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         if self._manual is None or self._manual.until is None:
             return
         delay = (self._manual.until - dt_util.utcnow()).total_seconds()
-        self._manual_unsub = async_call_later(
-            self.hass, max(delay, 0), self._async_manual_expired
-        )
+        self._manual_unsub = async_call_later(self.hass, max(delay, 0), self._async_manual_expired)
 
     def _cancel_manual_timer(self) -> None:
         if self._manual_unsub is not None:
@@ -809,9 +809,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         if self._boost is None:
             return
         delay = (self._boost.until - dt_util.utcnow()).total_seconds()
-        self._boost_unsub = async_call_later(
-            self.hass, max(delay, 0), self._async_boost_expired
-        )
+        self._boost_unsub = async_call_later(self.hass, max(delay, 0), self._async_boost_expired)
 
     def _cancel_boost_timer(self) -> None:
         if self._boost_unsub is not None:
@@ -862,17 +860,14 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             locked=self._locked,
             user_id=user_id,
         ):
-            raise HomeAssistantError(
-                "ClimateRouter is locked; unlock it before sending commands"
-            )
+            raise HomeAssistantError("ClimateRouter is locked; unlock it before sending commands")
         if manual_lock_blocks_context(
             enabled=self.config.manual_blocks_schedule,
             manual_active=self._manual is not None,
             user_id=user_id,
         ):
             raise HomeAssistantError(
-                "Manual mode is active; return to schedule before sending "
-                "automation commands"
+                "Manual mode is active; return to schedule before sending automation commands"
             )
 
     def _schedule_auto_relock(self, delay: float | None = None) -> None:
@@ -944,8 +939,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
                 if (
                     self.config.conflict_policy == "adopt"
                     and not boost
-                    and ctype
-                    in ("setpoint_mismatch", "preset_mismatch", "hvac_mode_mismatch")
+                    and ctype in ("setpoint_mismatch", "preset_mismatch", "hvac_mode_mismatch")
                     and not state.guard
                 ):
                     self._adopt_external_state(compare_target)
@@ -1023,9 +1017,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         if detected:
             self._publish()
 
-    def _reconcile_conflict_records(
-        self, detected: dict[str, Conflict], now: datetime
-    ) -> None:
+    def _reconcile_conflict_records(self, detected: dict[str, Conflict], now: datetime) -> None:
         """Keep new conflicts, age out resolved ones, and emit events."""
         for key, conflict in detected.items():
             self._conflict_cleared_since.pop(key, None)
@@ -1980,13 +1972,9 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             "manual_mode": self._manual.to_dict() if self._manual is not None else None,
             "boost": self._boost.to_dict() if self._boost is not None else None,
             "last_route": self._last_route.value if self._last_route else None,
-            "last_handover": (
-                self._last_handover.isoformat() if self._last_handover else None
-            ),
+            "last_handover": (self._last_handover.isoformat() if self._last_handover else None),
             "locked": self._locked,
-            "auto_relock_at": (
-                self._auto_relock_at.isoformat() if self._auto_relock_at else None
-            ),
+            "auto_relock_at": (self._auto_relock_at.isoformat() if self._auto_relock_at else None),
         }
 
 

@@ -47,11 +47,7 @@ def _both_targets_differ(snapshot: RouterSnapshot) -> bool:
         and abs(radiator.target_temperature - ac.target_temperature) > 0.2
     ):
         return True
-    return bool(
-        radiator.preset_mode
-        and ac.preset_mode
-        and radiator.preset_mode != ac.preset_mode
-    )
+    return bool(radiator.preset_mode and ac.preset_mode and radiator.preset_mode != ac.preset_mode)
 
 
 SENSOR_SPECS: tuple[

@@ -77,8 +77,7 @@ async def _async_coordinators(
     coordinators = [
         coordinator
         for coordinator in hass.data.get(DOMAIN, {}).values()
-        if coordinator.climate_entity_id in entity_ids
-        or coordinator.lock_entity_id in entity_ids
+        if coordinator.climate_entity_id in entity_ids or coordinator.lock_entity_id in entity_ids
     ]
     if not coordinators:
         raise ServiceValidationError("The target is not a ClimateRouter entity")

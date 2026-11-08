@@ -211,9 +211,7 @@ class RouterClimate(RouterEntity, ClimateEntity):
             "override": snapshot.manual_mode.to_dict() if snapshot.manual_mode else None,
             "manual_mode": snapshot.manual_mode.to_dict() if snapshot.manual_mode else None,
             "manual_active": snapshot.manual_active,
-            "manual_until": (
-                snapshot.manual_until.isoformat() if snapshot.manual_until else None
-            ),
+            "manual_until": (snapshot.manual_until.isoformat() if snapshot.manual_until else None),
             "manual_timer_minutes": snapshot.manual_timer_minutes,
             "manual_remaining_minutes": (
                 snapshot.manual_mode.remaining_minutes(dt_util.utcnow())
