@@ -222,6 +222,27 @@ async def test_desired_state_survives_reload(hass) -> None:
     assert reloaded.data.active_targets == frozenset({Target.RADIATOR})
 
 
+async def test_lock_blocks_only_user_commands(hass) -> None:
+    """The UI lock rejects user commands but leaves automations running."""
+    _entry, coordinator = await _setup(hass, outdoor=5.0, lock_enabled=True, lock_code="1234")
+    await coordinator.async_lock()
+    assert coordinator.data.locked is True
+
+    with pytest.raises(HomeAssistantError):
+        await coordinator.async_set_temperature(temperature=21, hvac_mode=HVAC_HEAT, context=USER)
+
+    await coordinator.async_set_temperature(temperature=21, hvac_mode=HVAC_HEAT)
+    assert coordinator.data.desired.target_temperature == 21
+
+    with pytest.raises(HomeAssistantError):
+        await coordinator.async_unlock(code="0000")
+
+    await coordinator.async_unlock(code="1234")
+    assert coordinator.data.locked is False
+    await coordinator.async_set_temperature(temperature=22, context=USER)
+    assert coordinator.data.manual_mode is not None
+
+
 async def test_detects_setpoint_mismatch(hass, freezer) -> None:
     """An external setpoint change is reported under the monitor policy."""
     _entry, coordinator = await _setup(hass, outdoor=5.0, conflict_policy="monitor")
