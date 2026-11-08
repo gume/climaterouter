@@ -1,13 +1,14 @@
 {
   "domain": "climaterouter",
   "name": "ClimateRouter",
+  "categories": ["climate"],
   "codeowners": ["@gume"],
   "config_flow": true,
+  "dependencies": ["climate", "lock"],
   "documentation": "https://github.com/gume/climaterouter",
-  "issue_tracker": "https://github.com/gume/climaterouter/issues",
-  "iot_class": "local_polling",
   "integration_type": "hub",
-  "version": "0.8.2",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/gume/climaterouter/issues",
   "requirements": [],
-  "dependencies": ["climate", "lock"]
+  "version": "0.8.2"
 }
