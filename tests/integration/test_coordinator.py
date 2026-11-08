@@ -141,3 +141,118 @@ async def test_turn_off_ends_manual_mode(hass) -> None:
     assert coordinator.data.manual_mode is None
     assert coordinator.data.desired.hvac_mode == "off"
     assert coordinator.data.active_targets == frozenset()
+
+
+async def test_falls_back_to_ac_when_radiator_unavailable(hass) -> None:
+    """A cold route falls back to a capable target when the first one is gone."""
+    _entry, coordinator = await _setup(hass, outdoor=5.0)
+    hass.states.async_set(RADIATOR, "unavailable")
+
+    await coordinator.async_set_temperature(temperature=21, hvac_mode=HVAC_HEAT)
+    await hass.async_block_till_done()
+
+    assert coordinator.data.active_targets == frozenset({Target.AC})
+    assert coordinator.data.route_reason == "fallback_unavailable"
+
+
+async def test_stale_outdoor_holds_current_target(hass) -> None:
+    """A missing outdoor reading keeps the current target instead of flapping."""
+    _entry, coordinator = await _setup(hass, outdoor=5.0)
+    await coordinator.async_set_temperature(temperature=21, hvac_mode=HVAC_HEAT)
+    await hass.async_block_till_done()
+
+    hass.states.async_set(OUTDOOR, "unknown")
+    await coordinator.async_recalculate()
+    await hass.async_block_till_done()
+
+    assert coordinator.data.active_targets == frozenset({Target.RADIATOR})
+    assert coordinator.data.route_reason == "fallback_outdoor"
+
+
+async def test_startup_adopts_a_running_target(hass) -> None:
+    """A target that is already heating is adopted without a command."""
+    hass.states.async_set(
+        RADIATOR,
+        HVAC_HEAT,
+        {
+            "hvac_modes": [HVAC_HEAT],
+            "hvac_action": "heating",
+            "temperature": 19,
+            "min_temp": 7,
+            "max_temp": 35,
+        },
+    )
+    hass.states.async_set(AC, STATE_OFF, {"hvac_modes": [HVAC_HEAT, "cool"]})
+    hass.states.async_set(OUTDOOR, "5.0", {"unit_of_measurement": "°C"})
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Test Router",
+        data=_entry_data(),
+        unique_id="test-router",
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    coordinator = entry.runtime_data
+    assert coordinator.data.active_targets == frozenset({Target.RADIATOR})
+    assert coordinator.data.desired.hvac_mode == HVAC_HEAT
+    assert coordinator.data.desired.target_temperature == 19
+
+
+async def test_desired_state_survives_reload(hass) -> None:
+    """The persisted desired state is restored when the entry reloads."""
+    entry, coordinator = await _setup(hass, outdoor=5.0)
+    await coordinator.async_set_temperature(temperature=21, hvac_mode=HVAC_HEAT)
+    await hass.async_block_till_done()
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    reloaded = entry.runtime_data
+    assert reloaded is not coordinator
+    assert reloaded.data.desired.hvac_mode == HVAC_HEAT
+    assert reloaded.data.desired.target_temperature == 21
+    assert reloaded.data.active_targets == frozenset({Target.RADIATOR})
+
+
+async def test_force_handover_completes_despite_active_old_target(hass) -> None:
+    """Forcing a handover skips the wait for the old target to idle."""
+    hass.states.async_set(
+        RADIATOR,
+        HVAC_HEAT,
+        {
+            "hvac_modes": [HVAC_HEAT],
+            "hvac_action": "heating",
+            "temperature": 19,
+            "min_temp": 7,
+            "max_temp": 35,
+        },
+    )
+    hass.states.async_set(AC, STATE_OFF, {"hvac_modes": [HVAC_HEAT, "cool"]})
+    hass.states.async_set(OUTDOOR, "5.0", {"unit_of_measurement": "°C"})
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Test Router",
+        data=_entry_data(),
+        unique_id="test-router",
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator = entry.runtime_data
+    assert coordinator.data.active_targets == frozenset({Target.RADIATOR})
+
+    hass.states.async_set(OUTDOOR, "15.0", {"unit_of_measurement": "°C"})
+    await coordinator.async_recalculate()
+    assert coordinator.data.pending_target is Target.AC
+
+    await coordinator.async_force_handover()
+    await hass.async_block_till_done()
+
+    assert coordinator.data.active_targets == frozenset({Target.AC})
+    assert coordinator.data.handover_state == "steady"
