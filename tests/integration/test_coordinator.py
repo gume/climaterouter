@@ -9,9 +9,12 @@ import pytest
 from homeassistant.const import STATE_OFF
 from homeassistant.core import Context
 from homeassistant.exceptions import HomeAssistantError
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_capture_events,
+)
 
-from custom_components.climaterouter.const import DOMAIN
+from custom_components.climaterouter.const import DOMAIN, EVENT_HANDOVER_ABORTED
 from custom_components.climaterouter.models import HVAC_HEAT, ROUTE_AC, Target
 
 RADIATOR = "climate.radiator"
@@ -300,8 +303,7 @@ async def test_handover_off_confirm_timeout_becomes_conflict(hass, monkeypatch) 
     from custom_components.climaterouter import coordinator as coordinator_module
 
     _entry, coordinator = await _setup_with_active_radiator(hass)
-    events: list[Any] = []
-    hass.bus.async_listen("climaterouter_handover_aborted", events.append)
+    events = async_capture_events(hass, EVENT_HANDOVER_ABORTED)
 
     hass.states.async_set(OUTDOOR, "15.0", {"unit_of_measurement": "°C"})
     await coordinator.async_recalculate()
