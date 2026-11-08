@@ -67,6 +67,8 @@
 | `ddef6d5` | `test: cover boost activation and cancel` |
 | `bfda92e` | `test: cover setpoint conflict detection` |
 | `9ac7679` | `test: cover UI lock gating` |
+| `590aeb4` | `docs: note the test-harness compatibility shims` |
+| `98f0d20` | `docs: record boost, conflict, and lock test coverage` |
 
 Everything through `e025cf4` is pushed to `origin/main`. The documentation and test commits after it are not pushed
 yet. The test instance runs a clean Marketplace install of `e025cf4` (version **0.8.1**). The assistant has no
@@ -499,10 +501,13 @@ Local machine here uses Python 3.10, while the project targets 3.12+ and HA 2026
 run on 3.10 (`str, Enum` with `# noqa: UP042`, `timezone.utc` with `# noqa: UP017`).
 
 ```bash
-# lint / format / unit tests (venv used during development)
+# lint / format / full test suite (venv with requirements_test.txt)
 /path/to/venv/bin/ruff check .
 /path/to/venv/bin/ruff format --check .
 /path/to/venv/bin/pytest
+
+# pure tests only: the integration directory is skipped without Home Assistant
+python3 -m pytest
 
 # Home Assistant lab
 cd test_environment
@@ -625,27 +630,93 @@ conflict policies, boost safety/expiry/return, lock enforcement/persistence, per
 5. Request upstream Equinox support for a configurable lock service/entity; the card button still cannot target the
    proxy's native lock.
 
-### 8.2 Automated tests
+### 8.2 Automated tests and CI
 
-`pytest-homeassistant-custom-component` is now wired into `tests/conftest.py`, CI installs `requirements_test.txt`,
-and the integration suite lives in `tests/integration/`. Done so far:
+Status as of 2026-11-08:
 
-- [x] config flow: happy path, missing entities, same entities, threshold order;
-- [x] config flow: duplicate unique id, reconfigure, options section save and finish;
-- [x] coordinator: cold/mild hysteresis, route override, manual mode start/return, off safety;
-- [x] coordinator: fallback on unavailable, stale/missing outdoor hold;
-- [x] startup: adopt one already-running target;
-- [x] handover: forced handover away from an active target;
-- [x] boost: activation of both targets, cancel back to normal routing, feature flag;
-- [x] conflicts: setpoint mismatch under the monitor policy;
-- [x] lock: UI lock rejects user commands but not automations, code validation;
-- [x] persistence: desired state survives unload/setup;
-- [x] services: route override, enter manual mode, manual timer, return to schedule, argument validation;
-- [x] entity platforms: registry coverage, device info, conditional lock platform;
-- [ ] handover: active → pending → idle → off → start; off-confirm timeout; route revert during pending;
-- [ ] startup: targets not loaded yet when desired state is restored;
-- [ ] persistence: `last_route` and manual/boost deadlines across reload;
-- [ ] entity state: optimistic window, mirroring, attributes.
+| Check | Result |
+|---|---|
+| `ruff check .` | clean |
+| `ruff format --check .` | clean |
+| Pure unit tests (no HA) | 56 passed |
+| Integration tests (HA harness) | 28 passed |
+| Full suite (HA harness) | 84 passed |
+| CI installs `requirements_test.txt` | yes |
+| GitHub CI run confirmed | **not yet** — commits are local only |
+| Measured statement coverage | ~78 % |
+
+`pytest-homeassistant-custom-component` is wired into `tests/conftest.py`, and the integration suite lives in
+`tests/integration/`. Without the harness, pytest runs the pure tests and skips the integration directory.
+
+#### Done
+
+- [x] CI lint/format failures fixed (`01fd245`); CI installs `requirements_test.txt` (`b94e279`).
+- [x] config flow: happy path, missing entities, same entities, threshold order, duplicate unique id,
+      reconfigure, options section save and finish.
+- [x] coordinator: cold/mild hysteresis, route override, manual-mode start/return, off safety.
+- [x] routing robustness: unavailable-target fallback, missing/stale outdoor hold.
+- [x] startup: adopt one already-running target.
+- [x] persistence: desired state survives unload/setup.
+- [x] handover: forced handover away from an active target.
+- [x] boost: both-target activation, cancel, feature-flag rejection.
+- [x] conflicts: setpoint mismatch under `monitor`.
+- [x] lock: user commands blocked, automations allowed, code validation.
+- [x] services: route override, enter manual mode, manual timer, return to schedule, argument validation.
+- [x] entity platforms: registry coverage, device info, conditional lock platform.
+- [x] test-only compatibility shims for the older local harness
+      (`async_extract_entity_ids` signature and `_attr_temperature_unit`).
+
+#### Missing
+
+High priority:
+
+- [ ] full handover idle path: active → pending → idle → off → start, off-confirm timeout, route revert while
+      pending, `handover_aborted` events;
+- [ ] startup while targets are not loaded yet, and both targets on at startup (`startup_conflict`);
+- [ ] persistence across reload: `last_route`, manual deadline/timer, boost deadline, auto-relock deadline;
+- [ ] entity behaviour: optimistic window, state mirroring, climate/sensor attributes, unavailable states,
+      button/select/switch actions.
+
+Medium priority:
+
+- [ ] remaining services: clear route override, clear conflicts, force-handover service, `set_manual_override`
+      alias, cancel manual override, set/cancel boost, lock/unlock, target-resolution errors;
+- [ ] conflict policies `reassert`/`adopt`, `both_targets_on`, `inactive_target_on`, auto-resolve switches;
+- [ ] natural boost expiry and boost-across-restart;
+- [ ] config-flow validation: invalid entity domain, invalid lock code, manual order, tolerance/duration errors,
+      unknown entry, duplicate reconfigure, remaining options sections.
+
+Low priority:
+
+- [ ] diagnostics (`diagnostics.py` is currently untested);
+- [ ] `vt_display.py` coverage is reported as 0 % due to the dual import path used by the pure and integration
+      suites; confirm with a combined coverage run;
+- [ ] coverage gate, type checking, and a Python version matrix in CI;
+- [ ] live GitHub CI run.
+
+#### Coverage snapshot
+
+| Module | Coverage |
+|---|---|
+| `const.py`, `entity.py` | 100 % |
+| `router.py` | 98 % |
+| `models.py` | 95 % |
+| `config_flow.py` | 90 % |
+| `climate.py` | 86 % |
+| `services.py` | 75 % |
+| `coordinator.py` | 68 % |
+| `diagnostics.py`, `vt_display.py` | 0 % (see note above) |
+| **Total** | **~78 %** |
+
+The local PyPI snapshot only offers `pytest-homeassistant-custom-component` 0.13.205 (HA 2025.1.4), not 2026.11.
+CI should install the newest release; the two shims keep the tests working on both.
+
+Run the suite with the HA venv:
+
+```bash
+/tmp/opencode/cr-venv/bin/python -m pytest -q
+/tmp/opencode/cr-venv/bin/python -m pytest --cov=custom_components.climaterouter --cov-report=term-missing
+```
 
 ### 8.3 M4 — proxy-owned manual mode (implemented in this checkout)
 
