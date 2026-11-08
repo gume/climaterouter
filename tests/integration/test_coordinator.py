@@ -222,6 +222,190 @@ async def test_desired_state_survives_reload(hass) -> None:
     assert reloaded.data.active_targets == frozenset({Target.RADIATOR})
 
 
+async def _setup_with_active_radiator(hass, **data: Any):
+    """Set up an entry whose radiator is already heating."""
+    hass.states.async_set(
+        RADIATOR,
+        HVAC_HEAT,
+        {
+            "hvac_modes": [HVAC_HEAT],
+            "hvac_action": "heating",
+            "temperature": 20,
+            "min_temp": 7,
+            "max_temp": 35,
+        },
+    )
+    hass.states.async_set(AC, STATE_OFF, {"hvac_modes": [HVAC_HEAT, "cool"]})
+    hass.states.async_set(OUTDOOR, "5.0", {"unit_of_measurement": "°C"})
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Test Router",
+        data=_entry_data(**data),
+        unique_id="test-router",
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator = entry.runtime_data
+    assert coordinator.data.active_targets == frozenset({Target.RADIATOR})
+    return entry, coordinator
+
+
+async def _set_radiator(hass, state: str, **attrs: Any) -> None:
+    hass.states.async_set(
+        RADIATOR,
+        state,
+        {
+            "hvac_modes": [HVAC_HEAT],
+            "temperature": 20,
+            "min_temp": 7,
+            "max_temp": 35,
+            **attrs,
+        },
+    )
+    await hass.async_block_till_done()
+
+
+async def test_handover_waits_for_idle_then_starts_new_target(hass) -> None:
+    """The normal handover path waits for idle, stops, then starts."""
+    _entry, coordinator = await _setup_with_active_radiator(hass)
+
+    hass.states.async_set(OUTDOOR, "15.0", {"unit_of_measurement": "°C"})
+    await coordinator.async_recalculate()
+    await hass.async_block_till_done()
+    assert coordinator.data.handover_state == "pending"
+    assert coordinator.data.pending_target is Target.AC
+
+    await _set_radiator(hass, HVAC_HEAT, hvac_action="idle")
+    await coordinator.async_recalculate()
+    await hass.async_block_till_done()
+    assert coordinator.data.handover_state in ("pending", "stopping_old")
+
+    await coordinator.async_recalculate()
+    await hass.async_block_till_done()
+    assert coordinator.data.handover_state == "stopping_old"
+
+    await _set_radiator(hass, STATE_OFF)
+    await coordinator.async_recalculate()
+    await hass.async_block_till_done()
+
+    assert coordinator.data.active_targets == frozenset({Target.AC})
+    assert coordinator.data.handover_state == "steady"
+    assert coordinator.data.pending_target is None
+
+
+async def test_handover_off_confirm_timeout_becomes_conflict(hass, monkeypatch) -> None:
+    """A target that stays on after the off command aborts the handover."""
+    from custom_components.climaterouter import coordinator as coordinator_module
+
+    _entry, coordinator = await _setup_with_active_radiator(hass)
+    events: list[Any] = []
+    hass.bus.async_listen("climaterouter_handover_aborted", events.append)
+
+    hass.states.async_set(OUTDOOR, "15.0", {"unit_of_measurement": "°C"})
+    await coordinator.async_recalculate()
+    await _set_radiator(hass, HVAC_HEAT, hvac_action="idle")
+    await coordinator.async_recalculate()
+    await coordinator.async_recalculate()
+    await hass.async_block_till_done()
+    assert coordinator.data.handover_state == "stopping_old"
+
+    # dt_util.utcnow is a partial bound at import time, so freezegun cannot
+    # move it; shift the coordinator's clock directly instead.
+    now = coordinator_module.dt_util.utcnow()
+    monkeypatch.setattr(coordinator_module.dt_util, "utcnow", lambda: now + timedelta(seconds=2))
+    await coordinator.async_recalculate()
+
+    # Do not drain scheduled updates here: a fresh evaluation would immediately
+    # begin a new handover and hide the abort.
+    assert coordinator.data.handover_state == "conflict"
+    assert coordinator.data.pending_target is None
+    assert events and events[0].data["error"] == "off_confirm_timeout"
+
+
+async def test_handover_reverts_when_route_changes_back(hass) -> None:
+    """A pending handover is cancelled if the route returns to the old target."""
+    _entry, coordinator = await _setup_with_active_radiator(hass)
+
+    hass.states.async_set(OUTDOOR, "15.0", {"unit_of_measurement": "°C"})
+    await coordinator.async_recalculate()
+    assert coordinator.data.handover_state == "pending"
+
+    hass.states.async_set(OUTDOOR, "5.0", {"unit_of_measurement": "°C"})
+    await coordinator.async_recalculate()
+    await hass.async_block_till_done()
+
+    assert coordinator.data.active_targets == frozenset({Target.RADIATOR})
+    assert coordinator.data.handover_state == "steady"
+    assert coordinator.data.pending_target is None
+
+
+async def test_manual_deadline_survives_reload(hass) -> None:
+    """An active manual timer is restored after an unload/setup cycle."""
+    entry, coordinator = await _setup(hass, outdoor=5.0)
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+    await coordinator.async_enter_manual_mode(temperature=23, duration_minutes=30)
+    await hass.async_block_till_done()
+    until = coordinator.data.manual_mode.until
+    assert coordinator.data.manual_mode.timer_minutes == 30
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    manual = entry.runtime_data.data.manual_mode
+    assert manual is not None
+    assert manual.timer_minutes == 30
+    assert manual.until == until
+    assert manual.desired.target_temperature == 23
+
+
+async def test_boost_deadline_survives_reload(hass) -> None:
+    """An active boost and its deadline are restored after a reload."""
+    entry, coordinator = await _setup(hass, outdoor=5.0, boost_enabled=True)
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+    await coordinator.async_set_boost(duration_minutes=10)
+    await hass.async_block_till_done()
+    until = coordinator.data.boost_until
+    assert until is not None
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    reloaded = entry.runtime_data
+    assert reloaded.data.boost_until == until
+    assert reloaded.data.active_targets == frozenset({Target.RADIATOR, Target.AC})
+
+
+async def test_restored_desired_waits_for_targets(hass) -> None:
+    """A restored desired state does not crash while targets are missing."""
+    entry, coordinator = await _setup(hass, outdoor=5.0)
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+    await hass.async_block_till_done()
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    for entity_id in (RADIATOR, AC, OUTDOOR):
+        hass.states.async_remove(entity_id)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    reloaded = entry.runtime_data
+    assert reloaded.data.desired.target_temperature == 20
+    assert reloaded.data.active_targets == frozenset()
+
+    _set_entities(hass, outdoor=5.0)
+    await reloaded.async_recalculate()
+    await hass.async_block_till_done()
+
+    assert reloaded.data.active_targets == frozenset({Target.RADIATOR})
+
+
 async def test_lock_blocks_only_user_commands(hass) -> None:
     """The UI lock rejects user commands but leaves automations running."""
     _entry, coordinator = await _setup(hass, outdoor=5.0, lock_enabled=True, lock_code="1234")
