@@ -64,6 +64,9 @@
 | `a20e1d9` | `docs: record the expanded integration test coverage` |
 | `834781e` | `ci: label the combined test step accurately` |
 | `beda94c` | `test: shim the legacy climate unit attribute for older HA harnesses` |
+| `ddef6d5` | `test: cover boost activation and cancel` |
+| `bfda92e` | `test: cover setpoint conflict detection` |
+| `9ac7679` | `test: cover UI lock gating` |
 
 Everything through `e025cf4` is pushed to `origin/main`. The documentation and test commits after it are not pushed
 yet. The test instance runs a clean Marketplace install of `e025cf4` (version **0.8.1**). The assistant has no
@@ -633,6 +636,9 @@ and the integration suite lives in `tests/integration/`. Done so far:
 - [x] coordinator: fallback on unavailable, stale/missing outdoor hold;
 - [x] startup: adopt one already-running target;
 - [x] handover: forced handover away from an active target;
+- [x] boost: activation of both targets, cancel back to normal routing, feature flag;
+- [x] conflicts: setpoint mismatch under the monitor policy;
+- [x] lock: UI lock rejects user commands but not automations, code validation;
 - [x] persistence: desired state survives unload/setup;
 - [x] services: route override, enter manual mode, manual timer, return to schedule, argument validation;
 - [x] entity platforms: registry coverage, device info, conditional lock platform;
