@@ -138,6 +138,20 @@ class RouterClimate(RouterEntity, ClimateEntity):
         state = self._active_state
         return state.target_temperature if state else None
 
+    if not hasattr(ClimateEntity, "native_current_temperature"):
+
+        @property
+        def current_temperature(self) -> float | None:
+            """Legacy temperature property for HA releases before 2026.11."""
+            return self.native_current_temperature
+
+    if not hasattr(ClimateEntity, "native_target_temperature"):
+
+        @property
+        def target_temperature(self) -> float | None:
+            """Legacy setpoint property for HA releases before 2026.11."""
+            return self.native_target_temperature
+
     @property
     def hvac_mode(self) -> HVACMode:
         snapshot = self._snapshot
