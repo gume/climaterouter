@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 
 import voluptuous as vol
@@ -65,12 +66,23 @@ SET_BOOST_SCHEMA = cv.make_entity_service_schema(
 )
 LOCK_SCHEMA = cv.make_entity_service_schema({vol.Optional("code"): cv.string})
 
+# Home Assistant 2026.11 resolves targeted entities from the service call alone;
+# older releases still require the ``hass`` argument.
+_EXTRACT_TAKES_HASS = len(inspect.signature(async_extract_entity_ids).parameters) > 1
+
+
+async def _async_extract_entity_ids(call: ServiceCall) -> set[str]:
+    """Call the version-appropriate ``async_extract_entity_ids`` signature."""
+    if _EXTRACT_TAKES_HASS:
+        return await async_extract_entity_ids(call.hass, call)
+    return await async_extract_entity_ids(call)
+
 
 async def _async_coordinators(
     hass: HomeAssistant, call: ServiceCall
 ) -> list[ClimateRouterCoordinator]:
     """Resolve the router coordinators targeted by a service call."""
-    entity_ids = await async_extract_entity_ids(call)
+    entity_ids = await _async_extract_entity_ids(call)
     if not entity_ids:
         raise ServiceValidationError("Target at least one ClimateRouter entity")
 
