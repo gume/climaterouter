@@ -1,6 +1,6 @@
 # Handover — ClimateRouter
 
-**Date:** 2026-11-07
+**Date:** 2026-11-08
 **Branch:** `main`
 **Relevant commits:**
 
@@ -52,10 +52,15 @@
 | `a1c4b66` | `docs: hand over the 0.8.1 live check and sensor fix` |
 | `0635928` | `docs: record the handover commit` |
 | `243f98f` | `docs: record the clean e025cf4 Marketplace install` |
+| `091c4dd` | `docs: record the clean-install commit` |
+| `01fd245` | `style: fix ruff lint and formatting failures` |
+| `b94e279` | `test: add config flow integration tests and CI HA harness` |
+| `a19f2d6` | `fix: expose temperature_unit alongside native_temperature_unit` |
+| `fc921bf` | `test: cover coordinator routing, services, and entity platforms` |
 
-Everything through `e025cf4` is pushed to `origin/main`. The documentation commits after it are not pushed yet. The
-test instance runs a clean Marketplace install of `e025cf4` (version **0.8.1**). The assistant has no GitHub
-credentials; the owner pushes.
+Everything through `e025cf4` is pushed to `origin/main`. The documentation and test commits after it are not pushed
+yet. The test instance runs a clean Marketplace install of `e025cf4` (version **0.8.1**). The assistant has no
+GitHub credentials; the owner pushes.
 
 ---
 
@@ -495,10 +500,17 @@ docker compose up -d
 docker compose logs -f homeassistant
 ```
 
-`requirements_test.txt` lists `pytest-homeassistant-custom-component`, but the current tests do not need it and it
-was **not** installed locally. CI installs only `pytest` and `ruff`. A separate `Validate` workflow runs
+CI installs `requirements_test.txt` (ruff, pytest and the Home Assistant test harness) and runs both the pure unit
+tests and the integration tests under `tests/integration/`. A separate `Validate` workflow runs
 `home-assistant/actions/hassfest` and `hacs/action` (integration category, brands ignored because the domain has no
 brand assets yet).
+
+The PyPI snapshot reachable from this host only offers `pytest-homeassistant-custom-component` 0.13.205, which pins
+Home Assistant 2025.1.4 rather than 2026.11. The integration tests therefore avoid version-specific assumptions and
+`tests/integration/conftest.py` bridges the one signature difference that matters (`async_extract_entity_ids`). They
+were run locally against that older harness; CI should use the newest release, which tracks 2026.11.
+
+Without the harness installed, `pytest` still passes the 56 pure tests and skips the integration directory.
 
 ---
 
@@ -584,9 +596,10 @@ conflict policies, boost safety/expiry/return, lock enforcement/persistence, per
 
 ### 8.1 Immediate
 
-1. Owner: push the two local docs commits. The test instance already runs the clean `e025cf4` build, so no further
-   Marketplace install is needed for the sensor fix. Do not re-add the old `custom_components/climaterouter` bind
-   mount: it makes the folder a mount point (`EBUSY`) and the Marketplace cannot back it up before replacing it.
+1. Owner: push the local commits. The test instance already runs the clean `e025cf4` build; the lint/test commits
+   do not change runtime behaviour, so no Marketplace install is required for them. Do not re-add the old
+   `custom_components/climaterouter` bind mount: it makes the folder a mount point (`EBUSY`) and the Marketplace
+   cannot back it up before replacing it.
 2. Open **Configure** once after the update and save any section. The schema-only save drops the removed
    manual-switch key from `entry.data`. Confirm the collapsed sections render correctly, that the brief
    explanations appear under the fields, that the options menu returns after each section save, and that **Finish**
@@ -603,16 +616,19 @@ conflict policies, boost safety/expiry/return, lock enforcement/persistence, per
 
 ### 8.2 Automated tests
 
-Add `pytest-homeassistant-custom-component` integration tests and update CI to install `requirements_test.txt`
-with a Python version matching the supported HA. Suggested coverage:
+`pytest-homeassistant-custom-component` is now wired into `tests/conftest.py`, CI installs `requirements_test.txt`,
+and the integration suite lives in `tests/integration/`. Done so far:
 
-- config flow: happy path, duplicate unique id, missing entity, threshold order, reconfigure, options reload;
-- coordinator: routing precedence, fallback on unavailable, stale outdoor hold, route override;
-- handover: active → pending → idle → off → start; off-confirm timeout; route revert during pending;
-- startup: adopt one on-target; persisted desired state; targets not loaded yet;
-- persistence: desired state and last route across reload;
-- services: target resolution, route override, clear override;
-- entity state: optimistic window, mirroring, attributes.
+- [x] config flow: happy path, missing entities, same entities, threshold order;
+- [x] coordinator: cold/mild hysteresis, route override, manual mode start/return, off safety;
+- [x] services: route override, enter manual mode, manual timer, return to schedule, argument validation;
+- [x] entity platforms: registry coverage, device info, conditional lock platform;
+- [ ] config flow: duplicate unique id, reconfigure, options reload;
+- [ ] coordinator: fallback on unavailable, stale outdoor hold;
+- [ ] handover: active → pending → idle → off → start; off-confirm timeout; route revert during pending;
+- [ ] startup: adopt one on-target; persisted desired state; targets not loaded yet;
+- [ ] persistence: desired state and last route across reload;
+- [ ] entity state: optimistic window, mirroring, attributes.
 
 ### 8.3 M4 — proxy-owned manual mode (implemented in this checkout)
 
@@ -691,9 +707,8 @@ with a Python version matching the supported HA. Suggested coverage:
   Docker keeps old logs. Poll `/api/states` for `climate.climaterouter*` instead.
 - **Local Python is 3.10.** Keep `str, Enum` + `# noqa: UP042` and `timezone.utc` + `# noqa: UP017` unless you
   raise the local/tooling baseline. CI uses 3.13.
-- **Ruff format drift.** A current `ruff` (0.17.x) wants to reformat several pre-existing blocks even though the
-  code was formatted with an older version. Pin ruff or reformat in a separate commit; do not mix it into a feature
-  change.
+- **Ruff format drift.** The tree was reformatted with ruff 0.17.x in `01fd245`, so `ruff check .` and
+  `ruff format --check .` are clean and CI enforces them. Run the formatter before committing.
 - **The `.storage` test entries are not in git.** A fresh clone has no `ClimateRouter Test` or
   `Fake HVAC Lab 2`.
 
