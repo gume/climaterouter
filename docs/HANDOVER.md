@@ -1,6 +1,6 @@
 # Handover — ClimateRouter
 
-**Date:** 2026-11-08
+**Date:** 2026-11-09
 **Branch:** `main`
 **Relevant commits:**
 
@@ -76,6 +76,7 @@
 | `bbfcf12` | `test: cover handover transitions and persisted deadlines` |
 | `514200b` | `test: cover climate optimism, availability, and auxiliary entities` |
 | `2c5c1de` | `fix: support Home Assistant 2025.1.4 and bump to 0.8.2` |
+| `724111f` | `test: capture handover-abort events synchronously` |
 
 Everything through `e025cf4` is pushed to `origin/main`. The documentation, test-harness, HA 2025.1.4 compatibility
 and coverage-gate commits after it are local only. The test instance runs a clean Marketplace install of `e025cf4`
@@ -648,7 +649,7 @@ both-targets-on startup conflicts, auto-relock persistence, remaining config val
 
 ### 8.2 Automated tests and CI
 
-Status as of 2026-11-08:
+Status as of 2026-11-09:
 
 | Check | Result |
 |---|---|
@@ -658,7 +659,7 @@ Status as of 2026-11-08:
 | Integration tests (HA harness) | 37 passed |
 | Full suite (HA harness) | 93 passed |
 | CI installs `requirements_test.txt` | yes (intentionally unpinned) |
-| GitHub CI run confirmed | **not yet** — commits are local only |
+| GitHub CI run confirmed | first run failed on the event-capture race; fixed in `724111f`, rerun pending |
 | Measured statement coverage | **81 %** (gate 75 %) |
 
 `pytest-homeassistant-custom-component` is wired into `tests/conftest.py`, and the integration suite lives in
@@ -704,7 +705,7 @@ Low priority:
 - [ ] `vt_display.py` coverage is reported as 0 % due to the dual import path used by the pure and integration
       suites; confirm with a combined coverage run;
 - [ ] type checking and a Python version matrix in CI (the coverage gate is in place);
-- [ ] live GitHub CI run.
+- [ ] confirm the CI rerun after `724111f` passes.
 
 #### Coverage snapshot
 
