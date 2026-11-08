@@ -32,4 +32,8 @@ jobs:
         run: ruff format --check .
 
       - name: Tests
-        run: pytest
+        run: |
+          pytest \
+            --cov=custom_components.climaterouter \
+            --cov-report=term-missing \
+            --cov-fail-under=75
