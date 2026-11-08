@@ -57,6 +57,10 @@
 | `b94e279` | `test: add config flow integration tests and CI HA harness` |
 | `a19f2d6` | `fix: expose temperature_unit alongside native_temperature_unit` |
 | `fc921bf` | `test: cover coordinator routing, services, and entity platforms` |
+| `306ce39` | `docs: record the automated test suite and CI harness` |
+| `759bca5` | `fix: register the sectioned options flow explicitly` |
+| `e0e17db` | `test: cover duplicate, reconfigure, and options flows` |
+| `a41b7e5` | `test: cover fallback, startup adoption, persistence, and handover` |
 
 Everything through `e025cf4` is pushed to `origin/main`. The documentation and test commits after it are not pushed
 yet. The test instance runs a clean Marketplace install of `e025cf4` (version **0.8.1**). The assistant has no
@@ -620,14 +624,17 @@ conflict policies, boost safety/expiry/return, lock enforcement/persistence, per
 and the integration suite lives in `tests/integration/`. Done so far:
 
 - [x] config flow: happy path, missing entities, same entities, threshold order;
+- [x] config flow: duplicate unique id, reconfigure, options section save and finish;
 - [x] coordinator: cold/mild hysteresis, route override, manual mode start/return, off safety;
+- [x] coordinator: fallback on unavailable, stale/missing outdoor hold;
+- [x] startup: adopt one already-running target;
+- [x] handover: forced handover away from an active target;
+- [x] persistence: desired state survives unload/setup;
 - [x] services: route override, enter manual mode, manual timer, return to schedule, argument validation;
 - [x] entity platforms: registry coverage, device info, conditional lock platform;
-- [ ] config flow: duplicate unique id, reconfigure, options reload;
-- [ ] coordinator: fallback on unavailable, stale outdoor hold;
 - [ ] handover: active → pending → idle → off → start; off-confirm timeout; route revert during pending;
-- [ ] startup: adopt one on-target; persisted desired state; targets not loaded yet;
-- [ ] persistence: desired state and last route across reload;
+- [ ] startup: targets not loaded yet when desired state is restored;
+- [ ] persistence: `last_route` and manual/boost deadlines across reload;
 - [ ] entity state: optimistic window, mirroring, attributes.
 
 ### 8.3 M4 — proxy-owned manual mode (implemented in this checkout)
