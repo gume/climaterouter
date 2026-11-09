@@ -91,6 +91,9 @@
 | `43e3257` | `docs: record watchdog expiry fix and live 0.8.2 state` |
 | `ff3474b` | `chore: bump version to 0.8.3` |
 | `bd0305d` | `test: cover service dispatch and inactive target detection` |
+| `7160c87` | `test: cover boost handover exit, flows, and display branches` |
+| `32c4ae7` | `fix: satisfy strict type checking` |
+| `24482c8` | `ci: add mypy and a Python 3.12/3.13 unit matrix` |
 
 Everything through `aeab87d` is pushed to `origin/main`. The test instance runs a clean Marketplace install of
 `aeab87d` (version **0.8.2**) and was verified live. The later test fixes and the 0.8.3 version bump are local only.
@@ -590,9 +593,10 @@ The remaining checks are the interactive ones that need the UI: saving the confi
 descriptions, and a real handover to confirm `last_handover` persistence.
 
 Automated coverage now includes natural manual/boost expiry callbacks, conflict `reassert`/`adopt`/auto-resolve,
-both-targets-on and `inactive_target_on` detection, auto-relock persistence, the remaining services, diagnostics and
-config-flow validation. The remaining gaps are boost expiry during a handover, a few service error paths and
-`vt_display.py`. See section 8.2 for the full list.
+both-targets-on and `inactive_target_on` detection, auto-relock persistence, the remaining services, diagnostics,
+config-flow validation, expiry during an active spare target and the VTherm display branches. The remaining gap is
+mostly defensive/error handling in `coordinator.py`; `mypy` and a Python 3.12/3.13 unit matrix are now in CI. See
+section 8.2 for the full list.
 
 ---
 
@@ -603,10 +607,9 @@ config-flow validation. The remaining gaps are boost expiry during a handover, a
    the correct `async_extract_entity_ids` signature, and `climate.py` exposes the legacy temperature properties when
    the base class lacks the `native_*` ones. The suite passes on a 2025.1.4 harness; CI tracks the newest harness.
    Intermediate releases are expected to work but are not individually tested.
-2. **Automated coverage is still partial (87 %, gate 75 %).** High-risk handover, persistence, manual start/return,
+2. **Automated coverage is still partial (89 %, gate 75 %).** High-risk handover, persistence, manual start/return,
    expiry, boost start/cancel, conflict policies, lock, services, diagnostics and entity behaviour are covered. See
-   section 8.2 for the remaining medium/low gaps; `coordinator.py` (80 %) and `vt_display.py` (0 % due to the dual
-   import path) are the largest untested areas.
+   section 8.2 for the remaining gaps; `coordinator.py` (81 %) is the largest untested area.
 3. **Manual mode is live-verified through 0.8.0 and well covered.** Start/return, `off`, conflicting-argument
    rejection, deadline persistence and the expiry callback are automated. Watchdog-driven expiry, handover carry-over
    and Lock B (`manual_blocks_schedule`) automation rejection still need tests. A user temperature/preset move
@@ -677,12 +680,14 @@ Status as of 2026-11-09:
 |---|---|
 | `ruff check .` | clean |
 | `ruff format --check .` | clean |
-| Pure unit tests (no HA) | 56 passed |
-| Integration tests (HA harness) | 66 passed |
-| Full suite (HA harness) | 122 passed |
-| CI installs `requirements_test.txt` | yes (intentionally unpinned) |
-| GitHub CI run confirmed | green through `aeab87d`; the later test/doc commits await the owner's push |
-| Measured statement coverage | **87 %** (gate 75 %) |
+| Pure unit tests (no HA) | 58 passed |
+| Integration tests (HA harness) | 73 passed |
+| Full suite (HA harness) | 131 passed |
+| `mypy custom_components/climaterouter` | clean |
+| CI installs `requirements_test.txt` | yes (intentionally unpinned, includes `mypy`) |
+| CI matrix | full HA suite on Python 3.13; pure unit tests on Python 3.12 and 3.13 |
+| GitHub CI run confirmed | green through `aeab87d`; the later commits await the owner's push |
+| Measured statement coverage | **89 %** (gate 75 %) |
 
 `pytest-homeassistant-custom-component` is wired into `tests/conftest.py`, and the integration suite lives in
 `tests/integration/`. Without the harness, pytest runs the pure tests and skips the integration directory.
@@ -720,37 +725,33 @@ Status as of 2026-11-09:
       them scheduled (`02e1bcd`).
 - [x] service dispatch for recalculate/clear-conflicts/force-handover and `inactive_target_on` detection
       (`bd0305d`).
+- [x] boost expiry while the spare target is active, starting a pending handover (`7160c87`).
+- [x] reconfigure with an unknown entry id, the remaining options sections, and legacy flat form data
+      (`7160c87`).
+- [x] `vt_display.py` ranking and valve-regulation branches; coverage attribution fixed by measuring the source
+      directory instead of the package name (`7160c87`, `24482c8`).
+- [x] `mypy` clean and wired into CI; Python 3.12/3.13 pure-unit matrix added (`32c4ae7`, `24482c8`).
 
 #### Missing
 
-Medium priority:
-
-- [ ] boost expiry during a pending handover;
-- [ ] reconfigure with an unknown entry id and the remaining options-section save paths.
-
-Low priority:
-
-- [ ] `vt_display.py` coverage is reported as 0 % due to the dual import path used by the pure and integration
-      suites; confirm with a combined coverage run;
-- [ ] type checking and a Python version matrix in CI (the coverage gate is in place);
-- [ ] owner: add repository topics so the HACS validation passes (for example
-      `home-assistant`, `home-assistant-custom-component`, `hacs`, `integration`).
+- [ ] `coordinator.py` defensive/error branches: invalid route overrides, unavailable or cooling boost targets,
+      manual-duration clamping, and conflicted clear-after ageing. These are the remaining sub-90 % areas.
+- [ ] owner: push the local commits, confirm the full CI run (including mypy and the matrix), and keep the
+      repository topics in place so HACS validation stays green.
+- [ ] live re-check after installing 0.8.3 (expiry and conflict behaviour).
 
 #### Coverage snapshot
 
 | Module | Coverage |
 |---|---|
-| `const.py`, `entity.py`, `switch.py`, `diagnostics.py` | 100 % |
-| `router.py`, `sensor.py` | 98 % |
+| `config_flow.py`, `const.py`, `diagnostics.py`, `entity.py`, `sensor.py`, `switch.py` | 100 % |
+| `router.py`, `services.py`, `vt_display.py` | 98 % |
 | `button.py` | 97 % |
 | `select.py` | 96 % |
 | `binary_sensor.py`, `models.py` | 95 % |
 | `__init__.py`, `climate.py`, `lock.py` | 94 % |
-| `services.py` | 98 % |
-| `config_flow.py` | 96 % |
-| `coordinator.py` | 80 % |
-| `vt_display.py` | 0 % (see note above) |
-| **Total** | **87 %** |
+| `coordinator.py` | 81 % |
+| **Total** | **89 %** |
 
 The local PyPI snapshot only offers `pytest-homeassistant-custom-component` 0.13.205 (HA 2025.1.4), not 2026.11.
 CI installs the newest release. Production code supports both versions; no test-only shims remain.
