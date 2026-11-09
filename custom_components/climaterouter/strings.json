@@ -56,7 +56,7 @@
             "data_description": {
               "default_manual_minutes": "Timer for a new manual session. 0 keeps manual mode active until ended.",
               "max_manual_minutes": "Upper limit for the manual timer.",
-              "manual_blocks_schedule": "Reject schedule and automation commands while manual mode is active. User commands still work."
+              "manual_blocks_schedule": "Keep schedule and automation commands out while manual mode is active. The latest schedule state is remembered and applied when manual mode ends. User commands still work."
             }
           },
           "conflicts": {
@@ -168,7 +168,7 @@
             "data_description": {
               "default_manual_minutes": "Timer for a new manual session. 0 keeps manual mode active until ended.",
               "max_manual_minutes": "Upper limit for the manual timer.",
-              "manual_blocks_schedule": "Reject schedule and automation commands while manual mode is active. User commands still work."
+              "manual_blocks_schedule": "Keep schedule and automation commands out while manual mode is active. The latest schedule state is remembered and applied when manual mode ends. User commands still work."
             }
           },
           "conflicts": {
@@ -309,7 +309,7 @@
         "data_description": {
           "default_manual_minutes": "Timer for a new manual session. 0 keeps manual mode active until ended.",
           "max_manual_minutes": "Upper limit for the manual timer.",
-          "manual_blocks_schedule": "Reject schedule and automation commands while manual mode is active. User commands still work."
+          "manual_blocks_schedule": "Keep schedule and automation commands out while manual mode is active. The latest schedule state is remembered and applied when manual mode ends. User commands still work."
         }
       },
       "conflicts": {

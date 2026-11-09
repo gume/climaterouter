@@ -27,7 +27,13 @@ from custom_components.climaterouter.const import (
     EVENT_HANDOVER_STARTED,
     EVENT_MANUAL_MODE_ENDED,
 )
-from custom_components.climaterouter.models import HVAC_COOL, HVAC_HEAT, ROUTE_AC, Target
+from custom_components.climaterouter.models import (
+    HVAC_COOL,
+    HVAC_HEAT,
+    HVAC_OFF,
+    ROUTE_AC,
+    Target,
+)
 
 RADIATOR = "climate.radiator"
 AC = "climate.ac"
@@ -1173,22 +1179,113 @@ async def test_auto_relock_deadline_expires_on_startup(hass, monkeypatch) -> Non
     assert reloaded._auto_relock_at is None
 
 
-async def test_lock_b_blocks_automation_commands(hass) -> None:
-    """With ``manual_blocks_schedule`` on, only user commands may change manual mode."""
+async def test_lock_b_defers_automation_commands(hass) -> None:
+    """With ``manual_blocks_schedule`` on, schedule moves are deferred, not applied."""
     from homeassistant.core import Context
 
     _entry, coordinator = await _setup(hass, outdoor=5.0, manual_blocks_schedule=True)
     await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
     await coordinator.async_enter_manual_mode(temperature=23, context=USER)
 
-    with pytest.raises(HomeAssistantError):
-        await coordinator.async_set_temperature(temperature=22, context=Context())
+    # A scheduler setpoint is remembered as the baseline but the manual value wins.
+    await coordinator.async_set_temperature(temperature=22, context=Context())
+    manual = coordinator.data.manual_mode
+    assert manual is not None
+    assert manual.desired.target_temperature == 23
+    assert coordinator.data.desired.target_temperature == 23
+    assert coordinator._baseline.target_temperature == 22
+
+    # A scheduler off must not stop manual mode either.
+    await coordinator.async_set_hvac_mode(HVAC_OFF, context=Context())
+    manual = coordinator.data.manual_mode
+    assert manual is not None
+    assert manual.desired.hvac_mode == HVAC_HEAT
+    assert coordinator.data.desired.hvac_mode == HVAC_HEAT
+    assert coordinator._baseline.hvac_mode == HVAC_OFF
+
+    # Automations still cannot change manual mode itself.
     with pytest.raises(HomeAssistantError):
         await coordinator.async_enter_manual_mode(temperature=24, context=Context())
 
-    await coordinator.async_set_temperature(temperature=22, context=USER)
+    await coordinator.async_set_temperature(temperature=24, context=USER)
     assert coordinator.data.manual_mode is not None
-    assert coordinator.data.manual_mode.desired.target_temperature == 22
+    assert coordinator.data.manual_mode.desired.target_temperature == 24
+
+
+async def test_deferred_scheduler_off_is_applied_when_manual_expires(hass, monkeypatch) -> None:
+    """A scheduler off during manual mode is the state manual mode returns to."""
+    from homeassistant.core import Context
+
+    from custom_components.climaterouter import coordinator as coordinator_module
+
+    _entry, coordinator = await _setup(hass, outdoor=5.0, manual_blocks_schedule=True)
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+    await coordinator.async_enter_manual_mode(temperature=23, duration_minutes=30, context=USER)
+    await coordinator.async_set_hvac_mode(HVAC_OFF, context=Context())
+    await hass.async_block_till_done()
+
+    manual = coordinator.data.manual_mode
+    assert manual is not None and manual.until is not None
+    assert coordinator.data.desired.hvac_mode == HVAC_HEAT
+
+    monkeypatch.setattr(
+        coordinator_module.dt_util,
+        "utcnow",
+        lambda: manual.until + timedelta(seconds=1),
+    )
+    await coordinator._async_manual_expired(coordinator_module.dt_util.utcnow())
+    await hass.async_block_till_done()
+
+    assert coordinator.data.manual_mode is None
+    assert coordinator.data.desired.hvac_mode == HVAC_OFF
+    assert coordinator.data.active_targets == frozenset()
+
+
+async def test_manual_mode_reasserts_direct_target_changes(hass) -> None:
+    """An external write to the active target does not beat manual mode."""
+    _entry, coordinator = await _setup(hass, outdoor=5.0, manual_blocks_schedule=True)
+    calls_temp = async_mock_service(hass, "climate", "set_temperature")
+    calls_mode = async_mock_service(hass, "climate", "set_hvac_mode")
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+    await coordinator.async_enter_manual_mode(temperature=23, context=USER)
+    await hass.async_block_till_done()
+    calls_temp.clear()
+    calls_mode.clear()
+
+    # A scheduler/automation writes directly to the VTherm instead of the proxy.
+    hass.states.async_set(
+        RADIATOR,
+        HVAC_HEAT,
+        {
+            "hvac_modes": [HVAC_HEAT],
+            "hvac_action": "heating",
+            "temperature": 18,
+            "min_temp": 7,
+            "max_temp": 35,
+        },
+    )
+    await hass.async_block_till_done()
+    await coordinator.async_evaluate()
+    await hass.async_block_till_done()
+
+    assert calls_temp and calls_temp[-1].data["temperature"] == 23
+    assert coordinator.data.manual_mode is not None
+    assert coordinator.data.desired.target_temperature == 23
+
+    # Turning the underlying target off must not end manual mode either.
+    calls_mode.clear()
+    hass.states.async_set(
+        RADIATOR,
+        STATE_OFF,
+        {"hvac_modes": [HVAC_HEAT], "min_temp": 7, "max_temp": 35},
+    )
+    await hass.async_block_till_done()
+    await coordinator.async_evaluate()
+    await hass.async_block_till_done()
+
+    assert calls_mode and calls_mode[-1].data["hvac_mode"] == HVAC_HEAT
+    assert coordinator.data.manual_mode is not None
+    assert coordinator.data.desired.hvac_mode == HVAC_HEAT
 
 
 async def test_manual_mode_carries_over_handover(hass) -> None:

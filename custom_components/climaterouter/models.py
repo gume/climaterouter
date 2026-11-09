@@ -620,11 +620,12 @@ def manual_lock_blocks_context(
     manual_active: bool,
     user_id: str | None,
 ) -> bool:
-    """Return whether manual mode (Lock B) blocks this command.
+    """Return whether manual mode should defer this command.
 
-    Lock B protects an active manual mode from schedule/automation commands.
-    User commands must always be accepted so the manual setpoint can be
-    adjusted without unlocking.
+    While manual mode is active, schedule/automation commands (no ``user_id``)
+    are kept as the baseline and are not applied to the targets. User commands
+    must always be accepted so the manual setpoint can be adjusted without
+    unlocking.
     """
     if not (enabled and manual_active):
         return False

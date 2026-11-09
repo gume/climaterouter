@@ -270,10 +270,17 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         from_user = self._is_user_context(context)
         has_setpoint = temperature is not None or preset_mode is not None
 
+        defer = self._defers_schedule_command(context)
+
         if hvac_mode == HVAC_OFF:
-            # An explicit off is a safety command and always ends manual mode.
-            self._end_manual("off")
-            self._apply_mode(HVAC_OFF)
+            if defer:
+                # A scheduler off must not stop manual mode. Remember it as the
+                # latest schedule state so the timer expiry returns to it.
+                self._baseline.hvac_mode = HVAC_OFF
+            else:
+                # An explicit off is a safety command and always ends manual mode.
+                self._end_manual("off")
+                self._apply_mode(HVAC_OFF)
             await self._async_command_received()
             return
 
@@ -286,6 +293,19 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
                 self._manual.desired.hvac_mode = hvac_mode
             self._apply_setpoint(
                 self._manual.desired,
+                temperature=temperature,
+                preset_mode=preset_mode,
+            )
+        elif defer:
+            # A schedule/automation move while manual mode is active is kept as
+            # the return target but is not applied now. This protects the manual
+            # setting and makes the next timer expiry follow the latest schedule.
+            if hvac_mode is not None:
+                if hvac_mode not in MODES:
+                    raise HomeAssistantError(f"Unsupported HVAC mode: {hvac_mode}")
+                self._baseline.hvac_mode = hvac_mode
+            self._apply_setpoint(
+                self._baseline,
                 temperature=temperature,
                 preset_mode=preset_mode,
             )
@@ -327,10 +347,17 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._ensure_unlocked(context)
         if hvac_mode not in MODES:
             raise HomeAssistantError(f"Unsupported HVAC mode: {hvac_mode}")
+        from_user = self._is_user_context(context)
+        defer = self._defers_schedule_command(context)
         if hvac_mode == HVAC_OFF:
-            self._end_manual("off")
-            self._apply_mode(HVAC_OFF)
-        elif self._manual is not None and self._is_user_context(context):
+            if defer:
+                # Keep heating/cooling while manual mode is active, but return
+                # to off when the manual timer expires.
+                self._baseline.hvac_mode = HVAC_OFF
+            else:
+                self._end_manual("off")
+                self._apply_mode(HVAC_OFF)
+        elif self._manual is not None and from_user:
             self._manual.desired.hvac_mode = hvac_mode
         else:
             self._apply_mode(hvac_mode)
@@ -364,7 +391,10 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
     async def async_turn_off(self, context: Context | None = None) -> None:
         """Turn everything off immediately."""
         self._ensure_unlocked(context)
-        self._end_manual("off")
+        if not self._defers_schedule_command(context):
+            self._end_manual("off")
+        # A scheduler off is remembered as the return state; a user off ends
+        # manual mode and stops the targets through the normal path.
         self._baseline.hvac_mode = HVAC_OFF
         await self._async_command_received()
 
@@ -450,11 +480,9 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
     async def _async_command_received(self) -> None:
         """Record the command, persist it, and evaluate the route."""
         self._last_command = dt_util.utcnow()
-        if self._baseline.hvac_mode == HVAC_OFF and self._manual is not None:
-            # An explicit off is a safety command and ends manual mode.
-            self._end_manual("off")
         if self._manual is not None:
-            # Keep the last schedule command for return-to-schedule.
+            # Keep the last schedule command for return-to-schedule. This also
+            # records commands that were deferred during manual mode.
             self._manual.baseline = self._baseline.copy()
         self._sync_desired()
         self._store.async_delay_save(self._data_to_save, 1)
@@ -576,6 +604,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
     ) -> None:
         """Enter or update manual mode through a service call."""
         self._ensure_unlocked(context)
+        self._ensure_manual_control_allowed(context)
         supplied = [value is not None for value in (temperature, preset_mode, hvac_mode)]
         if sum(supplied) > 1:
             raise HomeAssistantError(
@@ -628,6 +657,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
     ) -> None:
         """Set the manual countdown; ``None`` or ``0`` switches it off."""
         self._ensure_unlocked(context)
+        self._ensure_manual_control_allowed(context)
         if self._manual is None:
             raise HomeAssistantError("Manual mode is not active")
         now = dt_util.utcnow()
@@ -865,8 +895,29 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             self._publish()
         self._schedule_auto_relock()
 
+    def _defers_schedule_command(self, context: Context | None) -> bool:
+        """Return whether manual mode should defer this schedule/automation command.
+
+        While manual mode is active, schedule commands are not applied. They are
+        stored as the baseline instead, so the latest schedule is what manual
+        mode returns to when its timer expires (or the user returns manually).
+        """
+        user_id = context.user_id if context is not None else None
+        return manual_lock_blocks_context(
+            enabled=self.config.manual_blocks_schedule,
+            manual_active=self._manual is not None,
+            user_id=user_id,
+        )
+
+    def _ensure_manual_control_allowed(self, context: Context | None) -> None:
+        """Reject automation changes to manual mode itself while it is active."""
+        if self._defers_schedule_command(context):
+            raise HomeAssistantError(
+                "Manual mode is active; return to schedule before sending automation commands"
+            )
+
     def _ensure_unlocked(self, context: Context | None) -> None:
-        """Reject a command blocked by Lock A or Lock B."""
+        """Reject a command blocked by the accidental-touch UI lock (Lock A)."""
         user_id = context.user_id if context is not None else None
         if lock_blocks_context(
             enabled=self.config.lock_enabled,
@@ -874,14 +925,6 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             user_id=user_id,
         ):
             raise HomeAssistantError("ClimateRouter is locked; unlock it before sending commands")
-        if manual_lock_blocks_context(
-            enabled=self.config.manual_blocks_schedule,
-            manual_active=self._manual is not None,
-            user_id=user_id,
-        ):
-            raise HomeAssistantError(
-                "Manual mode is active; return to schedule before sending automation commands"
-            )
 
     def _schedule_auto_relock(self, delay: float | None = None) -> None:
         """Lock the router again after the configured delay."""
@@ -1225,9 +1268,23 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             if self._active_targets and target in self._active_targets:
                 self._route_reason = decision.reason
                 self._handover_state = HandoverState.STEADY
-                if explicit or (
-                    not self._conflicts_suppressed(dt_util.utcnow())
-                    and not self._has_target_conflict(target)
+                target_state = self._states[target]
+                # Manual mode is authoritative: an external change to the
+                # active target (for example a scheduler or automation writing
+                # directly to the VTherm) must not win while it is active.
+                manual_reassert = (
+                    self._manual is not None
+                    and target_state.available
+                    and not target_state.guard
+                    and not target_state.timed_preset_active
+                )
+                if (
+                    explicit
+                    or manual_reassert
+                    or (
+                        not self._conflicts_suppressed(dt_util.utcnow())
+                        and not self._has_target_conflict(target)
+                    )
                 ):
                     await self._async_forward_desired(target)
             else:

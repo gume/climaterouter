@@ -290,7 +290,7 @@ def test_ui_lock_blocks_only_user_commands() -> None:
     assert lock_blocks_context(**{**base, "enabled": False}, user_id="user-1") is False
 
 
-def test_manual_lock_blocks_only_automation_commands() -> None:
+def test_manual_lock_defers_only_automation_commands() -> None:
     base = {
         "enabled": True,
         "manual_active": True,

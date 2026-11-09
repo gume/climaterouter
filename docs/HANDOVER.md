@@ -147,6 +147,13 @@ available with an `off` state and crossed-out timer icon when unused, keeps the 
 expires without a schedule baseline, and adds text sensors that explain active conflicts and radiator/AC target
 mismatches.
 
+Version **0.8.5** makes manual mode authoritative against schedulers. Schedule/automation moves received while
+manual mode is active are remembered as the baseline instead of being rejected, so they cannot change the manual
+setpoint or turn the target off, and timer expiry/return-to-schedule follows the scheduler's latest move (including
+a deferred `off`). If an automation writes directly to the underlying VTherm, the coordinator re-asserts the manual
+state. The manual-timer select remains `off` when inactive. A small service-extraction compatibility fix also covers
+Home Assistant releases where `async_extract_entity_ids()` has an `expand_group` second parameter.
+
 The next developer should start with section 8 (Next steps).
 
 ---
@@ -299,9 +306,12 @@ Events fired on the HA bus:
 
 - Manual mode is owned by the proxy and is **not** mirrored to either VTherm.
 - A user moving the temperature or changing the preset in the UI enters manual mode automatically. Schedule and
-  automation commands (no `user_id` in the context) update the schedule baseline instead and do not enter manual
-  mode.
+  automation commands (no `user_id` in the context) do not enter manual mode.
 - Additional user moves while manual mode is active update the manual value but **never reset the timer**.
+- While manual mode is active, schedule/automation commands (including an `off`) are **deferred**: the latest
+  command is stored as the schedule baseline but is not applied to the targets. This protects the manual setting
+  and makes the timer expiry (or `return_to_schedule`) return to the scheduler's latest move. Automations still
+  cannot change manual mode itself (enter/timer) while `manual_blocks_schedule` is on.
 - `duration_minutes` defaults to `default_manual_minutes`; `0` means no countdown. The timer can be changed or
   switched off later with `climaterouter.set_manual_timer` (minutes `0` or omitted = infinite).
 - The coordinator keeps a **baseline** desired state (the latest schedule command) and a separate `ManualMode`
@@ -310,7 +320,10 @@ Events fired on the HA bus:
 - A user move starts manual mode without modifying the baseline, so `climaterouter.return_to_schedule` restores the
   schedule value rather than the last manual value. Schedule commands received while manual mode is active update
   the baseline but do not replace the manual value.
-- An explicit `off` ends manual mode (`cause=off`). Timer expiry ends it with `cause=expired`.
+- Manual mode is authoritative over the active target: if an external scheduler/automation writes directly to the
+  underlying VTherm, the coordinator re-sends the manual mode/setpoint (guarded targets are left alone).
+- An explicit **user** `off` ends manual mode (`cause=off`). A scheduler/automation `off` is deferred and applied
+  when manual mode ends. Timer expiry ends manual mode with `cause=expired`.
 - Handovers use the effective desired state, so manual mode and its deadline carry over to the new target. The
   manual mode is persisted with an absolute deadline; expired sessions are discarded on startup, infinite sessions
   are restored as-is.
@@ -438,9 +451,12 @@ optionally set a 4–8 digit `lock_code`, and set `auto_relock_sec` (0 disables 
 **Lock B — manual/schedule lock.** Controlled by `manual_blocks_schedule` (default on) and the manual-mode state
 itself; it is not mirrored to either VTherm.
 
-- While manual mode is active, commands without a `user_id` (Scheduler, automations, scripts) are rejected with a
-  clear error. User commands are always accepted, so the manual setpoint and timer can be adjusted without
-  unlocking.
+- While manual mode is active, climate commands without a `user_id` (Scheduler, Velair, automations, scripts) are
+  **deferred**: they update the schedule baseline but do not change the active target. An `off` from a scheduler is
+  deferred too, so it cannot stop a manual session; it becomes the state applied when manual mode ends. User
+  commands are always accepted, so the manual setpoint and timer can be adjusted without unlocking.
+- Automation calls that try to change manual mode itself (`enter_manual_mode`, `set_manual_timer`) are still
+  rejected while manual mode is active.
 - `climaterouter.return_to_schedule` is deliberately not gated, so an explicit return (including an automation)
   can end manual mode. Lock A still blocks user-initiated service calls when locked.
 - The manual-mode switch (`switch.<name>_manual_mode`) is the user-facing Lock B control: on enters manual mode,

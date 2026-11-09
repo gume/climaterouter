@@ -67,8 +67,11 @@ SET_BOOST_SCHEMA = cv.make_entity_service_schema(
 LOCK_SCHEMA = cv.make_entity_service_schema({vol.Optional("code"): cv.string})
 
 # Home Assistant 2026.11 resolves targeted entities from the service call alone;
-# older releases still require the ``hass`` argument.
-_EXTRACT_TAKES_HASS = len(inspect.signature(async_extract_entity_ids).parameters) > 1
+# older releases still require the ``hass`` argument. Some intermediate releases
+# also add ``expand_group`` as a second parameter, so inspect the first parameter
+# name instead of counting parameters.
+_EXTRACT_PARAMETERS = list(inspect.signature(async_extract_entity_ids).parameters)
+_EXTRACT_TAKES_HASS = bool(_EXTRACT_PARAMETERS) and _EXTRACT_PARAMETERS[0] == "hass"
 
 
 async def _async_extract_entity_ids(call: ServiceCall) -> set[str]:
