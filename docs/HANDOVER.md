@@ -95,6 +95,8 @@
 | `32c4ae7` | `fix: satisfy strict type checking` |
 | `24482c8` | `ci: add mypy and a Python 3.12/3.13 unit matrix` |
 | `acd5b02` | `test: cover coordinator command, boost, and lock validation` |
+| `a6c1bb3` | `test: cover conflict clear-after ageing and startup auto-relock` |
+| `d2ced17` | `test: cover Lock B rejection and manual carry-over across handover` |
 
 Everything through `aeab87d` is pushed to `origin/main`. The test instance runs a clean Marketplace install of
 `aeab87d` (version **0.8.2**) and was verified live. The later test fixes and the 0.8.3 version bump are local only.
@@ -608,12 +610,12 @@ section 8.2 for the full list.
    the correct `async_extract_entity_ids` signature, and `climate.py` exposes the legacy temperature properties when
    the base class lacks the `native_*` ones. The suite passes on a 2025.1.4 harness; CI tracks the newest harness.
    Intermediate releases are expected to work but are not individually tested.
-2. **Automated coverage is still partial (90 %, gate 75 %).** High-risk handover, persistence, manual start/return,
+2. **Automated coverage is still partial (91 %, gate 75 %).** High-risk handover, persistence, manual start/return,
    expiry, boost start/cancel, conflict policies, lock, services, diagnostics and entity behaviour are covered. See
-   section 8.2 for the remaining gaps; `coordinator.py` (83 %) is the largest untested area.
+   section 8.2 for the remaining gaps; `coordinator.py` (84 %) is the largest untested area.
 3. **Manual mode is live-verified through 0.8.0 and well covered.** Start/return, `off`, conflicting-argument
-   rejection, deadline persistence and the expiry callback are automated. Watchdog-driven expiry, handover carry-over
-   and Lock B (`manual_blocks_schedule`) automation rejection still need tests. A user temperature/preset move
+   rejection, deadline persistence, watchdog expiry, handover carry-over and Lock B (`manual_blocks_schedule`)
+   automation rejection are automated. A user temperature/preset move
    started while the proxy has no mode/active target updates the baseline but does not by itself start heating; start
    the proxy (`heat`/`cool`) first.
 4. **M5 is live-verified through 0.8.0 and well covered.** Monitor, `reassert`, `adopt`, `both_targets_on`, startup
@@ -682,13 +684,13 @@ Status as of 2026-11-09:
 | `ruff check .` | clean |
 | `ruff format --check .` | clean |
 | Pure unit tests (no HA) | 58 passed |
-| Integration tests (HA harness) | 77 passed |
-| Full suite (HA harness) | 135 passed |
+| Integration tests (HA harness) | 81 passed |
+| Full suite (HA harness) | 139 passed |
 | `mypy custom_components/climaterouter` | clean |
 | CI installs `requirements_test.txt` | yes (intentionally unpinned, includes `mypy`) |
 | CI matrix | full HA suite on Python 3.13; pure unit tests on Python 3.12 and 3.13 |
 | GitHub CI run confirmed | green through `aeab87d`; the later commits await the owner's push |
-| Measured statement coverage | **90 %** (gate 75 %) |
+| Measured statement coverage | **91 %** (gate 75 %) |
 
 `pytest-homeassistant-custom-component` is wired into `tests/conftest.py`, and the integration suite lives in
 `tests/integration/`. Without the harness, pytest runs the pure tests and skips the integration directory.
@@ -734,11 +736,12 @@ Status as of 2026-11-09:
 - [x] `mypy` clean and wired into CI; Python 3.12/3.13 pure-unit matrix added (`32c4ae7`, `24482c8`).
 - [x] coordinator command validation (empty command, invalid mode/route, no handover), boost duration/target/state
       rejection, manual duration bounds and timer toggling, lock feature-flag rejection (`acd5b02`).
+- [x] conflict clear-after ageing and an auto-relock deadline that expired while unloaded (`a6c1bb3`).
 
 #### Missing
 
-- [ ] `coordinator.py` edge branches: auto-relock expiry at startup, conflict clear-after ageing, and a few
-      handover/restore paths. These are the remaining sub-90 % areas.
+- [ ] `coordinator.py` edge branches: a few defensive handover/restore and persistence-error paths. These are the
+      remaining untested areas.
 - [ ] owner: push the local commits, confirm the full CI run (including mypy and the matrix), and keep the
       repository topics in place so HACS validation stays green.
 - [ ] live re-check after installing 0.8.3 (expiry and conflict behaviour).
@@ -753,8 +756,8 @@ Status as of 2026-11-09:
 | `select.py` | 96 % |
 | `binary_sensor.py`, `models.py` | 95 % |
 | `__init__.py`, `climate.py`, `lock.py` | 94 % |
-| `coordinator.py` | 83 % |
-| **Total** | **90 %** |
+| `coordinator.py` | 84 % |
+| **Total** | **91 %** |
 
 The local PyPI snapshot only offers `pytest-homeassistant-custom-component` 0.13.205 (HA 2025.1.4), not 2026.11.
 CI installs the newest release. Production code supports both versions; no test-only shims remain.
@@ -778,7 +781,8 @@ Run the suite with the HA venv:
 - [x] Persistence, handover carry-over, Lock B (`manual_blocks_schedule`) automation rejection.
 - [x] Unit tests for the model helpers (`with_manual_mode`, serialization, expiry/remaining, migration).
 - [x] Integration tests for start/return, `off`, conflicting arguments and deadline persistence.
-- [ ] Integration tests for natural timer expiry, handover carry-over and Lock B automation rejection.
+- [x] Integration tests for natural timer expiry, handover carry-over and Lock B automation rejection
+      (`58f0ba5`, `d2ced17`).
 - [x] Live verification in the 2026.11 test instance (through 0.8.0).
 
 ### 8.4 M5 — conflict handling (implemented in this checkout)
@@ -806,7 +810,7 @@ Run the suite with the HA venv:
 - [x] Unit tests for `BoostState` and pure boost routing.
 - [x] Add hassfest and HACS validation workflow (`.github/workflows/validate.yml`, brands ignored).
 - [x] Integration tests for start, cancel, both-target routing and deadline persistence.
-- [ ] Integration tests for natural expiry and expiry during a pending handover.
+- [x] Integration tests for natural expiry and expiry during a pending handover (`7160c87`).
 - [x] Live verification in the test HA (through 0.8.0).
 - [x] The Marketplace installs from `main` by commit; tags/releases are optional owner actions.
 
@@ -824,7 +828,7 @@ Run the suite with the HA venv:
 - [x] Live verification through 0.8.0.
 - [x] Install commit `d3af8b4` (0.8.1) through the Marketplace; the target icons were verified live.
 - [x] Fix the nine-sensor icon regression in `e025cf4` and reinstall that clean build through the Marketplace.
-- [ ] Integration tests for the flows, locks, and manual mode.
+- [x] Integration tests for the flows, locks, and manual mode (through `d2ced17`).
 
 ---
 
