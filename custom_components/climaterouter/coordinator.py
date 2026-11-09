@@ -667,6 +667,11 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         if self._manual is None:
             return
         manual = self._manual
+        if cause != "off" and self._baseline.is_empty:
+            # No schedule command exists yet, so there is nothing to return to.
+            # Keep the current manual state running instead of blanking the
+            # proxy when the timer expires (or the user returns to schedule).
+            self._baseline = manual.desired.copy()
         self._cancel_manual_timer()
         self._manual = None
         self._sync_desired()

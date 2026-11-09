@@ -6,6 +6,7 @@ from datetime import timedelta
 from typing import Any
 
 from homeassistant.const import STATE_OFF
+from homeassistant.core import Context
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -192,3 +193,100 @@ async def test_lock_entity_only_when_enabled(hass) -> None:
 
     entries = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
     assert "lock" in {item.domain for item in entries}
+
+
+async def test_manual_timer_select_is_always_available_and_shows_off(hass) -> None:
+    """The manual timer is a usable badge even when no countdown is running."""
+    entry, coordinator = await _setup(hass)
+    registry = er.async_get(hass)
+    timer_id = registry.async_get_entity_id("select", DOMAIN, f"{entry.entry_id}_manual_timer")
+    assert timer_id is not None
+
+    state = hass.states.get(timer_id)
+    assert state is not None
+    assert state.state == "off"
+    assert state.attributes["icon"] == "mdi:timer-off-outline"
+
+    # Selecting ``off`` while manual mode is inactive is a harmless no-op.
+    await hass.services.async_call(
+        "select",
+        "select_option",
+        {"entity_id": timer_id, "option": "off"},
+        blocking=True,
+    )
+    assert coordinator.data.manual_mode is None
+
+    await coordinator.async_enter_manual_mode(temperature=22)
+    await hass.async_block_till_done()
+    state = hass.states.get(timer_id)
+    assert state is not None
+    assert state.state == "60"
+    assert state.attributes["icon"] == "mdi:timer-outline"
+
+    await coordinator.async_set_manual_timer(minutes=0, context=Context(user_id="user-1"))
+    state = hass.states.get(timer_id)
+    assert state is not None
+    assert state.state == "off"
+    assert state.attributes["icon"] == "mdi:timer-off-outline"
+
+
+async def test_conflict_and_target_mismatch_detail_sensors(hass, freezer) -> None:
+    """The text sensors explain conflicts and target mismatches."""
+    entry, coordinator = await _setup(hass, outdoor=5.0, conflict_policy="monitor")
+    registry = er.async_get(hass)
+    conflict_id = registry.async_get_entity_id(
+        "sensor", DOMAIN, f"{entry.entry_id}_conflict_detail"
+    )
+    mismatch_id = registry.async_get_entity_id(
+        "sensor", DOMAIN, f"{entry.entry_id}_target_mismatch_detail"
+    )
+    assert conflict_id is not None
+    assert mismatch_id is not None
+
+    conflict = hass.states.get(conflict_id)
+    mismatch = hass.states.get(mismatch_id)
+    assert conflict is not None and conflict.state == "none"
+    assert mismatch is not None and mismatch.state == "none"
+
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+    await hass.async_block_till_done()
+
+    hass.states.async_set(
+        RADIATOR,
+        HVAC_HEAT,
+        {
+            "hvac_modes": [HVAC_HEAT],
+            "hvac_action": "heating",
+            "temperature": 25,
+            "min_temp": 7,
+            "max_temp": 35,
+        },
+    )
+    hass.states.async_set(
+        AC,
+        HVAC_HEAT,
+        {
+            "hvac_modes": [HVAC_HEAT, "cool"],
+            "hvac_action": "idle",
+            "temperature": 18,
+            "min_temp": 16,
+            "max_temp": 30,
+        },
+    )
+    await hass.async_block_till_done()
+    freezer.tick(timedelta(seconds=3))
+    await coordinator.async_recalculate()
+    await hass.async_block_till_done()
+
+    conflict = hass.states.get(conflict_id)
+    assert conflict is not None
+    assert "setpoint" in conflict.state
+    assert conflict.attributes["count"] >= 1
+    assert conflict.attributes["conflicts"]
+
+    mismatch = hass.states.get(mismatch_id)
+    assert mismatch is not None
+    assert "setpoint" in mismatch.state
+    assert mismatch.attributes["reasons"]
+    assert mismatch.attributes["radiator_target_temperature"] == 25
+    assert mismatch.attributes["ac_target_temperature"] == 18

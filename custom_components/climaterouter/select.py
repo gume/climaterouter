@@ -54,7 +54,6 @@ class RouterManualTimerSelect(RouterEntity, SelectEntity):
     """Choose or switch off the manual-mode countdown."""
 
     _attr_name = "Manual timer"
-    _attr_icon = "mdi:timer-outline"
 
     def __init__(self, coordinator: ClimateRouterCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator)
@@ -70,15 +69,21 @@ class RouterManualTimerSelect(RouterEntity, SelectEntity):
 
     @property
     def current_option(self) -> str:
-        """Return the selected timer length."""
+        """Return the selected timer length, or ``off`` when unused."""
         timer = self._snapshot.manual_timer_minutes
         return "off" if timer is None else str(timer)
 
     @property
-    def available(self) -> bool:
-        """Only offer the timer while manual mode is active."""
-        return super().available and self._snapshot.manual_active
+    def icon(self) -> str:
+        """Show a crossed-out timer while no countdown is running."""
+        if self.current_option == "off":
+            return "mdi:timer-off-outline"
+        return "mdi:timer-outline"
 
     async def async_select_option(self, option: str) -> None:
         minutes = None if option == "off" else int(option)
+        if minutes is None and not self._snapshot.manual_active:
+            # ``off`` is the resting state and can be selected as a no-op when
+            # manual mode is not active.
+            return
         await self.coordinator.async_set_manual_timer(minutes=minutes, context=self._context)

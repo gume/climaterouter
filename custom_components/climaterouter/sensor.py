@@ -19,7 +19,7 @@ from homeassistant.util import dt as dt_util
 
 from .coordinator import ClimateRouterCoordinator
 from .entity import RouterEntity
-from .models import RouterSnapshot
+from .models import Conflict, RouterSnapshot, Target
 
 PARALLEL_UPDATES = 0
 
@@ -30,6 +30,76 @@ TARGET_ICONS: dict[str, str] = {
     "both": "mdi:hvac",
     "none": "mdi:hvac-off",
 }
+
+CONFLICT_LABELS: dict[str, str] = {
+    "target_unavailable": "unavailable",
+    "hvac_mode_mismatch": "mode",
+    "setpoint_mismatch": "setpoint",
+    "preset_mismatch": "preset",
+    "underlying_override": "timed preset",
+    "both_targets_on": "both targets on",
+    "inactive_target_on": "inactive target on",
+}
+
+
+def _format_value(value: Any) -> str:
+    if value is None:
+        return "?"
+    if isinstance(value, float):
+        return f"{value:g}"
+    if isinstance(value, (list, tuple)):
+        return ", ".join(str(item) for item in value)
+    return str(value)
+
+
+def _format_conflict(conflict: Conflict) -> str:
+    """Return one short, human-readable conflict description."""
+    target = conflict.target.value if conflict.target else "router"
+    label = CONFLICT_LABELS.get(conflict.type, conflict.type)
+    if conflict.type in ("setpoint_mismatch", "preset_mismatch", "hvac_mode_mismatch"):
+        return (
+            f"{target} {label} "
+            f"{_format_value(conflict.expected)} -> {_format_value(conflict.actual)}"
+        )
+    if conflict.type == "both_targets_on":
+        return label
+    return f"{target} {label}"
+
+
+def _truncate(value: str, limit: int = 250) -> str:
+    return value if len(value) <= limit else f"{value[: limit - 1]}…"
+
+
+def _conflict_detail(snapshot: RouterSnapshot) -> str:
+    if not snapshot.conflicts:
+        return "none"
+    return _truncate("; ".join(_format_conflict(conflict) for conflict in snapshot.conflicts))
+
+
+def _target_mismatch_detail(snapshot: RouterSnapshot) -> str:
+    reasons = snapshot.target_mismatch_reasons()
+    return "none" if not reasons else _truncate("; ".join(reasons))
+
+
+def _conflict_attributes(snapshot: RouterSnapshot) -> dict[str, Any]:
+    return {
+        "count": len(snapshot.conflicts),
+        "conflicts": [conflict.to_dict() for conflict in snapshot.conflicts],
+    }
+
+
+def _target_mismatch_attributes(snapshot: RouterSnapshot) -> dict[str, Any]:
+    radiator = snapshot.targets.get(Target.RADIATOR)
+    ac = snapshot.targets.get(Target.AC)
+    return {
+        "reasons": list(snapshot.target_mismatch_reasons()),
+        "radiator_target_temperature": (
+            radiator.target_temperature if radiator is not None else None
+        ),
+        "ac_target_temperature": ac.target_temperature if ac is not None else None,
+        "radiator_preset_mode": radiator.preset_mode if radiator is not None else None,
+        "ac_preset_mode": ac.preset_mode if ac is not None else None,
+    }
 
 
 def _active_target(snapshot: RouterSnapshot) -> str:
@@ -166,6 +236,24 @@ SENSOR_SPECS: tuple[
         None,
         lambda snapshot: snapshot.conflict_count,
     ),
+    (
+        "conflict_detail",
+        "Conflict detail",
+        None,
+        None,
+        None,
+        None,
+        _conflict_detail,
+    ),
+    (
+        "target_mismatch_detail",
+        "Target mismatch detail",
+        None,
+        None,
+        None,
+        None,
+        _target_mismatch_detail,
+    ),
 )
 
 
@@ -212,7 +300,27 @@ class RouterSensor(RouterEntity, SensorEntity):
     def icon(self) -> str | None:
         if self._key in ("active_target", "pending_target"):
             return TARGET_ICONS.get(self._value_fn(self._snapshot), "mdi:eye")
+        if self._key == "conflict_detail":
+            return (
+                "mdi:alert-circle-outline"
+                if self._snapshot.conflicts
+                else "mdi:check-circle-outline"
+            )
+        if self._key == "target_mismatch_detail":
+            return (
+                "mdi:alert-circle-outline"
+                if self._snapshot.target_mismatch_reasons()
+                else "mdi:check-circle-outline"
+            )
         return self._attr_icon
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        if self._key == "conflict_detail":
+            return _conflict_attributes(self._snapshot)
+        if self._key == "target_mismatch_detail":
+            return _target_mismatch_attributes(self._snapshot)
+        return None
 
     @property
     def native_value(self) -> Any:

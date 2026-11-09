@@ -10,6 +10,7 @@ from climaterouter.models import (
     DesiredState,
     ManualMode,
     RouterConfig,
+    RouterSnapshot,
     SetpointKind,
     Target,
     UnderlyingState,
@@ -299,3 +300,37 @@ def test_manual_lock_blocks_only_automation_commands() -> None:
     assert manual_lock_blocks_context(**base, user_id="user-1") is False
     assert manual_lock_blocks_context(**{**base, "manual_active": False}, user_id=None) is False
     assert manual_lock_blocks_context(**{**base, "enabled": False}, user_id=None) is False
+
+
+def test_target_mismatch_reasons_describe_setpoint_and_preset_differences() -> None:
+    snapshot = RouterSnapshot(
+        targets={
+            Target.RADIATOR: UnderlyingState(
+                target_temperature=23.0,
+                preset_mode="comfort",
+            ),
+            Target.AC: UnderlyingState(
+                target_temperature=21.0,
+                preset_mode="eco",
+            ),
+        }
+    )
+    assert snapshot.target_mismatch_reasons() == (
+        "setpoint 23 vs 21",
+        "preset comfort vs eco",
+    )
+
+    matching = RouterSnapshot(
+        targets={
+            Target.RADIATOR: UnderlyingState(
+                target_temperature=23.0,
+                preset_mode="comfort",
+            ),
+            Target.AC: UnderlyingState(
+                target_temperature=23.1,
+                preset_mode="comfort",
+            ),
+        }
+    )
+    assert matching.target_mismatch_reasons() == ()
+    assert RouterSnapshot().target_mismatch_reasons() == ()

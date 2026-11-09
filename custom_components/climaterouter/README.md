@@ -41,10 +41,13 @@ calls `versatile_thermostat.lock`/`unlock` on the card entity, which a proxy can
 | `sensor.<name>_manual_until` | Absolute manual-mode deadline. |
 | `sensor.<name>_manual_timer_minutes` | Selected timer length (diagnostic). |
 | `switch.<name>_manual_mode` | Enter manual mode / return to the schedule. |
-| `select.<name>_manual_timer` | Choose a timer length or `off`. |
+| `select.<name>_manual_timer` | Choose a timer length or `off`; always available and shows `off` (crossed-out timer icon) when unused. |
 | `binary_sensor.<name>_boost_active` | Both targets are active during a bounded boost. |
 | `binary_sensor.<name>_conflict` | An underlying VTherm differs from the expected state. |
+| `sensor.<name>_conflict_detail` | Human-readable summary of the active conflicts; attributes contain the full conflict list. |
 | `sensor.<name>_conflict_count` | Total conflicts detected since startup. |
+| `sensor.<name>_target_mismatch_detail` | Why the radiator and AC differ from each other (setpoint/preset), with both values as attributes. |
+| `binary_sensor.<name>_target_mismatch` | The radiator and AC setpoints or presets differ (diagnostic). |
 | `sensor.<name>_boost_remaining` | Whole minutes left in boost. |
 | `select.<name>_route_override` | Force `auto`, `radiator` or `ac`. |
 | `button.<name>_recalculate_route` | Re-evaluate immediately. |

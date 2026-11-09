@@ -565,6 +565,38 @@ async def test_manual_timer_expiry_returns_to_schedule(hass, monkeypatch) -> Non
     assert events and events[0].data["cause"] == "expired"
 
 
+async def test_manual_timer_expiry_without_schedule_keeps_current_mode(hass, monkeypatch) -> None:
+    """With no schedule to return to, an expired timer keeps the current state."""
+    from custom_components.climaterouter import coordinator as coordinator_module
+
+    _entry, coordinator = await _setup(hass, outdoor=5.0)
+    await coordinator.async_enter_manual_mode(
+        hvac_mode=HVAC_HEAT,
+        duration_minutes=30,
+        context=USER,
+    )
+    await coordinator.async_set_temperature(temperature=23, context=USER)
+    await hass.async_block_till_done()
+
+    manual = coordinator.data.manual_mode
+    assert manual is not None
+    assert manual.baseline.is_empty is True
+    assert manual.until is not None
+
+    monkeypatch.setattr(
+        coordinator_module.dt_util,
+        "utcnow",
+        lambda: manual.until + timedelta(seconds=1),
+    )
+    await coordinator._async_manual_expired(coordinator_module.dt_util.utcnow())
+    await hass.async_block_till_done()
+
+    assert coordinator.data.manual_mode is None
+    assert coordinator.data.desired.hvac_mode == HVAC_HEAT
+    assert coordinator.data.desired.target_temperature == 23
+    assert coordinator.data.active_targets == frozenset({Target.RADIATOR})
+
+
 async def test_boost_expiry_returns_to_single_target(hass, monkeypatch) -> None:
     """An expired boost ends both-target routing and emits the end event."""
     from custom_components.climaterouter import coordinator as coordinator_module

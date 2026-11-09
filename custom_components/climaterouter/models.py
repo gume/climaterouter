@@ -442,6 +442,29 @@ class RouterSnapshot:
         """Return the selected manual timer length, or ``None`` when off."""
         return self.manual_mode.timer_minutes if self.manual_mode is not None else None
 
+    def target_mismatch_reasons(self, tolerance: float = 0.2) -> tuple[str, ...]:
+        """Describe how the two underlying targets differ from each other.
+
+        This is a diagnostic comparison between the radiator and the AC. It
+        is not the desired-vs-actual conflict detector, which is exposed by
+        the conflict entities.
+        """
+        radiator = self.targets.get(Target.RADIATOR)
+        ac = self.targets.get(Target.AC)
+        if radiator is None or ac is None:
+            return ()
+
+        reasons: list[str] = []
+        if (
+            radiator.target_temperature is not None
+            and ac.target_temperature is not None
+            and abs(radiator.target_temperature - ac.target_temperature) > tolerance
+        ):
+            reasons.append(f"setpoint {radiator.target_temperature:g} vs {ac.target_temperature:g}")
+        if radiator.preset_mode and ac.preset_mode and radiator.preset_mode != ac.preset_mode:
+            reasons.append(f"preset {radiator.preset_mode} vs {ac.preset_mode}")
+        return tuple(reasons)
+
     @property
     def schedule_locked(self) -> bool:
         """Return whether manual mode currently blocks schedule commands."""
