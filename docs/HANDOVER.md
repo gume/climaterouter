@@ -97,10 +97,11 @@
 | `acd5b02` | `test: cover coordinator command, boost, and lock validation` |
 | `a6c1bb3` | `test: cover conflict clear-after ageing and startup auto-relock` |
 | `d2ced17` | `test: cover Lock B rejection and manual carry-over across handover` |
+| `563ead4` | `feat: add brand icon and detailed conflict/timer sensors` |
 
 Everything through `aeab87d` is pushed to `origin/main`. The test instance runs a clean Marketplace install of
-`aeab87d` (version **0.8.2**) and was verified live. The later test fixes and the 0.8.3 version bump are local only.
-The assistant has no GitHub credentials; the owner pushes.
+`aeab87d` (version **0.8.2**) and was verified live. The later test fixes, the 0.8.3 version bump, and the 0.8.4
+brand/sensor batch are local only. The assistant has no GitHub credentials; the owner pushes.
 
 ---
 
@@ -135,6 +136,10 @@ explanations under the config/options fields, persisted `last_handover`, preset 
 sensor, consistent config storage (schema-only `entry.data`, empty `entry.options`), a translation-sync test, and
 the plan/handover alignment. The icon property initially broke the other sensors; `e025cf4` initializes the shared
 icon attribute and restores them.
+
+Version **0.8.4** (local, `563ead4`) adds the local brand assets, keeps the manual-timer select available with an
+`off` state and crossed-out timer icon when unused, keeps the current mode when manual mode expires without a
+schedule baseline, and adds text sensors that explain active conflicts and radiator/AC target mismatches.
 
 The next developer should start with section 8 (Next steps).
 
@@ -308,9 +313,12 @@ Events fired on the HA bus:
 - Events: `climaterouter_manual_mode_started`, `climaterouter_manual_mode_ended`, and
   `climaterouter_manual_timer_changed`.
 - Standard-card entities: `switch.<name>_manual_mode` (on = manual, off = return to schedule),
-  `select.<name>_manual_timer` (`off` or minutes), `button.<name>_return_to_schedule`,
+  `select.<name>_manual_timer` (`off` or minutes; always available and shows `off` with a crossed-out timer icon
+  when no countdown is running), `button.<name>_return_to_schedule`,
   `binary_sensor.<name>_manual_mode`, `sensor.<name>_manual_remaining`, `sensor.<name>_manual_until`, and a
   diagnostic `sensor.<name>_manual_timer_minutes`.
+- If manual mode expires (or is ended) before any schedule command exists, the manual state is promoted to the
+  baseline so the target keeps running instead of the proxy going blank.
 - The climate entity exposes `manual_mode`, `manual_active`, `manual_until`, `manual_timer_minutes`, and
   `manual_remaining_minutes`; the legacy `override` attribute is still present for older cards. A timer that is off
   reports `null`/unknown rather than a fake countdown.
@@ -337,9 +345,13 @@ Events fired on the HA bus:
   `conflict.to_dict()`).
 - `button.<name>_clear_conflicts` / `climaterouter.clear_conflicts` acknowledges current conflicts, records them
   as resolved and publishes the cleared state; it does not change the underlying targets.
-- Exposed through `binary_sensor.<name>_conflict`, `sensor.<name>_conflict_count`, the proxy climate's conflict
-  attributes and diagnostics. During boost each active target is compared; `adopt` is skipped because two targets
-  cannot define one baseline.
+- Exposed through `binary_sensor.<name>_conflict`, `sensor.<name>_conflict_count`,
+  `sensor.<name>_conflict_detail` (a short human-readable summary plus the full conflict list in its attributes),
+  the proxy climate's conflict attributes and diagnostics. During boost each active target is compared; `adopt` is
+  skipped because two targets cannot define one baseline.
+- `binary_sensor.<name>_target_mismatch` / `sensor.<name>_target_mismatch_detail` compare the radiator and AC with
+  each other (setpoint and preset), not with the desired state. The detail sensor names the differing values and
+  exposes both targets' temperatures/presets as attributes.
 
 ### 3.8 Boost (M6)
 
@@ -636,8 +648,10 @@ section 8.2 for the full list.
    per-command confirmation timeout.
 8. **`strings.json` and `translations/en.json` are duplicated.** `tests/test_translations.py` now fails if they drift
    and also requires a `data_description` for every config/options field.
-9. `binary_sensor.target_mismatch` compares the two targets' setpoints and presets; it is not the full M5 mismatch
-   detector. Use `binary_sensor.<name>_conflict` for the desired-vs-actual comparison.
+9. `binary_sensor.target_mismatch` compares the two targets' setpoints and presets with each other; it is not the
+   full M5 mismatch detector. `sensor.<name>_target_mismatch_detail` explains the difference and exposes both
+   values. Use `binary_sensor.<name>_conflict` / `sensor.<name>_conflict_detail` for the desired-vs-actual
+   comparison.
 10. **Fan/swing/humidity pass-through is not exposed.** `DesiredState` carries `fan_mode`/`swing_mode`, but the
     climate entity only advertises temperature, preset, turn-on and turn-off.
 11. **Equinox's lock button still cannot drive the native lock.** Equinox hard-codes
@@ -654,9 +668,9 @@ section 8.2 for the full list.
 ### 8.1 Immediate
 
 1. Owner: push the local commits. The test instance runs the clean `aeab87d` build (0.8.2). If the new build
-   (version **0.8.3**) is installed, confirm that all entities still load and repeat the expiry/conflict checks.
-   Do not re-add the old `custom_components/climaterouter` bind mount: it makes the folder a mount point (`EBUSY`)
-   and the Marketplace cannot back it up before replacing it.
+   (version **0.8.4**, `563ead4`) is installed, confirm that the brand icon appears, all entities still load, and
+   repeat the expiry/conflict checks. Do not re-add the old `custom_components/climaterouter` bind mount: it makes
+   the folder a mount point (`EBUSY`) and the Marketplace cannot back it up before replacing it.
 2. Open **Configure** once after the update and save any section. The schema-only save drops the removed
    manual-switch key from `entry.data`. Confirm the collapsed sections render correctly, that the brief
    explanations appear under the fields, that the options menu returns after each section save, and that **Finish**
@@ -683,14 +697,14 @@ Status as of 2026-11-09:
 |---|---|
 | `ruff check .` | clean |
 | `ruff format --check .` | clean |
-| Pure unit tests (no HA) | 58 passed |
-| Integration tests (HA harness) | 81 passed |
-| Full suite (HA harness) | 139 passed |
+| Pure unit tests (no HA) | 59 passed |
+| Integration tests (HA harness) | 84 passed |
+| Full suite (HA harness) | 143 passed |
 | `mypy custom_components/climaterouter` | clean |
 | CI installs `requirements_test.txt` | yes (intentionally unpinned, includes `mypy`) |
 | CI matrix | full HA suite on Python 3.13; pure unit tests on Python 3.12 and 3.13 |
 | GitHub CI run confirmed | green through `aeab87d`; the later commits await the owner's push |
-| Measured statement coverage | **91 %** (gate 75 %) |
+| Measured statement coverage | **92 %** (91.8 %, gate 75 %) |
 
 `pytest-homeassistant-custom-component` is wired into `tests/conftest.py`, and the integration suite lives in
 `tests/integration/`. Without the harness, pytest runs the pure tests and skips the integration directory.
@@ -744,20 +758,19 @@ Status as of 2026-11-09:
       remaining untested areas.
 - [ ] owner: push the local commits, confirm the full CI run (including mypy and the matrix), and keep the
       repository topics in place so HACS validation stays green.
-- [ ] live re-check after installing 0.8.3 (expiry and conflict behaviour).
+- [ ] live re-check after installing 0.8.4 (brand icon, timer badge, expiry and conflict details).
 
 #### Coverage snapshot
 
 | Module | Coverage |
 |---|---|
-| `config_flow.py`, `const.py`, `diagnostics.py`, `entity.py`, `sensor.py`, `switch.py` | 100 % |
-| `router.py`, `services.py`, `vt_display.py` | 98 % |
+| `binary_sensor.py`, `config_flow.py`, `const.py`, `diagnostics.py`, `entity.py`, `switch.py` | 100 % |
+| `router.py`, `select.py`, `sensor.py`, `services.py`, `vt_display.py` | 98 % |
 | `button.py` | 97 % |
-| `select.py` | 96 % |
-| `binary_sensor.py`, `models.py` | 95 % |
+| `models.py` | 95 % |
 | `__init__.py`, `climate.py`, `lock.py` | 94 % |
-| `coordinator.py` | 84 % |
-| **Total** | **91 %** |
+| `coordinator.py` | 85 % |
+| **Total** | **92 %** |
 
 The local PyPI snapshot only offers `pytest-homeassistant-custom-component` 0.13.205 (HA 2025.1.4), not 2026.11.
 CI installs the newest release. Production code supports both versions; no test-only shims remain.
@@ -829,6 +842,11 @@ Run the suite with the HA venv:
 - [x] Install commit `d3af8b4` (0.8.1) through the Marketplace; the target icons were verified live.
 - [x] Fix the nine-sensor icon regression in `e025cf4` and reinstall that clean build through the Marketplace.
 - [x] Integration tests for the flows, locks, and manual mode (through `d2ced17`).
+- [x] Local brand assets (black pattern, white dark variant) under `custom_components/climaterouter/brand/`.
+- [x] Manual timer select stays available and reports `off` with a crossed-out icon when unused.
+- [x] Manual expiry without a schedule baseline keeps the current mode running.
+- [x] `sensor.<name>_conflict_detail` and `sensor.<name>_target_mismatch_detail` explain the two diagnostic binary
+      sensors, with full values in their attributes.
 
 ---
 
