@@ -85,9 +85,9 @@ async def test_climate_entity_tracks_device_info(hass) -> None:
     from homeassistant.helpers import device_registry as dr
 
     device_registry = dr.async_get(hass)
-    device = device_registry.async_get_device_by_identifier(
-        (DOMAIN, entry.entry_id), entry.entry_id
-    )
+    devices = dr.async_entries_for_config_entry(device_registry, entry.entry_id)
+    assert len(devices) == 1
+    device = devices[0]
 
     assert device is not None
     assert device.name == "Test Router"
