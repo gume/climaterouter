@@ -17,6 +17,7 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.climaterouter.const import (
+    CONFLICT_CLEAR_AFTER,
     CONFLICT_REASSERT_GRACE,
     DOMAIN,
     EVENT_BOOST_ENDED,
@@ -1052,3 +1053,89 @@ async def test_lock_requires_the_feature_flag(hass) -> None:
         await coordinator.async_lock()
     with pytest.raises(HomeAssistantError):
         await coordinator.async_unlock()
+
+
+async def test_conflict_clears_after_quiet_period(hass, monkeypatch) -> None:
+    """A conflict is cleared automatically once it stays resolved long enough."""
+    from custom_components.climaterouter import coordinator as coordinator_module
+
+    cleared = async_capture_events(hass, EVENT_CONFLICT_CLEARED)
+    _entry, coordinator = await _setup(hass, outdoor=5.0)
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+    await hass.async_block_till_done()
+
+    hass.states.async_set(
+        RADIATOR,
+        HVAC_HEAT,
+        {
+            "hvac_modes": [HVAC_HEAT],
+            "hvac_action": "heating",
+            "temperature": 25,
+            "min_temp": 7,
+            "max_temp": 35,
+        },
+    )
+    await hass.async_block_till_done()
+
+    base = coordinator_module.dt_util.utcnow()
+    clock = {"now": base + timedelta(seconds=2)}
+    monkeypatch.setattr(coordinator_module.dt_util, "utcnow", lambda: clock["now"])
+    await coordinator.async_evaluate()
+    await hass.async_block_till_done()
+    assert coordinator.data.conflicts
+
+    # Stop the mismatch. The state-change evaluation records when the conflict
+    # disappeared (at ``base + 2``), which starts the clear-after window.
+    hass.states.async_set(
+        RADIATOR,
+        HVAC_HEAT,
+        {
+            "hvac_modes": [HVAC_HEAT],
+            "hvac_action": "heating",
+            "temperature": 20,
+            "min_temp": 7,
+            "max_temp": 35,
+        },
+    )
+    await hass.async_block_till_done()
+
+    # Still inside the window: the conflict is kept.
+    clock["now"] = base + timedelta(seconds=CONFLICT_CLEAR_AFTER - 10)
+    await coordinator.async_evaluate()
+    await hass.async_block_till_done()
+    assert coordinator.data.conflicts
+
+    # Past the window: the conflict is cleared and the event fires.
+    clock["now"] = base + timedelta(seconds=CONFLICT_CLEAR_AFTER + 5)
+    await coordinator.async_evaluate()
+    await hass.async_block_till_done()
+
+    assert coordinator.data.conflicts == ()
+    assert cleared
+
+
+async def test_auto_relock_deadline_expires_on_startup(hass, monkeypatch) -> None:
+    """A reload after the auto-relock deadline locks the router immediately."""
+    from custom_components.climaterouter import coordinator as coordinator_module
+
+    entry, coordinator = await _setup(hass, outdoor=5.0, lock_enabled=True)
+    await coordinator.async_lock()
+    await coordinator.async_unlock()
+    until = coordinator._auto_relock_at
+    assert until is not None
+    coordinator._cancel_auto_relock()
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    monkeypatch.setattr(
+        coordinator_module.dt_util,
+        "utcnow",
+        lambda: until + timedelta(seconds=1),
+    )
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    reloaded = entry.runtime_data
+    assert reloaded.data.locked is True
+    assert reloaded._auto_relock_at is None
