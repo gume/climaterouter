@@ -1704,6 +1704,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         """Schedule evaluation, coalescing bursts of state changes."""
         self._refresh_inputs()
         self._remember_event_source(event)
+        self._adopt_user_target_change(event)
         if not self._ready:
             self._publish()
             return
@@ -1711,6 +1712,70 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             return
         self._update_scheduled = True
         self.hass.async_create_task(self._async_run_scheduled_update())
+
+    def _adopt_user_target_change(self, event: Event[EventStateChangedData]) -> None:
+        """Treat a direct user move on the active VTherm as a manual move.
+
+        Users sometimes adjust the underlying thermostat card instead of the
+        proxy. Such a change must update the manual value, not be re-asserted
+        away by the manual-mode protection.
+        """
+        context = getattr(event, "context", None)
+        if not self._is_user_context(context) or self._event_is_own(event):
+            return
+
+        new_state = event.data.get("new_state")
+        if new_state is None or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN, HVAC_OFF):
+            return
+        target = self._target_for_entity(new_state.entity_id)
+        if target is None or target not in self._active_targets:
+            return
+
+        old_state = event.data.get("old_state")
+        desired = self._manual.desired.copy() if self._manual is not None else self._baseline.copy()
+        changed = False
+
+        if old_state is None or old_state.state != new_state.state:
+            desired.hvac_mode = new_state.state
+            changed = True
+
+        old_preset = old_state.attributes.get(ATTR_PRESET_MODE) if old_state is not None else None
+        new_preset = new_state.attributes.get(ATTR_PRESET_MODE)
+        if new_preset != old_preset:
+            desired.setpoint_kind = SetpointKind.PRESET
+            desired.preset_mode = new_preset
+            desired.target_temperature = None
+            changed = True
+
+        old_temperature = (
+            _as_float(old_state.attributes.get(ATTR_TEMPERATURE)) if old_state is not None else None
+        )
+        new_temperature = _as_float(new_state.attributes.get(ATTR_TEMPERATURE))
+        if new_temperature != old_temperature:
+            desired.setpoint_kind = SetpointKind.TEMPERATURE
+            desired.target_temperature = new_temperature
+            desired.preset_mode = None
+            changed = True
+
+        if not changed:
+            return
+
+        now = dt_util.utcnow()
+        self._last_command = now
+        if self._manual is None:
+            if self._baseline.hvac_mode not in (HVAC_HEAT, HVAC_COOL):
+                return
+            self._ensure_manual_baseline()
+            self._start_manual(now, desired=desired)
+            self._sync_desired()
+            return
+
+        self._manual.desired = desired
+        self._manual.baseline = self._baseline.copy()
+        self._sync_desired()
+        self._schedule_manual_expiry()
+        self._store.async_delay_save(self._data_to_save, 1)
+        self._publish()
 
     def _remember_event_source(self, event: Event[EventStateChangedData]) -> None:
         """Track who changed a target and suppress our own calls."""

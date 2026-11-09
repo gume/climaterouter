@@ -1288,6 +1288,98 @@ async def test_manual_mode_reasserts_direct_target_changes(hass) -> None:
     assert coordinator.data.desired.hvac_mode == HVAC_HEAT
 
 
+async def test_user_direct_target_change_updates_manual_value(hass) -> None:
+    """A user move on the VTherm card updates manual mode instead of being undone."""
+    _entry, coordinator = await _setup(hass, outdoor=5.0, manual_blocks_schedule=True)
+    calls_temp = async_mock_service(hass, "climate", "set_temperature")
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+    await coordinator.async_enter_manual_mode(temperature=23, duration_minutes=30, context=USER)
+    await hass.async_block_till_done()
+    hass.states.async_set(
+        RADIATOR,
+        HVAC_HEAT,
+        {
+            "hvac_modes": [HVAC_HEAT],
+            "hvac_action": "heating",
+            "temperature": 23,
+            "min_temp": 7,
+            "max_temp": 35,
+        },
+    )
+    await hass.async_block_till_done()
+    manual = coordinator.data.manual_mode
+    assert manual is not None and manual.until is not None
+    deadline = manual.until
+    calls_temp.clear()
+
+    # The user drags the underlying thermostat card instead of the proxy.
+    hass.states.async_set(
+        RADIATOR,
+        HVAC_HEAT,
+        {
+            "hvac_modes": [HVAC_HEAT],
+            "hvac_action": "heating",
+            "temperature": 24,
+            "min_temp": 7,
+            "max_temp": 35,
+        },
+        context=USER,
+    )
+    await hass.async_block_till_done()
+
+    manual = coordinator.data.manual_mode
+    assert manual is not None
+    assert manual.desired.target_temperature == 24
+    # A direct user move keeps the running timer instead of restarting it.
+    assert manual.until == deadline
+    assert coordinator.data.desired.target_temperature == 24
+    # The adopted value is already on the target, so nothing is written back.
+    assert not calls_temp
+
+    # A scheduler write without a user is still re-asserted away.
+    hass.states.async_set(
+        RADIATOR,
+        HVAC_HEAT,
+        {"hvac_modes": [HVAC_HEAT], "temperature": 18, "min_temp": 7, "max_temp": 35},
+    )
+    await hass.async_block_till_done()
+    await coordinator.async_evaluate()
+    await hass.async_block_till_done()
+
+    assert calls_temp and calls_temp[-1].data["temperature"] == 24
+    assert coordinator.data.manual_mode is not None
+    assert coordinator.data.desired.target_temperature == 24
+
+
+async def test_user_direct_target_change_starts_manual_mode(hass) -> None:
+    """A user move on the active VTherm card starts manual mode on its own."""
+    _entry, coordinator = await _setup(hass, outdoor=5.0, manual_blocks_schedule=True)
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+    await hass.async_block_till_done()
+    hass.states.async_set(
+        RADIATOR,
+        HVAC_HEAT,
+        {"hvac_modes": [HVAC_HEAT], "temperature": 20, "min_temp": 7, "max_temp": 35},
+    )
+    await hass.async_block_till_done()
+    assert coordinator.data.manual_mode is None
+
+    hass.states.async_set(
+        RADIATOR,
+        HVAC_HEAT,
+        {"hvac_modes": [HVAC_HEAT], "temperature": 24, "min_temp": 7, "max_temp": 35},
+        context=USER,
+    )
+    await hass.async_block_till_done()
+
+    manual = coordinator.data.manual_mode
+    assert manual is not None
+    assert manual.desired.target_temperature == 24
+    assert manual.timer_minutes == coordinator.config.default_manual_minutes
+    assert manual.baseline.target_temperature == 20
+    assert coordinator.data.desired.target_temperature == 24
+
+
 async def test_manual_mode_carries_over_handover(hass) -> None:
     """A manual setpoint survives the handover to the other target."""
     _entry, coordinator = await _setup_with_active_radiator(hass)
