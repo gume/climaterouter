@@ -101,8 +101,10 @@
 | `23290d2` | `feat: explain off-target setpoints in the mismatch detail` |
 | `ee0a878` | `docs: point the 0.8.4 handover at the final commit` |
 | `1972d1e` | `ci: clarify the local brand asset location` |
+| `cf53fc8` | `fix: defer scheduler commands while manual mode is active` |
 
-Everything through `1972d1e` is on `origin/main`. The test instance runs the Marketplace release **v0.8.3**
+Everything through `1972d1e` is on `origin/main`. The local `cf53fc8` commit adds the 0.8.5 scheduler/manual
+fix and is not pushed yet. The test instance runs the Marketplace release **v0.8.3**
 (tag `v0.8.3`, commit `723c5c0`): `update.climaterouter` reports `installed_version` = `latest_version` = `v0.8.3`
 and points at `https://github.com/gume/climaterouter/releases/tag/v0.8.3`. The 0.8.4 commits are on `main`, but no
 `v0.8.4` tag/release exists yet, so the Marketplace does not offer them. The assistant has no GitHub credentials;
@@ -695,12 +697,12 @@ section 8.2 for the full list.
 
 ### 8.1 Immediate
 
-1. Owner: create a `v0.8.4` tag/release on `1972d1e` (or on the then-current `main`). The test instance runs the
-   Marketplace release **v0.8.3** and correctly reports no update because no 0.8.4 release exists. After the release,
-   refresh the Marketplace or restart Home Assistant, install the update, and confirm the brand icon, all entities,
-   the timer `off` badge, and the conflict/mismatch detail sensors. Do not re-add the old
-   `custom_components/climaterouter` bind mount: it makes the folder a mount point (`EBUSY`) and the Marketplace
-   cannot back it up before replacing it.
+1. Owner: create a `v0.8.5` tag/release on `cf53fc8` (or on the then-current `main`). The test instance runs the
+   Marketplace release **v0.8.3** and correctly reports no update because no 0.8.4/0.8.5 release exists. After the
+   release, refresh the Marketplace or restart Home Assistant, install the update, and confirm the brand icon, all
+   entities, the timer `off` badge, the scheduler/manual protection, and the conflict/mismatch detail sensors. Do
+   not re-add the old `custom_components/climaterouter` bind mount: it makes the folder a mount point (`EBUSY`) and
+   the Marketplace cannot back it up before replacing it.
 2. Open **Configure** once after the update and save any section. The schema-only save drops the removed
    manual-switch key from `entry.data`. Confirm the collapsed sections render correctly, that the brief
    explanations appear under the fields, that the options menu returns after each section save, and that **Finish**
@@ -728,8 +730,8 @@ Status as of 2026-11-09:
 | `ruff check .` | clean |
 | `ruff format --check .` | clean |
 | Pure unit tests (no HA) | 59 passed |
-| Integration tests (HA harness) | 85 passed |
-| Full suite (HA harness) | 144 passed |
+| Integration tests (HA harness) | 86 passed, 1 harness-only failure (`test_climate_entity_tracks_device_info`: `MissingIntegrationFrame` under the local 2026.10.4 harness) |
+| Full suite (HA harness) | 145 passed, 1 harness-only failure |
 | `mypy custom_components/climaterouter` | clean |
 | CI installs `requirements_test.txt` | yes (intentionally unpinned, includes `mypy`) |
 | CI matrix | full HA suite on Python 3.13; pure unit tests on Python 3.12 and 3.13 |
@@ -788,7 +790,8 @@ Status as of 2026-11-09:
       remaining untested areas.
 - [ ] owner: push the local commits, confirm the full CI run (including mypy and the matrix), and keep the
       repository topics in place so HACS validation stays green.
-- [ ] live re-check after installing 0.8.4 (brand icon, timer badge, expiry and conflict details).
+- [ ] live re-check after installing 0.8.5 (brand icon, timer badge, manual/scheduler protection, expiry and conflict
+      details).
 
 #### Coverage snapshot
 
