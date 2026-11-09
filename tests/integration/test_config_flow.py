@@ -4,22 +4,33 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 from homeassistant import config_entries, data_entry_flow
 from homeassistant.const import STATE_OFF
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.climaterouter.config_flow import (
     OPTION_MENU,
+    SECTION_BASIC,
+    SECTION_BOOST,
+    SECTION_CONFLICTS,
+    SECTION_DISPLAY,
     SECTION_LOCK,
     SECTION_MANUAL,
     SECTION_ROUTING,
+    _flatten_sections,
     _validate_input,
 )
 from custom_components.climaterouter.const import (
     CONF_AC_ENTITY_ID,
     CONF_AUTO_RELOCK_SEC,
+    CONF_AUTO_RESOLVE_IDLE_TARGETS,
+    CONF_AUTO_RESOLVE_SIMULTANEOUS,
+    CONF_BOOST_ENABLED,
     CONF_COLD_THRESHOLD,
+    CONF_CONFLICT_POLICY,
     CONF_DEFAULT_MANUAL_MINUTES,
+    CONF_EXPOSE_VTHERM_IDENTITY,
     CONF_LOCK_CODE,
     CONF_LOCK_ENABLED,
     CONF_MAX_MANUAL_MINUTES,
@@ -27,6 +38,7 @@ from custom_components.climaterouter.const import (
     CONF_MIN_ROUTE_DWELL,
     CONF_NAME,
     CONF_OUTDOOR_SENSOR_ENTITY_ID,
+    CONF_OUTDOOR_STALE_AFTER,
     CONF_RADIATOR_ENTITY_ID,
     CONF_TEMPERATURE_TOLERANCE,
     DOMAIN,
@@ -414,4 +426,78 @@ async def test_validate_input_rejects_out_of_range_values(hass) -> None:
         CONF_TEMPERATURE_TOLERANCE: "invalid_tolerance",
         CONF_MIN_ROUTE_DWELL: "invalid_duration",
         CONF_AUTO_RELOCK_SEC: "invalid_duration",
+    }
+
+
+async def test_reconfigure_unknown_entry_aborts(hass) -> None:
+    """A reconfigure flow for a missing entry aborts cleanly."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={
+            "source": config_entries.SOURCE_RECONFIGURE,
+            "entry_id": "missing-entry",
+        },
+    )
+
+    assert result["type"] is data_entry_flow.FlowResultType.ABORT
+    assert result["reason"] == "unknown_entry"
+
+
+@pytest.mark.parametrize(
+    ("section", "payload"),
+    [
+        (
+            SECTION_BASIC,
+            {
+                CONF_NAME: "Renamed Router",
+                CONF_RADIATOR_ENTITY_ID: RADIATOR,
+                CONF_AC_ENTITY_ID: AC,
+                CONF_OUTDOOR_SENSOR_ENTITY_ID: OUTDOOR,
+            },
+        ),
+        (
+            SECTION_CONFLICTS,
+            {
+                CONF_CONFLICT_POLICY: "adopt",
+                CONF_AUTO_RESOLVE_IDLE_TARGETS: False,
+                CONF_AUTO_RESOLVE_SIMULTANEOUS: True,
+                CONF_OUTDOOR_STALE_AFTER: 3600,
+                CONF_TEMPERATURE_TOLERANCE: 0.5,
+            },
+        ),
+        (SECTION_BOOST, {CONF_BOOST_ENABLED: True}),
+        (SECTION_DISPLAY, {CONF_EXPOSE_VTHERM_IDENTITY: True}),
+    ],
+)
+async def test_options_remaining_sections_save(hass, section, payload) -> None:
+    """Every remaining options section persists its values and returns to the menu."""
+    _set_entities(hass)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Test Router",
+        data=_form_input()["basic"],
+        unique_id=f"{RADIATOR}|{AC}",
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": section}
+    )
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+
+    result = await hass.config_entries.options.async_configure(result["flow_id"], payload)
+
+    assert result["type"] is data_entry_flow.FlowResultType.MENU
+    for key, value in payload.items():
+        assert entry.data[key] == value
+
+
+def test_flatten_sections_keeps_legacy_scalars() -> None:
+    """Top-level scalar values survive while section wrappers are flattened."""
+    assert _flatten_sections({"basic": {"a": 1}, "legacy_key": 2}) == {
+        "a": 1,
+        "legacy_key": 2,
     }

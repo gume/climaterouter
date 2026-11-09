@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from climaterouter.vt_display import (
+    _score,
     build_vt_display_attributes,
 )
 
@@ -122,3 +123,41 @@ def test_climate_only_target_has_no_power_gauge() -> None:
 def test_missing_vtherm_attributes_return_empty() -> None:
     """A plain climate entity produces no VTherm extras."""
     assert build_vt_display_attributes([{"current_temperature": 21.0}]) == {}
+
+
+def test_score_ranks_percentages_and_type_flags() -> None:
+    """The ranking prefers a valve percentage, then power, then type flags."""
+    assert _score({"valve_open_percent": 10}) == 3
+    assert _score({"power_percent": 10}) == 2
+    assert _score({"is_over_valve": True}) == 1
+    assert _score({"is_over_switch": True}) == 1
+    assert _score({}) == 0
+
+
+def test_over_climate_valve_is_curated() -> None:
+    """Valve regulation data is copied without unrelated keys."""
+    attributes = build_vt_display_attributes(
+        [
+            {
+                "is_over_climate": True,
+                "vtherm_over_climate_valve": {
+                    "have_valve_regulation": True,
+                    "valve_regulation": {
+                        "power_percent": 35,
+                        "valve_open_percent": 55,
+                        "function": "tpi",
+                        "ignored": "value",
+                    },
+                },
+            }
+        ]
+    )
+
+    assert attributes["vtherm_over_climate_valve"] == {
+        "have_valve_regulation": True,
+        "valve_regulation": {
+            "power_percent": 35,
+            "valve_open_percent": 55,
+            "function": "tpi",
+        },
+    }

@@ -23,6 +23,7 @@ from custom_components.climaterouter.const import (
     EVENT_CONFLICT_CLEARED,
     EVENT_CONFLICT_DETECTED,
     EVENT_HANDOVER_ABORTED,
+    EVENT_HANDOVER_STARTED,
     EVENT_MANUAL_MODE_ENDED,
 )
 from custom_components.climaterouter.models import HVAC_HEAT, ROUTE_AC, Target
@@ -913,3 +914,53 @@ async def test_inactive_target_on_is_reported(hass, monkeypatch) -> None:
         conflict.type == "inactive_target_on" and conflict.target is Target.AC
         for conflict in coordinator.data.conflicts
     )
+
+
+async def test_boost_expiry_waits_for_active_spare(hass, monkeypatch) -> None:
+    """Expiring boost starts a handover instead of interrupting the spare."""
+    from custom_components.climaterouter import coordinator as coordinator_module
+
+    events = async_capture_events(hass, EVENT_HANDOVER_STARTED)
+    _entry, coordinator = await _setup(hass, outdoor=5.0, boost_enabled=True)
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+
+    hass.states.async_set(
+        RADIATOR,
+        HVAC_HEAT,
+        {
+            "hvac_modes": [HVAC_HEAT],
+            "hvac_action": "heating",
+            "temperature": 20,
+            "min_temp": 7,
+            "max_temp": 35,
+        },
+    )
+    hass.states.async_set(
+        AC,
+        HVAC_HEAT,
+        {
+            "hvac_modes": [HVAC_HEAT, "cool"],
+            "hvac_action": "heating",
+            "temperature": 20,
+            "min_temp": 16,
+            "max_temp": 30,
+        },
+    )
+    await hass.async_block_till_done()
+    await coordinator.async_set_boost(duration_minutes=10)
+    await hass.async_block_till_done()
+
+    until = coordinator.data.boost_until
+    assert until is not None
+    monkeypatch.setattr(
+        coordinator_module.dt_util,
+        "utcnow",
+        lambda: until + timedelta(seconds=1),
+    )
+    await coordinator._async_boost_expired(coordinator_module.dt_util.utcnow())
+    await hass.async_block_till_done()
+
+    assert coordinator.data.boost_until is None
+    assert coordinator.data.handover_state == "pending"
+    assert coordinator.data.pending_target is Target.RADIATOR
+    assert any(event.data["reason"] == "boost_end" for event in events)
