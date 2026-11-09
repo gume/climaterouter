@@ -575,9 +575,9 @@ The remaining 0.8.1 checks are the interactive ones that need the UI: saving the
 descriptions, and a real handover to confirm `last_handover` persistence.
 
 Automated coverage now includes natural manual/boost expiry callbacks, conflict `reassert`/`adopt`/auto-resolve,
-both-targets-on startup conflicts, auto-relock persistence, the remaining services and diagnostics. The remaining
-gaps are watchdog-driven expiry, unasserted `inactive_target_on`, config validation and `vt_display.py`. See section
-8.2 for the full list.
+both-targets-on startup conflicts, auto-relock persistence, the remaining services, diagnostics and config-flow
+validation. The remaining gaps are watchdog-driven expiry, unasserted `inactive_target_on` and `vt_display.py`. See
+section 8.2 for the full list.
 
 ---
 
@@ -663,10 +663,10 @@ Status as of 2026-11-09:
 | `ruff check .` | clean |
 | `ruff format --check .` | clean |
 | Pure unit tests (no HA) | 56 passed |
-| Integration tests (HA harness) | 53 passed |
-| Full suite (HA harness) | 109 passed |
+| Integration tests (HA harness) | 60 passed |
+| Full suite (HA harness) | 116 passed |
 | CI installs `requirements_test.txt` | yes (intentionally unpinned) |
-| GitHub CI run confirmed | green through `aeab87d`; `58f0ba5` and `1b1c818` await the owner's push |
+| GitHub CI run confirmed | green through `aeab87d`; `58f0ba5`, `1b1c818` and `44e73a4` await the owner's push |
 | Measured statement coverage | **85 %** (gate 75 %) |
 
 `pytest-homeassistant-custom-component` is wired into `tests/conftest.py`, and the integration suite lives in
@@ -698,6 +698,8 @@ Status as of 2026-11-09:
 - [x] remaining services: clear route override, manual-override alias/cancel, set/cancel boost, lock/unlock,
       foreign-entity and missing-target rejection (`1b1c818`).
 - [x] diagnostics serialization and lock-code redaction (`1b1c818`).
+- [x] config-flow validation: wrong entity domain, manual order, lock code, tolerance/duration ranges, duplicate
+      reconfigure and options-section error handling (`44e73a4`).
 
 #### Missing
 
@@ -705,8 +707,7 @@ Medium priority:
 
 - [ ] watchdog-driven manual/boost expiry and boost expiry during a pending handover;
 - [ ] `inactive_target_on` and conflict history/clear assertions;
-- [ ] config-flow validation: invalid entity domain, invalid lock code, manual order, tolerance/duration errors,
-      unknown entry, duplicate reconfigure, remaining options sections.
+- [ ] reconfigure with an unknown entry id and the remaining options-section save paths.
 
 Low priority:
 
@@ -727,7 +728,7 @@ Low priority:
 | `binary_sensor.py`, `models.py` | 95 % |
 | `__init__.py`, `climate.py`, `lock.py` | 94 % |
 | `services.py` | 92 % |
-| `config_flow.py` | 90 % |
+| `config_flow.py` | 96 % |
 | `coordinator.py` | 78 % |
 | `vt_display.py` | 0 % (see note above) |
 | **Total** | **85 %** |
