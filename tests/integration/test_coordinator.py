@@ -26,7 +26,7 @@ from custom_components.climaterouter.const import (
     EVENT_HANDOVER_STARTED,
     EVENT_MANUAL_MODE_ENDED,
 )
-from custom_components.climaterouter.models import HVAC_HEAT, ROUTE_AC, Target
+from custom_components.climaterouter.models import HVAC_COOL, HVAC_HEAT, ROUTE_AC, Target
 
 RADIATOR = "climate.radiator"
 AC = "climate.ac"
@@ -964,3 +964,91 @@ async def test_boost_expiry_waits_for_active_spare(hass, monkeypatch) -> None:
     assert coordinator.data.handover_state == "pending"
     assert coordinator.data.pending_target is Target.RADIATOR
     assert any(event.data["reason"] == "boost_end" for event in events)
+
+
+async def test_command_validation_errors(hass) -> None:
+    """Invalid commands are rejected before they reach a target."""
+    _entry, coordinator = await _setup(hass, outdoor=5.0)
+
+    with pytest.raises(HomeAssistantError):
+        await coordinator.async_set_temperature()
+    with pytest.raises(HomeAssistantError):
+        await coordinator.async_set_hvac_mode("dry")
+    with pytest.raises(HomeAssistantError):
+        await coordinator.async_set_route_override("space")
+    with pytest.raises(HomeAssistantError):
+        await coordinator.async_force_handover()
+    with pytest.raises(HomeAssistantError):
+        await coordinator.async_set_manual_timer(10)
+
+
+async def test_boost_validation_errors(hass) -> None:
+    """Boost rejects invalid durations, targets, and target states."""
+    _entry, coordinator = await _setup(hass, outdoor=5.0, boost_enabled=True)
+
+    with pytest.raises(HomeAssistantError):
+        await coordinator.async_set_boost(duration_minutes=10)
+
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+    with pytest.raises(HomeAssistantError):
+        await coordinator.async_set_boost(targets="radiator")
+    with pytest.raises(HomeAssistantError):
+        await coordinator.async_set_boost(duration_minutes=0)
+    with pytest.raises(HomeAssistantError):
+        await coordinator.async_set_boost(duration_minutes=100000)
+
+    hass.states.async_set(
+        AC,
+        HVAC_COOL,
+        {
+            "hvac_modes": [HVAC_HEAT, HVAC_COOL],
+            "hvac_action": "cooling",
+            "temperature": 20,
+            "min_temp": 16,
+            "max_temp": 30,
+        },
+    )
+    await hass.async_block_till_done()
+    with pytest.raises(HomeAssistantError):
+        await coordinator.async_set_boost(duration_minutes=10)
+
+    hass.states.async_set(AC, "unavailable")
+    await hass.async_block_till_done()
+    with pytest.raises(HomeAssistantError):
+        await coordinator.async_set_boost(duration_minutes=10)
+
+
+async def test_manual_duration_validation_and_timer_toggle(hass) -> None:
+    """Manual duration is bounded and the timer can be enabled or cleared."""
+    _entry, coordinator = await _setup(hass, outdoor=5.0)
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+
+    await coordinator.async_enter_manual_mode(temperature=22, context=USER)
+    assert coordinator.data.manual_mode is not None
+    assert coordinator.data.manual_mode.timer_minutes == coordinator.config.default_manual_minutes
+
+    with pytest.raises(HomeAssistantError):
+        await coordinator.async_enter_manual_mode(
+            temperature=22,
+            duration_minutes=100000,
+            context=USER,
+        )
+
+    await coordinator.async_set_manual_timer(minutes=15, context=USER)
+    assert coordinator.data.manual_mode is not None
+    assert coordinator.data.manual_mode.timer_minutes == 15
+    await coordinator.async_set_manual_timer(minutes=0, context=USER)
+    assert coordinator.data.manual_mode is not None
+    assert coordinator.data.manual_mode.timer_minutes is None
+
+    await coordinator.async_return_to_schedule()
+
+
+async def test_lock_requires_the_feature_flag(hass) -> None:
+    """Lock and unlock are rejected when the feature is disabled."""
+    _entry, coordinator = await _setup(hass, outdoor=5.0)
+
+    with pytest.raises(HomeAssistantError):
+        await coordinator.async_lock()
+    with pytest.raises(HomeAssistantError):
+        await coordinator.async_unlock()
