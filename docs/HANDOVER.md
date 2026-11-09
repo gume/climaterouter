@@ -79,6 +79,18 @@
 | `724111f` | `test: capture handover-abort events synchronously` |
 | `9ee81e2` | `ci: update checkout and setup-python actions` |
 | `c560616` | `fix: satisfy hassfest manifest and config schema checks` |
+| `aeab87d` | `docs: record the hassfest and HACS validation fixes` |
+| `58f0ba5` | `test: cover expiry, relock, and conflict policies` |
+| `1b1c818` | `test: cover remaining services and diagnostics` |
+| `3419152` | `docs: record 109 tests and 85 percent coverage` |
+| `44e73a4` | `test: cover config-flow validation branches` |
+| `3201acd` | `docs: record config-flow coverage` |
+| `4549614` | `test: assert conflict history and clear events` |
+| `821b28d` | `docs: record conflict-clear coverage` |
+| `02e1bcd` | `fix: cancel expiry timers when the watchdog fires them` |
+| `43e3257` | `docs: record watchdog expiry fix and live 0.8.2 state` |
+| `ff3474b` | `chore: bump version to 0.8.3` |
+| `bd0305d` | `test: cover service dispatch and inactive target detection` |
 
 Everything through `aeab87d` is pushed to `origin/main`. The test instance runs a clean Marketplace install of
 `aeab87d` (version **0.8.2**) and was verified live. The later test fixes and the 0.8.3 version bump are local only.
@@ -578,9 +590,9 @@ The remaining checks are the interactive ones that need the UI: saving the confi
 descriptions, and a real handover to confirm `last_handover` persistence.
 
 Automated coverage now includes natural manual/boost expiry callbacks, conflict `reassert`/`adopt`/auto-resolve,
-both-targets-on startup conflicts, auto-relock persistence, the remaining services, diagnostics and config-flow
-validation. The remaining gaps are unasserted `inactive_target_on`, boost expiry during a handover and `vt_display.py`. See
-section 8.2 for the full list.
+both-targets-on and `inactive_target_on` detection, auto-relock persistence, the remaining services, diagnostics and
+config-flow validation. The remaining gaps are boost expiry during a handover, a few service error paths and
+`vt_display.py`. See section 8.2 for the full list.
 
 ---
 
@@ -591,7 +603,7 @@ section 8.2 for the full list.
    the correct `async_extract_entity_ids` signature, and `climate.py` exposes the legacy temperature properties when
    the base class lacks the `native_*` ones. The suite passes on a 2025.1.4 harness; CI tracks the newest harness.
    Intermediate releases are expected to work but are not individually tested.
-2. **Automated coverage is still partial (86 %, gate 75 %).** High-risk handover, persistence, manual start/return,
+2. **Automated coverage is still partial (87 %, gate 75 %).** High-risk handover, persistence, manual start/return,
    expiry, boost start/cancel, conflict policies, lock, services, diagnostics and entity behaviour are covered. See
    section 8.2 for the remaining medium/low gaps; `coordinator.py` (80 %) and `vt_display.py` (0 % due to the dual
    import path) are the largest untested areas.
@@ -601,8 +613,8 @@ section 8.2 for the full list.
    started while the proxy has no mode/active target updates the baseline but does not by itself start heating; start
    the proxy (`heat`/`cool`) first.
 4. **M5 is live-verified through 0.8.0 and well covered.** Monitor, `reassert`, `adopt`, `both_targets_on`, startup
-   conflicts, context suppression, settle windows and history/clear are automated. `inactive_target_on` and the
-   reassert grace across a reload are still only partially asserted. Detection deliberately pauses during
+   conflicts, context suppression, settle windows, `inactive_target_on` and history/clear are automated. The
+   reassert grace across a reload is still only partially asserted. Detection deliberately pauses during
    handover and during the post-command settle window, so very short mismatches may never be reported.
    `_guess_source()` is heuristic.
 5. **Boost is live-verified through 0.8.0 and partially covered.** Activation on both targets, cancel, the feature
@@ -666,11 +678,11 @@ Status as of 2026-11-09:
 | `ruff check .` | clean |
 | `ruff format --check .` | clean |
 | Pure unit tests (no HA) | 56 passed |
-| Integration tests (HA harness) | 62 passed |
-| Full suite (HA harness) | 118 passed |
+| Integration tests (HA harness) | 66 passed |
+| Full suite (HA harness) | 122 passed |
 | CI installs `requirements_test.txt` | yes (intentionally unpinned) |
 | GitHub CI run confirmed | green through `aeab87d`; the later test/doc commits await the owner's push |
-| Measured statement coverage | **86 %** (gate 75 %) |
+| Measured statement coverage | **87 %** (gate 75 %) |
 
 `pytest-homeassistant-custom-component` is wired into `tests/conftest.py`, and the integration suite lives in
 `tests/integration/`. Without the harness, pytest runs the pure tests and skips the integration directory.
@@ -706,13 +718,14 @@ Status as of 2026-11-09:
 - [x] conflict detection/clear events and resolved history.
 - [x] watchdog-driven manual/boost expiry; the watchdog now cancels the pending expiry handles instead of leaving
       them scheduled (`02e1bcd`).
+- [x] service dispatch for recalculate/clear-conflicts/force-handover and `inactive_target_on` detection
+      (`bd0305d`).
 
 #### Missing
 
 Medium priority:
 
 - [ ] boost expiry during a pending handover;
-- [ ] `inactive_target_on` detection assertion;
 - [ ] reconfigure with an unknown entry id and the remaining options-section save paths.
 
 Low priority:
@@ -733,11 +746,11 @@ Low priority:
 | `select.py` | 96 % |
 | `binary_sensor.py`, `models.py` | 95 % |
 | `__init__.py`, `climate.py`, `lock.py` | 94 % |
-| `services.py` | 92 % |
+| `services.py` | 98 % |
 | `config_flow.py` | 96 % |
 | `coordinator.py` | 80 % |
 | `vt_display.py` | 0 % (see note above) |
-| **Total** | **86 %** |
+| **Total** | **87 %** |
 
 The local PyPI snapshot only offers `pytest-homeassistant-custom-component` 0.13.205 (HA 2025.1.4), not 2026.11.
 CI installs the newest release. Production code supports both versions; no test-only shims remain.
@@ -774,9 +787,8 @@ Run the suite with the HA venv:
 - [x] Fire `climaterouter_conflict_detected` / `climaterouter_conflict_cleared`; make `clear_conflicts` real.
 - [x] Handle both-targets-on, unavailable targets, stale outdoor sensor and target mismatch.
 - [x] Unit tests for the pure classifier (`target_conflict`) and `Conflict.to_dict()`.
-- [x] Integration tests for the `monitor` and `reassert`/`adopt` paths, auto-resolve switches and
-      both-targets-on.
-- [ ] Integration test for `inactive_target_on` detection.
+- [x] Integration tests for the `monitor` and `reassert`/`adopt` paths, auto-resolve switches,
+      both-targets-on and `inactive_target_on`.
 - [x] Live verification in the 2026.11 test instance (through 0.8.0).
 
 ### 8.5 M6 — boost and release (implemented in this checkout)
