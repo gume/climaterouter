@@ -20,6 +20,8 @@ from custom_components.climaterouter.const import (
     CONFLICT_REASSERT_GRACE,
     DOMAIN,
     EVENT_BOOST_ENDED,
+    EVENT_CONFLICT_CLEARED,
+    EVENT_CONFLICT_DETECTED,
     EVENT_HANDOVER_ABORTED,
     EVENT_MANUAL_MODE_ENDED,
 )
@@ -793,3 +795,47 @@ async def test_startup_with_both_targets_active_reports_conflict(hass) -> None:
     assert coordinator.data.active_targets == frozenset({Target.RADIATOR, Target.AC})
     assert coordinator.data.handover_state == "conflict"
     assert coordinator.data.route_reason == "startup_conflict"
+
+
+async def test_conflict_history_and_clear(hass, monkeypatch) -> None:
+    """Clearing a conflict records it as resolved and fires the event."""
+    from custom_components.climaterouter import coordinator as coordinator_module
+
+    detected = async_capture_events(hass, EVENT_CONFLICT_DETECTED)
+    cleared = async_capture_events(hass, EVENT_CONFLICT_CLEARED)
+    _entry, coordinator = await _setup(hass, outdoor=5.0)
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+    await hass.async_block_till_done()
+
+    hass.states.async_set(
+        RADIATOR,
+        HVAC_HEAT,
+        {
+            "hvac_modes": [HVAC_HEAT],
+            "hvac_action": "heating",
+            "temperature": 25,
+            "min_temp": 7,
+            "max_temp": 35,
+        },
+    )
+    await hass.async_block_till_done()
+
+    base = coordinator_module.dt_util.utcnow()
+    monkeypatch.setattr(
+        coordinator_module.dt_util,
+        "utcnow",
+        lambda: base + timedelta(seconds=2),
+    )
+    await coordinator.async_evaluate()
+    await hass.async_block_till_done()
+
+    assert coordinator.data.conflict_count == 1
+    assert coordinator.data.conflicts
+    assert detected
+
+    await coordinator.async_clear_conflicts()
+    await hass.async_block_till_done()
+
+    assert coordinator.data.conflicts == ()
+    assert coordinator.conflict_history[-1].resolved is True
+    assert cleared
