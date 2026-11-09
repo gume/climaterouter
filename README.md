@@ -76,7 +76,7 @@ user-initiated commands; schedule and automation traffic keeps running. See
 | One climate entity | Scheduler/UI see `climate.climaterouter`; no scheduler changes required. |
 | Temperature-based routing | Outdoor sensor plus optional `select` override; hysteresis and minimum dwell time. |
 | Safe handover | Route change is deferred until the old target is idle; old target is turned off before the new one starts. |
-| Manual mode | Moving the temperature/preset or `climaterouter.enter_manual_mode` starts proxy-owned manual mode with an optional timer; additional moves do not reset it. While it is active, scheduler/automation moves are remembered but not applied, and `return_to_schedule` (or timer expiry) returns to the latest schedule state. Survives handover/restart. |
+| Manual mode | Moving the temperature/preset or `climaterouter.enter_manual_mode` starts proxy-owned manual mode with an optional timer; additional moves do not reset it. While it is active, scheduler/automation moves are remembered but not applied, and `return_to_schedule` (or timer expiry) returns to the latest schedule state. A direct user move on the VTherm card itself is adopted into manual mode. Survives handover/restart. |
 | Observability | Binary sensors and sensors for active target, pending handover, manual mode, boost, stale inputs, conflicts, and last handover. |
 | Conflict detection | Detects direct changes to either VTherm, both-targets-on, unavailable targets, and stale inputs; `monitor` by default, with `reassert`/`adopt` policies and guarded states excluded. |
 | Boost | `climaterouter.set_boost` runs both targets for a bounded time when `boost_enabled` is on; heat-only, both targets must be available, and ending boost hands back to single-target routing. |

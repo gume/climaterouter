@@ -102,9 +102,10 @@
 | `ee0a878` | `docs: point the 0.8.4 handover at the final commit` |
 | `1972d1e` | `ci: clarify the local brand asset location` |
 | `cf53fc8` | `fix: defer scheduler commands while manual mode is active` |
+| `f0d423c` | `fix: adopt direct user changes on the active thermostat as manual moves` |
 
-Everything through `1972d1e` is on `origin/main`. The local `cf53fc8` commit adds the 0.8.5 scheduler/manual
-fix and is not pushed yet. The test instance runs the Marketplace release **v0.8.3**
+Everything through `1972d1e` is on `origin/main`. The local `cf53fc8` and `f0d423c` commits add the 0.8.5
+scheduler/manual fix and are not pushed yet. The test instance runs the Marketplace release **v0.8.3**
 (tag `v0.8.3`, commit `723c5c0`): `update.climaterouter` reports `installed_version` = `latest_version` = `v0.8.3`
 and points at `https://github.com/gume/climaterouter/releases/tag/v0.8.3`. The 0.8.4 commits are on `main`, but no
 `v0.8.4` tag/release exists yet, so the Marketplace does not offer them. The assistant has no GitHub credentials;
@@ -153,8 +154,11 @@ Version **0.8.5** makes manual mode authoritative against schedulers. Schedule/a
 manual mode is active are remembered as the baseline instead of being rejected, so they cannot change the manual
 setpoint or turn the target off, and timer expiry/return-to-schedule follows the scheduler's latest move (including
 a deferred `off`). If an automation writes directly to the underlying VTherm, the coordinator re-asserts the manual
-state. The manual-timer select remains `off` when inactive. A small service-extraction compatibility fix also covers
-Home Assistant releases where `async_extract_entity_ids()` has an `expand_group` second parameter.
+state; a change that carries a `user_id` (the user moving the VTherm card itself) is adopted into manual mode
+instead, keeping the running timer. The manual-timer select remains `off` when inactive. A small service-extraction
+compatibility fix also covers Home Assistant releases where `async_extract_entity_ids()` has an `expand_group`
+second parameter. The device-info test now uses the non-deprecated `async_get_device_by_identifier` lookup, so the
+full suite is green on the current harness.
 
 The next developer should start with section 8 (Next steps).
 
@@ -323,7 +327,10 @@ Events fired on the HA bus:
   schedule value rather than the last manual value. Schedule commands received while manual mode is active update
   the baseline but do not replace the manual value.
 - Manual mode is authoritative over the active target: if an external scheduler/automation writes directly to the
-  underlying VTherm, the coordinator re-sends the manual mode/setpoint (guarded targets are left alone).
+  underlying VTherm, the coordinator re-sends the manual mode/setpoint (guarded targets are left alone). A direct
+  write that carries a `user_id` (the user moving the VTherm card itself) is **adopted** instead: it updates the
+  manual value, starts manual mode if it was inactive, and keeps a running timer. Changes to the inactive target,
+  and `off`/`unavailable` writes, are not adopted.
 - An explicit **user** `off` ends manual mode (`cause=off`). A scheduler/automation `off` is deferred and applied
   when manual mode ends. Timer expiry ends manual mode with `cause=expired`.
 - Handovers use the effective desired state, so manual mode and its deadline carry over to the new target. The
@@ -457,6 +464,9 @@ itself; it is not mirrored to either VTherm.
   **deferred**: they update the schedule baseline but do not change the active target. An `off` from a scheduler is
   deferred too, so it cannot stop a manual session; it becomes the state applied when manual mode ends. User
   commands are always accepted, so the manual setpoint and timer can be adjusted without unlocking.
+- A direct write to the active VTherm that carries a `user_id` is adopted as a manual move (see section 5): it is not
+  re-asserted, so a user moving the VTherm card itself is not fought by the protection. Writes without a `user_id`
+  are re-asserted.
 - Automation calls that try to change manual mode itself (`enter_manual_mode`, `set_manual_timer`) are still
   rejected while manual mode is active.
 - `climaterouter.return_to_schedule` is deliberately not gated, so an explicit return (including an automation)
@@ -723,15 +733,15 @@ section 8.2 for the full list.
 
 ### 8.2 Automated tests and CI
 
-Status as of 2026-11-09:
+Status as of 2026-11-10:
 
 | Check | Result |
 |---|---|
 | `ruff check .` | clean |
 | `ruff format --check .` | clean |
 | Pure unit tests (no HA) | 59 passed |
-| Integration tests (HA harness) | 86 passed, 1 harness-only failure (`test_climate_entity_tracks_device_info`: `MissingIntegrationFrame` under the local 2026.10.4 harness) |
-| Full suite (HA harness) | 145 passed, 1 harness-only failure |
+| Integration tests (HA harness) | 89 passed |
+| Full suite (HA harness) | 148 passed, 0 failures |
 | `mypy custom_components/climaterouter` | clean |
 | CI installs `requirements_test.txt` | yes (intentionally unpinned, includes `mypy`) |
 | CI matrix | full HA suite on Python 3.13; pure unit tests on Python 3.12 and 3.13 |
