@@ -9,12 +9,20 @@ import pytest
 from homeassistant.const import STATE_OFF
 from homeassistant.core import Context
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_capture_events,
+    async_mock_service,
 )
 
-from custom_components.climaterouter.const import DOMAIN, EVENT_HANDOVER_ABORTED
+from custom_components.climaterouter.const import (
+    CONFLICT_REASSERT_GRACE,
+    DOMAIN,
+    EVENT_BOOST_ENDED,
+    EVENT_HANDOVER_ABORTED,
+    EVENT_MANUAL_MODE_ENDED,
+)
 from custom_components.climaterouter.models import HVAC_HEAT, ROUTE_AC, Target
 
 RADIATOR = "climate.radiator"
@@ -524,3 +532,264 @@ async def test_force_handover_completes_despite_active_old_target(hass) -> None:
 
     assert coordinator.data.active_targets == frozenset({Target.AC})
     assert coordinator.data.handover_state == "steady"
+
+
+async def test_manual_timer_expiry_returns_to_schedule(hass, monkeypatch) -> None:
+    """An expired manual timer drops back to the scheduled setpoint."""
+    from custom_components.climaterouter import coordinator as coordinator_module
+
+    events = async_capture_events(hass, EVENT_MANUAL_MODE_ENDED)
+    _entry, coordinator = await _setup(hass, outdoor=5.0)
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+    await coordinator.async_enter_manual_mode(temperature=23, duration_minutes=30)
+    await hass.async_block_till_done()
+
+    manual = coordinator.data.manual_mode
+    assert manual is not None
+    assert manual.until is not None
+
+    monkeypatch.setattr(
+        coordinator_module.dt_util,
+        "utcnow",
+        lambda: manual.until + timedelta(seconds=1),
+    )
+    coordinator._cancel_manual_timer()
+    await coordinator._async_manual_expired(coordinator_module.dt_util.utcnow())
+    await hass.async_block_till_done()
+
+    assert coordinator.data.manual_mode is None
+    assert coordinator.data.desired.target_temperature == 20
+    assert events and events[0].data["cause"] == "expired"
+
+
+async def test_boost_expiry_returns_to_single_target(hass, monkeypatch) -> None:
+    """An expired boost ends both-target routing and emits the end event."""
+    from custom_components.climaterouter import coordinator as coordinator_module
+
+    events = async_capture_events(hass, EVENT_BOOST_ENDED)
+    _entry, coordinator = await _setup(hass, outdoor=5.0, boost_enabled=True)
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+    await coordinator.async_set_boost(duration_minutes=10)
+    await hass.async_block_till_done()
+
+    until = coordinator.data.boost_until
+    assert until is not None
+    assert coordinator.data.active_targets == frozenset({Target.RADIATOR, Target.AC})
+
+    monkeypatch.setattr(
+        coordinator_module.dt_util,
+        "utcnow",
+        lambda: until + timedelta(seconds=1),
+    )
+    coordinator._cancel_boost_timer()
+    await coordinator._async_boost_expired(coordinator_module.dt_util.utcnow())
+    await hass.async_block_till_done()
+
+    assert coordinator.data.boost_until is None
+    assert coordinator.data.handover_state == "steady"
+    assert coordinator.data.active_targets == frozenset({Target.RADIATOR})
+    assert events and events[0].data["cause"] == "expired"
+
+
+async def test_unlock_schedules_auto_relock(hass) -> None:
+    """Unlocking schedules the configured automatic relock."""
+    _entry, coordinator = await _setup(hass, outdoor=5.0, lock_enabled=True)
+    await coordinator.async_lock()
+    assert coordinator.data.locked is True
+
+    await coordinator.async_unlock()
+    assert coordinator.data.locked is False
+    assert coordinator._auto_relock_at is not None
+
+    coordinator._cancel_auto_relock()
+    await coordinator._async_auto_relock(dt_util.utcnow())
+    assert coordinator.data.locked is True
+
+
+async def test_auto_relock_deadline_survives_reload(hass) -> None:
+    """The pending auto-relock deadline is restored after a reload."""
+    entry, coordinator = await _setup(hass, outdoor=5.0, lock_enabled=True)
+    await coordinator.async_lock()
+    await coordinator.async_unlock()
+    until = coordinator._auto_relock_at
+    assert until is not None
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    reloaded = entry.runtime_data
+    assert reloaded._auto_relock_at is not None
+    assert abs((reloaded._auto_relock_at - until).total_seconds()) < 5
+    assert reloaded.data.locked is False
+
+
+async def test_conflict_reassert_reenforces_desired_setpoint(hass, monkeypatch) -> None:
+    """The reassert policy resends the desired setpoint after the grace period."""
+    from custom_components.climaterouter import coordinator as coordinator_module
+
+    _entry, coordinator = await _setup(hass, outdoor=5.0, conflict_policy="reassert")
+    calls = async_mock_service(hass, "climate", "set_temperature")
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+    await hass.async_block_till_done()
+    calls.clear()
+
+    hass.states.async_set(
+        RADIATOR,
+        HVAC_HEAT,
+        {
+            "hvac_modes": [HVAC_HEAT],
+            "hvac_action": "heating",
+            "temperature": 25,
+            "min_temp": 7,
+            "max_temp": 35,
+        },
+    )
+    await hass.async_block_till_done()
+    await coordinator.async_evaluate()
+    await hass.async_block_till_done()
+    assert not any(call.data.get("temperature") == 20 for call in calls)
+
+    # Move past the settle window so the mismatch is detected, then past the
+    # reassert grace period so the desired setpoint is sent again.
+    base = coordinator_module.dt_util.utcnow()
+    clock = {"now": base + timedelta(seconds=2)}
+    monkeypatch.setattr(coordinator_module.dt_util, "utcnow", lambda: clock["now"])
+
+    await coordinator.async_evaluate()
+    await hass.async_block_till_done()
+    assert coordinator.data.conflicts
+    assert not any(call.data.get("temperature") == 20 for call in calls)
+
+    clock["now"] = base + timedelta(seconds=CONFLICT_REASSERT_GRACE + 3)
+    await coordinator.async_evaluate()
+    await hass.async_block_till_done()
+
+    assert any(call.data.get("temperature") == 20 for call in calls)
+
+
+async def test_conflict_adopt_updates_baseline(hass, monkeypatch) -> None:
+    """The adopt policy accepts an external setpoint as the new desired value."""
+    from custom_components.climaterouter import coordinator as coordinator_module
+
+    _entry, coordinator = await _setup(hass, outdoor=5.0, conflict_policy="adopt")
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+    await hass.async_block_till_done()
+
+    hass.states.async_set(
+        RADIATOR,
+        HVAC_HEAT,
+        {
+            "hvac_modes": [HVAC_HEAT],
+            "hvac_action": "heating",
+            "temperature": 25,
+            "min_temp": 7,
+            "max_temp": 35,
+        },
+    )
+    await hass.async_block_till_done()
+
+    # Skip the settle window that follows our own service calls.
+    base = coordinator_module.dt_util.utcnow()
+    monkeypatch.setattr(
+        coordinator_module.dt_util,
+        "utcnow",
+        lambda: base + timedelta(seconds=2),
+    )
+    await coordinator.async_recalculate()
+    await hass.async_block_till_done()
+
+    assert coordinator.data.desired.target_temperature == 25
+    assert coordinator.data.conflict_count == 0
+
+
+async def test_both_targets_on_auto_resolve_stops_spare(hass, monkeypatch) -> None:
+    """Both-on detection can stop the idle spare target automatically."""
+    from custom_components.climaterouter import coordinator as coordinator_module
+
+    _entry, coordinator = await _setup(hass, outdoor=5.0, auto_resolve_simultaneous=True)
+    calls = async_mock_service(hass, "climate", "set_hvac_mode")
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+    await hass.async_block_till_done()
+
+    hass.states.async_set(
+        RADIATOR,
+        HVAC_HEAT,
+        {
+            "hvac_modes": [HVAC_HEAT],
+            "hvac_action": "heating",
+            "temperature": 20,
+            "min_temp": 7,
+            "max_temp": 35,
+        },
+    )
+    hass.states.async_set(
+        AC,
+        HVAC_HEAT,
+        {
+            "hvac_modes": [HVAC_HEAT, "cool"],
+            "hvac_action": "idle",
+            "temperature": 20,
+            "min_temp": 16,
+            "max_temp": 30,
+        },
+    )
+    await hass.async_block_till_done()
+
+    # Skip the settle window that follows our own service calls.
+    base = coordinator_module.dt_util.utcnow()
+    monkeypatch.setattr(
+        coordinator_module.dt_util,
+        "utcnow",
+        lambda: base + timedelta(seconds=2),
+    )
+    await coordinator.async_recalculate()
+    await hass.async_block_till_done()
+
+    assert any(conflict.type == "both_targets_on" for conflict in coordinator.data.conflicts)
+    assert any(
+        call.data.get("entity_id") == AC and call.data.get("hvac_mode") == "off" for call in calls
+    )
+
+
+async def test_startup_with_both_targets_active_reports_conflict(hass) -> None:
+    """Two targets already heating at startup are adopted with a conflict state."""
+    hass.states.async_set(
+        RADIATOR,
+        HVAC_HEAT,
+        {
+            "hvac_modes": [HVAC_HEAT],
+            "hvac_action": "heating",
+            "temperature": 20,
+            "min_temp": 7,
+            "max_temp": 35,
+        },
+    )
+    hass.states.async_set(
+        AC,
+        HVAC_HEAT,
+        {
+            "hvac_modes": [HVAC_HEAT, "cool"],
+            "hvac_action": "heating",
+            "temperature": 20,
+            "min_temp": 16,
+            "max_temp": 30,
+        },
+    )
+    hass.states.async_set(OUTDOOR, "5.0", {"unit_of_measurement": "°C"})
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Test Router",
+        data=_entry_data(),
+        unique_id="test-router",
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    coordinator = entry.runtime_data
+    assert coordinator.data.active_targets == frozenset({Target.RADIATOR, Target.AC})
+    assert coordinator.data.handover_state == "conflict"
+    assert coordinator.data.route_reason == "startup_conflict"

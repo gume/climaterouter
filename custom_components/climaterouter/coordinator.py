@@ -1586,7 +1586,10 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
 
         async with self._lock:
             decision = self._route_decision()
-            self._route_reason = "off" if self._desired.hvac_mode == HVAC_OFF else decision.reason
+            if self._handover_state is not HandoverState.CONFLICT:
+                self._route_reason = (
+                    "off" if self._desired.hvac_mode == HVAC_OFF else decision.reason
+                )
             self._publish()
 
     def _adopt_from_active(self) -> None:
