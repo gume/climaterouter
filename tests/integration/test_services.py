@@ -15,9 +15,12 @@ from custom_components.climaterouter.const import (
     DOMAIN,
     SERVICE_CANCEL_BOOST,
     SERVICE_CANCEL_MANUAL_OVERRIDE,
+    SERVICE_CLEAR_CONFLICTS,
     SERVICE_CLEAR_ROUTE_OVERRIDE,
     SERVICE_ENTER_MANUAL_MODE,
+    SERVICE_FORCE_HANDOVER,
     SERVICE_LOCK,
+    SERVICE_RECALCULATE,
     SERVICE_RETURN_TO_SCHEDULE,
     SERVICE_SET_BOOST,
     SERVICE_SET_MANUAL_OVERRIDE,
@@ -275,3 +278,63 @@ async def test_service_requires_a_target(hass) -> None:
             {"route": ROUTE_AC},
             blocking=True,
         )
+
+
+async def test_recalculate_service_dispatches(hass, monkeypatch) -> None:
+    """The recalculate service calls the coordinator for its target."""
+    _entry, coordinator = await _setup(hass)
+    calls: list[bool] = []
+
+    async def fake_recalculate() -> None:
+        calls.append(True)
+
+    monkeypatch.setattr(coordinator, "async_recalculate", fake_recalculate)
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_RECALCULATE,
+        {"entity_id": coordinator.climate_entity_id},
+        blocking=True,
+    )
+
+    assert calls == [True]
+
+
+async def test_clear_conflicts_service_dispatches(hass, monkeypatch) -> None:
+    """The clear-conflicts service calls the coordinator for its target."""
+    _entry, coordinator = await _setup(hass)
+    calls: list[bool] = []
+
+    async def fake_clear() -> None:
+        calls.append(True)
+
+    monkeypatch.setattr(coordinator, "async_clear_conflicts", fake_clear)
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_CLEAR_CONFLICTS,
+        {"entity_id": coordinator.climate_entity_id},
+        blocking=True,
+    )
+
+    assert calls == [True]
+
+
+async def test_force_handover_service_dispatches(hass, monkeypatch) -> None:
+    """The force-handover service calls the coordinator for its target."""
+    _entry, coordinator = await _setup(hass)
+    calls: list[bool] = []
+
+    async def fake_force() -> None:
+        calls.append(True)
+
+    monkeypatch.setattr(coordinator, "async_force_handover", fake_force)
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_FORCE_HANDOVER,
+        {"entity_id": coordinator.climate_entity_id},
+        blocking=True,
+    )
+
+    assert calls == [True]

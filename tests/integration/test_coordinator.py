@@ -870,3 +870,46 @@ async def test_watchdog_expires_manual_and_boost(hass, monkeypatch) -> None:
     assert coordinator.data.boost_until is None
     assert manual_events and manual_events[0].data["cause"] == "expired"
     assert boost_events and boost_events[0].data["cause"] == "expired"
+
+
+async def test_inactive_target_on_is_reported(hass, monkeypatch) -> None:
+    """A spare target that is on while the route expects it off is flagged."""
+    from custom_components.climaterouter import coordinator as coordinator_module
+
+    _entry, coordinator = await _setup(hass, outdoor=5.0, auto_resolve_idle_targets=False)
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+    await hass.async_block_till_done()
+
+    # The radiator drops out while the AC comes on idle: exactly one target is
+    # on, and it is not the one the router still considers active.
+    hass.states.async_set(
+        RADIATOR,
+        STATE_OFF,
+        {"hvac_modes": [HVAC_HEAT], "min_temp": 7, "max_temp": 35},
+    )
+    hass.states.async_set(
+        AC,
+        HVAC_HEAT,
+        {
+            "hvac_modes": [HVAC_HEAT, "cool"],
+            "hvac_action": "idle",
+            "temperature": 20,
+            "min_temp": 16,
+            "max_temp": 30,
+        },
+    )
+    await hass.async_block_till_done()
+
+    base = coordinator_module.dt_util.utcnow()
+    monkeypatch.setattr(
+        coordinator_module.dt_util,
+        "utcnow",
+        lambda: base + timedelta(seconds=2),
+    )
+    await coordinator.async_evaluate()
+    await hass.async_block_till_done()
+
+    assert any(
+        conflict.type == "inactive_target_on" and conflict.target is Target.AC
+        for conflict in coordinator.data.conflicts
+    )
