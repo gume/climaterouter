@@ -98,6 +98,7 @@
 | `a6c1bb3` | `test: cover conflict clear-after ageing and startup auto-relock` |
 | `d2ced17` | `test: cover Lock B rejection and manual carry-over across handover` |
 | `563ead4` | `feat: add brand icon and detailed conflict/timer sensors` |
+| `23290d2` | `feat: explain off-target setpoints in the mismatch detail` |
 
 Everything through `aeab87d` is pushed to `origin/main`. The test instance runs a clean Marketplace install of
 `aeab87d` (version **0.8.2**) and was verified live. The later test fixes, the 0.8.3 version bump, and the 0.8.4
@@ -137,9 +138,9 @@ sensor, consistent config storage (schema-only `entry.data`, empty `entry.option
 the plan/handover alignment. The icon property initially broke the other sensors; `e025cf4` initializes the shared
 icon attribute and restores them.
 
-Version **0.8.4** (local, `563ead4`) adds the local brand assets, keeps the manual-timer select available with an
-`off` state and crossed-out timer icon when unused, keeps the current mode when manual mode expires without a
-schedule baseline, and adds text sensors that explain active conflicts and radiator/AC target mismatches.
+Version **0.8.4** (local, through `23290d2`) adds the local brand assets, keeps the manual-timer select available
+with an `off` state and crossed-out timer icon when unused, keeps the current mode when manual mode expires without
+a schedule baseline, and adds text sensors that explain active conflicts and radiator/AC target mismatches.
 
 The next developer should start with section 8 (Next steps).
 
@@ -670,9 +671,9 @@ section 8.2 for the full list.
 ### 8.1 Immediate
 
 1. Owner: push the local commits. The test instance runs the clean `aeab87d` build (0.8.2). If the new build
-   (version **0.8.4**, `563ead4`) is installed, confirm that the brand icon appears, all entities still load, and
-   repeat the expiry/conflict checks. Do not re-add the old `custom_components/climaterouter` bind mount: it makes
-   the folder a mount point (`EBUSY`) and the Marketplace cannot back it up before replacing it.
+   (version **0.8.4**, through `23290d2`) is installed, confirm that the brand icon appears, all entities still
+   load, and repeat the expiry/conflict checks. Do not re-add the old `custom_components/climaterouter` bind mount:
+   it makes the folder a mount point (`EBUSY`) and the Marketplace cannot back it up before replacing it.
 2. Open **Configure** once after the update and save any section. The schema-only save drops the removed
    manual-switch key from `entry.data`. Confirm the collapsed sections render correctly, that the brief
    explanations appear under the fields, that the options menu returns after each section save, and that **Finish**
