@@ -230,6 +230,51 @@ async def test_manual_timer_select_is_always_available_and_shows_off(hass) -> No
     assert state.attributes["icon"] == "mdi:timer-off-outline"
 
 
+async def test_target_mismatch_detail_explains_off_target(hass) -> None:
+    """The mismatch detail names a stale setpoint on the off target."""
+    entry, coordinator = await _setup(hass, outdoor=5.0)
+    registry = er.async_get(hass)
+    mismatch_id = registry.async_get_entity_id(
+        "sensor", DOMAIN, f"{entry.entry_id}_target_mismatch_detail"
+    )
+    assert mismatch_id is not None
+
+    hass.states.async_set(
+        RADIATOR,
+        STATE_OFF,
+        {
+            "hvac_modes": [HVAC_HEAT],
+            "temperature": 23,
+            "preset_mode": "none",
+            "min_temp": 7,
+            "max_temp": 35,
+        },
+    )
+    hass.states.async_set(
+        AC,
+        HVAC_HEAT,
+        {
+            "hvac_modes": [HVAC_HEAT, "cool"],
+            "hvac_action": "idle",
+            "temperature": 20.5,
+            "preset_mode": "comfort",
+            "min_temp": 16,
+            "max_temp": 30,
+        },
+    )
+    await hass.async_block_till_done()
+    await coordinator.async_recalculate()
+    await hass.async_block_till_done()
+
+    mismatch = hass.states.get(mismatch_id)
+    assert mismatch is not None
+    assert mismatch.state.startswith("radiator off;")
+    assert mismatch.attributes["radiator_hvac_mode"] == STATE_OFF
+    assert mismatch.attributes["ac_hvac_mode"] == HVAC_HEAT
+    assert mismatch.attributes["radiator_target_temperature"] == 23
+    assert mismatch.attributes["ac_target_temperature"] == 20.5
+
+
 async def test_conflict_and_target_mismatch_detail_sensors(hass, freezer) -> None:
     """The text sensors explain conflicts and target mismatches."""
     entry, coordinator = await _setup(hass, outdoor=5.0, conflict_policy="monitor")

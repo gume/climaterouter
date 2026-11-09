@@ -351,7 +351,9 @@ Events fired on the HA bus:
   skipped because two targets cannot define one baseline.
 - `binary_sensor.<name>_target_mismatch` / `sensor.<name>_target_mismatch_detail` compare the radiator and AC with
   each other (setpoint and preset), not with the desired state. The detail sensor names the differing values and
-  exposes both targets' temperatures/presets as attributes.
+  exposes both targets' temperatures, presets, modes and availability as attributes. It explicitly notes when a
+  target is off or unavailable, because a stale setpoint on the inactive target is the usual reason for this
+  diagnostic being on.
 
 ### 3.8 Boost (M6)
 
@@ -698,8 +700,8 @@ Status as of 2026-11-09:
 | `ruff check .` | clean |
 | `ruff format --check .` | clean |
 | Pure unit tests (no HA) | 59 passed |
-| Integration tests (HA harness) | 84 passed |
-| Full suite (HA harness) | 143 passed |
+| Integration tests (HA harness) | 85 passed |
+| Full suite (HA harness) | 144 passed |
 | `mypy custom_components/climaterouter` | clean |
 | CI installs `requirements_test.txt` | yes (intentionally unpinned, includes `mypy`) |
 | CI matrix | full HA suite on Python 3.13; pure unit tests on Python 3.12 and 3.13 |
@@ -846,7 +848,7 @@ Run the suite with the HA venv:
 - [x] Manual timer select stays available and reports `off` with a crossed-out icon when unused.
 - [x] Manual expiry without a schedule baseline keeps the current mode running.
 - [x] `sensor.<name>_conflict_detail` and `sensor.<name>_target_mismatch_detail` explain the two diagnostic binary
-      sensors, with full values in their attributes.
+      sensors, with full values in their attributes and an explicit off/unavailable note for the mismatch case.
 
 ---
 

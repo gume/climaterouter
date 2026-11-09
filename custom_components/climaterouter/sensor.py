@@ -78,7 +78,24 @@ def _conflict_detail(snapshot: RouterSnapshot) -> str:
 
 def _target_mismatch_detail(snapshot: RouterSnapshot) -> str:
     reasons = snapshot.target_mismatch_reasons()
-    return "none" if not reasons else _truncate("; ".join(reasons))
+    if not reasons:
+        return "none"
+
+    radiator = snapshot.targets.get(Target.RADIATOR)
+    ac = snapshot.targets.get(Target.AC)
+    notes: list[str] = []
+    for label, state in (("radiator", radiator), ("ac", ac)):
+        if state is None:
+            notes.append(f"{label} unknown")
+        elif not state.available:
+            notes.append(f"{label} unavailable")
+        elif state.hvac_mode in (None, "off"):
+            notes.append(f"{label} off")
+
+    detail = "; ".join(reasons)
+    if notes:
+        detail = f"{', '.join(notes)}; {detail}"
+    return _truncate(detail)
 
 
 def _conflict_attributes(snapshot: RouterSnapshot) -> dict[str, Any]:
@@ -99,6 +116,10 @@ def _target_mismatch_attributes(snapshot: RouterSnapshot) -> dict[str, Any]:
         "ac_target_temperature": ac.target_temperature if ac is not None else None,
         "radiator_preset_mode": radiator.preset_mode if radiator is not None else None,
         "ac_preset_mode": ac.preset_mode if ac is not None else None,
+        "radiator_hvac_mode": radiator.hvac_mode if radiator is not None else None,
+        "ac_hvac_mode": ac.hvac_mode if ac is not None else None,
+        "radiator_available": radiator.available if radiator is not None else None,
+        "ac_available": ac.available if ac is not None else None,
     }
 
 
