@@ -677,7 +677,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._desired = self._baseline.with_manual_mode(self._manual)
 
     async def _async_manual_expired(self, _now: datetime) -> None:
-        self._manual_unsub = None
+        self._cancel_manual_timer()
         if self._manual is None:
             return
         if not self._manual.is_expired(dt_util.utcnow()):
@@ -793,7 +793,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         )
 
     async def _async_boost_expired(self, _now: datetime) -> None:
-        self._boost_unsub = None
+        self._cancel_boost_timer()
         if self._boost is None:
             return
         if not self._boost.is_expired(dt_util.utcnow()):

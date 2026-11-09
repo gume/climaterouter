@@ -555,7 +555,6 @@ async def test_manual_timer_expiry_returns_to_schedule(hass, monkeypatch) -> Non
         "utcnow",
         lambda: manual.until + timedelta(seconds=1),
     )
-    coordinator._cancel_manual_timer()
     await coordinator._async_manual_expired(coordinator_module.dt_util.utcnow())
     await hass.async_block_till_done()
 
@@ -583,7 +582,6 @@ async def test_boost_expiry_returns_to_single_target(hass, monkeypatch) -> None:
         "utcnow",
         lambda: until + timedelta(seconds=1),
     )
-    coordinator._cancel_boost_timer()
     await coordinator._async_boost_expired(coordinator_module.dt_util.utcnow())
     await hass.async_block_till_done()
 
@@ -839,3 +837,36 @@ async def test_conflict_history_and_clear(hass, monkeypatch) -> None:
     assert coordinator.data.conflicts == ()
     assert coordinator.conflict_history[-1].resolved is True
     assert cleared
+
+
+async def test_watchdog_expires_manual_and_boost(hass, monkeypatch) -> None:
+    """The periodic watchdog ends expired manual mode and boost."""
+    from custom_components.climaterouter import coordinator as coordinator_module
+
+    manual_events = async_capture_events(hass, EVENT_MANUAL_MODE_ENDED)
+    boost_events = async_capture_events(hass, EVENT_BOOST_ENDED)
+    _entry, coordinator = await _setup(
+        hass,
+        outdoor=5.0,
+        boost_enabled=True,
+        manual_blocks_schedule=False,
+    )
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+    await coordinator.async_enter_manual_mode(temperature=23, duration_minutes=30)
+    await coordinator.async_set_boost(duration_minutes=10)
+    await hass.async_block_till_done()
+
+    manual = coordinator.data.manual_mode
+    boost_until = coordinator.data.boost_until
+    assert manual is not None and manual.until is not None
+    assert boost_until is not None
+
+    later = max(manual.until, boost_until) + timedelta(seconds=1)
+    monkeypatch.setattr(coordinator_module.dt_util, "utcnow", lambda: later)
+    await coordinator._async_watchdog(later)
+    await hass.async_block_till_done()
+
+    assert coordinator.data.manual_mode is None
+    assert coordinator.data.boost_until is None
+    assert manual_events and manual_events[0].data["cause"] == "expired"
+    assert boost_events and boost_events[0].data["cause"] == "expired"
