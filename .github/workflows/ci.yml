@@ -31,9 +31,41 @@ jobs:
       - name: Check formatting
         run: ruff format --check .
 
+      - name: Type check
+        run: mypy custom_components/climaterouter
+
       - name: Tests
         run: |
           pytest \
-            --cov=custom_components.climaterouter \
+            --cov=custom_components/climaterouter \
             --cov-report=term-missing \
             --cov-fail-under=75
+
+  unit-tests:
+    name: Unit tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # The pure domain tests do not need Home Assistant; run them on the
+      # oldest supported Python as well as the current one.
+      - name: Install pytest
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+
+      - name: Pure unit tests
+        run: |
+          pytest \
+            tests/test_models.py \
+            tests/test_router.py \
+            tests/test_translations.py \
+            tests/test_vt_display.py

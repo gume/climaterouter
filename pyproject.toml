@@ -1,6 +1,6 @@
 [project]
 name = "climaterouter"
-version = "0.8.1"
+version = "0.8.3"
 description = "Home Assistant climate proxy that routes between a radiator and an AC VTherm"
 requires-python = ">=3.12"
 license = { text = "MIT" }
@@ -26,6 +26,11 @@ ignore = [
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+check_untyped_defs = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
