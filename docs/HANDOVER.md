@@ -783,6 +783,8 @@ Status as of 2026-11-09:
 - [x] coordinator command validation (empty command, invalid mode/route, no handover), boost duration/target/state
       rejection, manual duration bounds and timer toggling, lock feature-flag rejection (`acd5b02`).
 - [x] conflict clear-after ageing and an auto-relock deadline that expired while unloaded (`a6c1bb3`).
+- [x] manual mode defers scheduler/automation moves (including `off`), returns to the latest schedule on expiry, and
+      re-asserts direct VTherm writes while active (`cf53fc8`).
 
 #### Missing
 
