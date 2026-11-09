@@ -80,9 +80,9 @@
 | `9ee81e2` | `ci: update checkout and setup-python actions` |
 | `c560616` | `fix: satisfy hassfest manifest and config schema checks` |
 
-Everything through `9ee81e2` is pushed to `origin/main`. The hassfest/HACS fixes (`c560616`) and the documentation
-commit after it are local only. The test instance runs a clean Marketplace install of `e025cf4` (version **0.8.1**);
-the checkout now declares version **0.8.2**. The assistant has no GitHub credentials; the owner pushes.
+Everything through `aeab87d` is pushed to `origin/main`. The test instance runs a clean Marketplace install of
+`aeab87d` (version **0.8.2**) and was verified live. The later test fixes and the 0.8.3 version bump are local only.
+The assistant has no GitHub credentials; the owner pushes.
 
 ---
 
@@ -90,9 +90,9 @@ the checkout now declares version **0.8.2**. The assistant has no GitHub credent
 
 Milestones M1–M6 from [`PLAN.md`](PLAN.md) are implemented. The owner reports live verification through version
 **0.8.0**. **0.8.1** was first installed as `d3af8b4`, which exposed a regression: nine sensors failed to add because
-`RouterSensor.icon` returned an uninitialized `_attr_icon`. Fixed in `e025cf4`; that commit is pushed and the test
-instance now runs a clean Marketplace install of it. All eleven sensors are available and the target icons are
-correct.
+`RouterSensor.icon` returned an uninitialized `_attr_icon`. Fixed in `e025cf4`; **0.8.2** (`aeab87d`) added the HA
+2025.1.4 compatibility and hassfest schema fixes. The test instance runs a clean Marketplace install of `aeab87d`;
+all eleven sensors are available and the target icons are correct.
 
 | Milestone | State | Notes |
 |---|---|---|
@@ -455,8 +455,8 @@ Defined in `test_environment/`; full instructions in [`TEST_ENVIRONMENT.md`](TES
   (`gume/climaterouter`, repository id `1448098130`). The container runs on this host and mounts
   `test_environment/config` as `/config`; that directory is git-ignored runtime state.
 - The Marketplace installs from the default branch (`main`) and identifies the version by the **short commit
-  hash**, not by a tag or release. The test instance currently runs the clean `e025cf4` build of version **0.8.1**;
-  earlier live tests covered `fd009ea` (version **0.8.0**).
+  hash**, not by a tag or release. The test instance currently runs the clean `aeab87d` build of version **0.8.2**;
+  earlier live tests covered `e025cf4` (version **0.8.1**) and `fd009ea` (version **0.8.0**).
 - Installed custom repositories refresh their commit metadata at Home Assistant startup and then every **48 hours**
   (`marketplace/base.py`, `timedelta(hours=48)`). A push made after the last startup is therefore not visible until
   Home Assistant restarts, the repository is refreshed from the Marketplace, or 48 hours pass. The assistant
@@ -566,17 +566,20 @@ ACs; later versions use the two VTherm entities described in section 4.
 | 0.8.1 sensor regression | Nine sensors (`route_reason`, `outdoor_temperature`, manual/boost/last-handover/last-command/conflict) failed to add with `AttributeError: 'RouterSensor' object has no attribute '_attr_icon'` |
 | 0.8.1 sensor fix (`e025cf4`) | Hot-patched first, then installed cleanly through the Marketplace after the push; all nine sensors are available and there are no `Error adding entity` lines |
 | 0.8.1 clean `e025cf4` build | `update.climaterouter` = `off`, `installed_version` = `e025cf4`; eleven `sensor.*` entities available; `active_target` = `ac` (`mdi:air-conditioner`), `pending_target` = `none` (`mdi:hvac-off`) |
+| 0.8.2 install (`aeab87d`) | `update.climaterouter` = `off` with `installed_version` = `latest_version` = `aeab87d`; the config entry is loaded and the ClimateRouter entities are available |
+| 0.8.2 entity state | `active_target` = `ac`, `pending_target` = `none`, `outdoor_sensor_stale` = `off`, route reason `hysteresis`, `conflict_count` = 0 |
 
 The owner reports live verification through version **0.8.0** for M4 manual mode, M5 conflicts, M6 boost, the native
-lock, the 0.8.0 proxy rework, and the read-only VTherm display pass-through. Version **0.8.1** is now installed as
-the clean `e025cf4` build and checked live as described above.
+lock, the 0.8.0 proxy rework, and the read-only VTherm display pass-through. Version **0.8.2** is installed as the
+clean `aeab87d` build and checked live: the update entity reports `installed_version` = `latest_version` =
+`aeab87d`, all ClimateRouter entities load, and the route/conflict sensors report the expected state.
 
-The remaining 0.8.1 checks are the interactive ones that need the UI: saving the config/options sections, the field
+The remaining checks are the interactive ones that need the UI: saving the config/options sections, the field
 descriptions, and a real handover to confirm `last_handover` persistence.
 
 Automated coverage now includes natural manual/boost expiry callbacks, conflict `reassert`/`adopt`/auto-resolve,
 both-targets-on startup conflicts, auto-relock persistence, the remaining services, diagnostics and config-flow
-validation. The remaining gaps are watchdog-driven expiry, unasserted `inactive_target_on` and `vt_display.py`. See
+validation. The remaining gaps are unasserted `inactive_target_on`, boost expiry during a handover and `vt_display.py`. See
 section 8.2 for the full list.
 
 ---
@@ -590,7 +593,7 @@ section 8.2 for the full list.
    Intermediate releases are expected to work but are not individually tested.
 2. **Automated coverage is still partial (86 %, gate 75 %).** High-risk handover, persistence, manual start/return,
    expiry, boost start/cancel, conflict policies, lock, services, diagnostics and entity behaviour are covered. See
-   section 8.2 for the remaining medium/low gaps; `coordinator.py` (79 %) and `vt_display.py` (0 % due to the dual
+   section 8.2 for the remaining medium/low gaps; `coordinator.py` (80 %) and `vt_display.py` (0 % due to the dual
    import path) are the largest untested areas.
 3. **Manual mode is live-verified through 0.8.0 and well covered.** Start/return, `off`, conflicting-argument
    rejection, deadline persistence and the expiry callback are automated. Watchdog-driven expiry, handover carry-over
@@ -632,10 +635,10 @@ section 8.2 for the full list.
 
 ### 8.1 Immediate
 
-1. Owner: push the local commits. The test instance runs the clean `e025cf4` build. The HA 2025.1.4 compatibility
-   commits are no-ops on 2026.11, so reinstalling is optional; if the new build (version **0.8.2**) is installed,
-   confirm that all entities still load. Do not re-add the old `custom_components/climaterouter` bind mount: it makes
-   the folder a mount point (`EBUSY`) and the Marketplace cannot back it up before replacing it.
+1. Owner: push the local commits. The test instance runs the clean `aeab87d` build (0.8.2). If the new build
+   (version **0.8.3**) is installed, confirm that all entities still load and repeat the expiry/conflict checks.
+   Do not re-add the old `custom_components/climaterouter` bind mount: it makes the folder a mount point (`EBUSY`)
+   and the Marketplace cannot back it up before replacing it.
 2. Open **Configure** once after the update and save any section. The schema-only save drops the removed
    manual-switch key from `entry.data`. Confirm the collapsed sections render correctly, that the brief
    explanations appear under the fields, that the options menu returns after each section save, and that **Finish**
@@ -663,8 +666,8 @@ Status as of 2026-11-09:
 | `ruff check .` | clean |
 | `ruff format --check .` | clean |
 | Pure unit tests (no HA) | 56 passed |
-| Integration tests (HA harness) | 61 passed |
-| Full suite (HA harness) | 117 passed |
+| Integration tests (HA harness) | 62 passed |
+| Full suite (HA harness) | 118 passed |
 | CI installs `requirements_test.txt` | yes (intentionally unpinned) |
 | GitHub CI run confirmed | green through `aeab87d`; the later test/doc commits await the owner's push |
 | Measured statement coverage | **86 %** (gate 75 %) |
@@ -701,12 +704,14 @@ Status as of 2026-11-09:
 - [x] config-flow validation: wrong entity domain, manual order, lock code, tolerance/duration ranges, duplicate
       reconfigure and options-section error handling (`44e73a4`).
 - [x] conflict detection/clear events and resolved history.
+- [x] watchdog-driven manual/boost expiry; the watchdog now cancels the pending expiry handles instead of leaving
+      them scheduled (`02e1bcd`).
 
 #### Missing
 
 Medium priority:
 
-- [ ] watchdog-driven manual/boost expiry and boost expiry during a pending handover;
+- [ ] boost expiry during a pending handover;
 - [ ] `inactive_target_on` detection assertion;
 - [ ] reconfigure with an unknown entry id and the remaining options-section save paths.
 
@@ -730,7 +735,7 @@ Low priority:
 | `__init__.py`, `climate.py`, `lock.py` | 94 % |
 | `services.py` | 92 % |
 | `config_flow.py` | 96 % |
-| `coordinator.py` | 79 % |
+| `coordinator.py` | 80 % |
 | `vt_display.py` | 0 % (see note above) |
 | **Total** | **86 %** |
 
