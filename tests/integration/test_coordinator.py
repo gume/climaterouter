@@ -1139,3 +1139,41 @@ async def test_auto_relock_deadline_expires_on_startup(hass, monkeypatch) -> Non
     reloaded = entry.runtime_data
     assert reloaded.data.locked is True
     assert reloaded._auto_relock_at is None
+
+
+async def test_lock_b_blocks_automation_commands(hass) -> None:
+    """With ``manual_blocks_schedule`` on, only user commands may change manual mode."""
+    from homeassistant.core import Context
+
+    _entry, coordinator = await _setup(hass, outdoor=5.0, manual_blocks_schedule=True)
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+    await coordinator.async_enter_manual_mode(temperature=23, context=USER)
+
+    with pytest.raises(HomeAssistantError):
+        await coordinator.async_set_temperature(temperature=22, context=Context())
+    with pytest.raises(HomeAssistantError):
+        await coordinator.async_enter_manual_mode(temperature=24, context=Context())
+
+    await coordinator.async_set_temperature(temperature=22, context=USER)
+    assert coordinator.data.manual_mode is not None
+    assert coordinator.data.manual_mode.desired.target_temperature == 22
+
+
+async def test_manual_mode_carries_over_handover(hass) -> None:
+    """A manual setpoint survives the handover to the other target."""
+    _entry, coordinator = await _setup_with_active_radiator(hass)
+    await coordinator.async_set_temperature(temperature=23, context=USER)
+
+    hass.states.async_set(OUTDOOR, "15.0", {"unit_of_measurement": "°C"})
+    await coordinator.async_recalculate()
+    await _set_radiator(hass, HVAC_HEAT, hvac_action="idle")
+    await coordinator.async_recalculate()
+    await coordinator.async_recalculate()
+    await _set_radiator(hass, STATE_OFF)
+    await coordinator.async_recalculate()
+    await hass.async_block_till_done()
+
+    assert coordinator.data.active_targets == frozenset({Target.AC})
+    assert coordinator.data.manual_mode is not None
+    assert coordinator.data.manual_mode.desired.target_temperature == 23
+    assert coordinator.data.desired.target_temperature == 23
