@@ -588,9 +588,9 @@ section 8.2 for the full list.
    the correct `async_extract_entity_ids` signature, and `climate.py` exposes the legacy temperature properties when
    the base class lacks the `native_*` ones. The suite passes on a 2025.1.4 harness; CI tracks the newest harness.
    Intermediate releases are expected to work but are not individually tested.
-2. **Automated coverage is still partial (85 %, gate 75 %).** High-risk handover, persistence, manual start/return,
+2. **Automated coverage is still partial (86 %, gate 75 %).** High-risk handover, persistence, manual start/return,
    expiry, boost start/cancel, conflict policies, lock, services, diagnostics and entity behaviour are covered. See
-   section 8.2 for the remaining medium/low gaps; `coordinator.py` (78 %) and `vt_display.py` (0 % due to the dual
+   section 8.2 for the remaining medium/low gaps; `coordinator.py` (79 %) and `vt_display.py` (0 % due to the dual
    import path) are the largest untested areas.
 3. **Manual mode is live-verified through 0.8.0 and well covered.** Start/return, `off`, conflicting-argument
    rejection, deadline persistence and the expiry callback are automated. Watchdog-driven expiry, handover carry-over
@@ -598,7 +598,7 @@ section 8.2 for the full list.
    started while the proxy has no mode/active target updates the baseline but does not by itself start heating; start
    the proxy (`heat`/`cool`) first.
 4. **M5 is live-verified through 0.8.0 and well covered.** Monitor, `reassert`, `adopt`, `both_targets_on`, startup
-   conflicts, context suppression and settle windows are automated. `inactive_target_on`, history/clear and the
+   conflicts, context suppression, settle windows and history/clear are automated. `inactive_target_on` and the
    reassert grace across a reload are still only partially asserted. Detection deliberately pauses during
    handover and during the post-command settle window, so very short mismatches may never be reported.
    `_guess_source()` is heuristic.
@@ -663,11 +663,11 @@ Status as of 2026-11-09:
 | `ruff check .` | clean |
 | `ruff format --check .` | clean |
 | Pure unit tests (no HA) | 56 passed |
-| Integration tests (HA harness) | 60 passed |
-| Full suite (HA harness) | 116 passed |
+| Integration tests (HA harness) | 61 passed |
+| Full suite (HA harness) | 117 passed |
 | CI installs `requirements_test.txt` | yes (intentionally unpinned) |
-| GitHub CI run confirmed | green through `aeab87d`; `58f0ba5`, `1b1c818` and `44e73a4` await the owner's push |
-| Measured statement coverage | **85 %** (gate 75 %) |
+| GitHub CI run confirmed | green through `aeab87d`; the later test/doc commits await the owner's push |
+| Measured statement coverage | **86 %** (gate 75 %) |
 
 `pytest-homeassistant-custom-component` is wired into `tests/conftest.py`, and the integration suite lives in
 `tests/integration/`. Without the harness, pytest runs the pure tests and skips the integration directory.
@@ -700,13 +700,14 @@ Status as of 2026-11-09:
 - [x] diagnostics serialization and lock-code redaction (`1b1c818`).
 - [x] config-flow validation: wrong entity domain, manual order, lock code, tolerance/duration ranges, duplicate
       reconfigure and options-section error handling (`44e73a4`).
+- [x] conflict detection/clear events and resolved history.
 
 #### Missing
 
 Medium priority:
 
 - [ ] watchdog-driven manual/boost expiry and boost expiry during a pending handover;
-- [ ] `inactive_target_on` and conflict history/clear assertions;
+- [ ] `inactive_target_on` detection assertion;
 - [ ] reconfigure with an unknown entry id and the remaining options-section save paths.
 
 Low priority:
@@ -729,9 +730,9 @@ Low priority:
 | `__init__.py`, `climate.py`, `lock.py` | 94 % |
 | `services.py` | 92 % |
 | `config_flow.py` | 96 % |
-| `coordinator.py` | 78 % |
+| `coordinator.py` | 79 % |
 | `vt_display.py` | 0 % (see note above) |
-| **Total** | **85 %** |
+| **Total** | **86 %** |
 
 The local PyPI snapshot only offers `pytest-homeassistant-custom-component` 0.13.205 (HA 2025.1.4), not 2026.11.
 CI installs the newest release. Production code supports both versions; no test-only shims remain.
@@ -768,8 +769,9 @@ Run the suite with the HA venv:
 - [x] Fire `climaterouter_conflict_detected` / `climaterouter_conflict_cleared`; make `clear_conflicts` real.
 - [x] Handle both-targets-on, unavailable targets, stale outdoor sensor and target mismatch.
 - [x] Unit tests for the pure classifier (`target_conflict`) and `Conflict.to_dict()`.
-- [x] Integration tests for the `monitor` setpoint-mismatch path.
-- [ ] Integration tests for `reassert`/`adopt`, auto-resolve switches, both-targets-on and `inactive_target_on`.
+- [x] Integration tests for the `monitor` and `reassert`/`adopt` paths, auto-resolve switches and
+      both-targets-on.
+- [ ] Integration test for `inactive_target_on` detection.
 - [x] Live verification in the 2026.11 test instance (through 0.8.0).
 
 ### 8.5 M6 — boost and release (implemented in this checkout)
