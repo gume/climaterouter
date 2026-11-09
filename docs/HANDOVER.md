@@ -99,10 +99,14 @@
 | `d2ced17` | `test: cover Lock B rejection and manual carry-over across handover` |
 | `563ead4` | `feat: add brand icon and detailed conflict/timer sensors` |
 | `23290d2` | `feat: explain off-target setpoints in the mismatch detail` |
+| `ee0a878` | `docs: point the 0.8.4 handover at the final commit` |
+| `1972d1e` | `ci: clarify the local brand asset location` |
 
-Everything through `aeab87d` is pushed to `origin/main`. The test instance runs a clean Marketplace install of
-`aeab87d` (version **0.8.2**) and was verified live. The later test fixes, the 0.8.3 version bump, and the 0.8.4
-brand/sensor batch are local only. The assistant has no GitHub credentials; the owner pushes.
+Everything through `1972d1e` is on `origin/main`. The test instance runs the Marketplace release **v0.8.3**
+(tag `v0.8.3`, commit `723c5c0`): `update.climaterouter` reports `installed_version` = `latest_version` = `v0.8.3`
+and points at `https://github.com/gume/climaterouter/releases/tag/v0.8.3`. The 0.8.4 commits are on `main`, but no
+`v0.8.4` tag/release exists yet, so the Marketplace does not offer them. The assistant has no GitHub credentials;
+the owner pushes and creates releases.
 
 ---
 
@@ -111,8 +115,8 @@ brand/sensor batch are local only. The assistant has no GitHub credentials; the 
 Milestones M1–M6 from [`PLAN.md`](PLAN.md) are implemented. The owner reports live verification through version
 **0.8.0**. **0.8.1** was first installed as `d3af8b4`, which exposed a regression: nine sensors failed to add because
 `RouterSensor.icon` returned an uninitialized `_attr_icon`. Fixed in `e025cf4`; **0.8.2** (`aeab87d`) added the HA
-2025.1.4 compatibility and hassfest schema fixes. The test instance runs a clean Marketplace install of `aeab87d`;
-all eleven sensors are available and the target icons are correct.
+2025.1.4 compatibility and hassfest schema fixes. The test instance currently runs the Marketplace release
+**v0.8.3** (`723c5c0`); all eleven sensors are available and the target icons are correct.
 
 | Milestone | State | Notes |
 |---|---|---|
@@ -138,9 +142,10 @@ sensor, consistent config storage (schema-only `entry.data`, empty `entry.option
 the plan/handover alignment. The icon property initially broke the other sensors; `e025cf4` initializes the shared
 icon attribute and restores them.
 
-Version **0.8.4** (local, through `23290d2`) adds the local brand assets, keeps the manual-timer select available
-with an `off` state and crossed-out timer icon when unused, keeps the current mode when manual mode expires without
-a schedule baseline, and adds text sensors that explain active conflicts and radiator/AC target mismatches.
+Version **0.8.4** (on `main` through `1972d1e`) adds the local brand assets, keeps the manual-timer select
+available with an `off` state and crossed-out timer icon when unused, keeps the current mode when manual mode
+expires without a schedule baseline, and adds text sensors that explain active conflicts and radiator/AC target
+mismatches.
 
 The next developer should start with section 8 (Next steps).
 
@@ -487,14 +492,14 @@ Defined in `test_environment/`; full instructions in [`TEST_ENVIRONMENT.md`](TES
   The mount has been removed and ClimateRouter is now a Marketplace-managed custom repository
   (`gume/climaterouter`, repository id `1448098130`). The container runs on this host and mounts
   `test_environment/config` as `/config`; that directory is git-ignored runtime state.
-- The Marketplace installs from the default branch (`main`) and identifies the version by the **short commit
-  hash**, not by a tag or release. The test instance currently runs the clean `aeab87d` build of version **0.8.2**;
-  earlier live tests covered `e025cf4` (version **0.8.1**) and `fd009ea` (version **0.8.0**).
-- Installed custom repositories refresh their commit metadata at Home Assistant startup and then every **48 hours**
-  (`marketplace/base.py`, `timedelta(hours=48)`). A push made after the last startup is therefore not visible until
-  Home Assistant restarts, the repository is refreshed from the Marketplace, or 48 hours pass. The assistant
-  restarted the container on 2026-11-07 and `last_commit` moved from `fd009ea` to `d3af8b4`, so the update is now
-  offered. No tag or release is required.
+- The Marketplace can identify a custom repository by release/tag as well as by commit. The live update entity
+  currently reports `installed_version` = `latest_version` = **v0.8.3** and a `release_url` for tag `v0.8.3`
+  (`723c5c0`), so the Marketplace is following the published release. Earlier live tests covered `aeab87d`
+  (version **0.8.2**, commit-based), `e025cf4` (version **0.8.1**) and `fd009ea` (version **0.8.0**). No `v0.8.4`
+  release exists yet, so the 0.8.4 commits on `main` are not offered.
+- Installed custom repositories refresh their metadata at Home Assistant startup and then every **48 hours**
+  (`marketplace/base.py`, `timedelta(hours=48)`). A push or release made after the last startup is therefore not
+  visible until Home Assistant restarts, the repository is refreshed from the Marketplace, or 48 hours pass.
 - The owner tests remotely with a long-lived Home Assistant token; the component itself is not bind-mounted.
 - Live-entering v0.4.0 exposed a real service bug: HA 2026.11 changed `async_extract_entity_ids()` to take only the
   `ServiceCall`. The previous `(hass, call)` call made every `climaterouter.*` service fail with
@@ -601,11 +606,15 @@ ACs; later versions use the two VTherm entities described in section 4.
 | 0.8.1 clean `e025cf4` build | `update.climaterouter` = `off`, `installed_version` = `e025cf4`; eleven `sensor.*` entities available; `active_target` = `ac` (`mdi:air-conditioner`), `pending_target` = `none` (`mdi:hvac-off`) |
 | 0.8.2 install (`aeab87d`) | `update.climaterouter` = `off` with `installed_version` = `latest_version` = `aeab87d`; the config entry is loaded and the ClimateRouter entities are available |
 | 0.8.2 entity state | `active_target` = `ac`, `pending_target` = `none`, `outdoor_sensor_stale` = `off`, route reason `hysteresis`, `conflict_count` = 0 |
+| 0.8.3 install (`v0.8.3`) | `update.climaterouter` = `off` with `installed_version` = `latest_version` = `v0.8.3`, `release_url` = tag `v0.8.3`; all ClimateRouter entities load |
+| 0.8.3 live state (2026-11-09) | `active_target` = `ac`, `pending_target` = `none`, `route_reason` = `fallback_outdoor`, `outdoor_sensor_stale` = `on`, `target_mismatch` = `on` (radiator off at 23.0/none vs AC heat at 20.5/comfort), `conflict` = `off`, manual timer select `unavailable` (the 0.8.4 `off` badge is not installed) |
+| 0.8.4 not offered | No `v0.8.4` tag/release exists; the Marketplace reports 0.8.3 as the latest version even though the 0.8.4 commits are on `main` |
 
 The owner reports live verification through version **0.8.0** for M4 manual mode, M5 conflicts, M6 boost, the native
-lock, the 0.8.0 proxy rework, and the read-only VTherm display pass-through. Version **0.8.2** is installed as the
-clean `aeab87d` build and checked live: the update entity reports `installed_version` = `latest_version` =
-`aeab87d`, all ClimateRouter entities load, and the route/conflict sensors report the expected state.
+lock, the 0.8.0 proxy rework, and the read-only VTherm display pass-through. The live instance currently runs the
+Marketplace release **v0.8.3** (`723c5c0`): the update entity reports `installed_version` = `latest_version` =
+`v0.8.3`, all ClimateRouter entities load, and the route/conflict sensors report the expected state. The 0.8.4
+brand/sensor batch is on `main` but is not installed because no release/tag exists.
 
 The remaining checks are the interactive ones that need the UI: saving the config/options sections, the field
 descriptions, and a real handover to confirm `last_handover` persistence.
@@ -670,10 +679,12 @@ section 8.2 for the full list.
 
 ### 8.1 Immediate
 
-1. Owner: push the local commits. The test instance runs the clean `aeab87d` build (0.8.2). If the new build
-   (version **0.8.4**, through `23290d2`) is installed, confirm that the brand icon appears, all entities still
-   load, and repeat the expiry/conflict checks. Do not re-add the old `custom_components/climaterouter` bind mount:
-   it makes the folder a mount point (`EBUSY`) and the Marketplace cannot back it up before replacing it.
+1. Owner: create a `v0.8.4` tag/release on `1972d1e` (or on the then-current `main`). The test instance runs the
+   Marketplace release **v0.8.3** and correctly reports no update because no 0.8.4 release exists. After the release,
+   refresh the Marketplace or restart Home Assistant, install the update, and confirm the brand icon, all entities,
+   the timer `off` badge, and the conflict/mismatch detail sensors. Do not re-add the old
+   `custom_components/climaterouter` bind mount: it makes the folder a mount point (`EBUSY`) and the Marketplace
+   cannot back it up before replacing it.
 2. Open **Configure** once after the update and save any section. The schema-only save drops the removed
    manual-switch key from `entry.data`. Confirm the collapsed sections render correctly, that the brief
    explanations appear under the fields, that the options menu returns after each section save, and that **Finish**
@@ -706,7 +717,7 @@ Status as of 2026-11-09:
 | `mypy custom_components/climaterouter` | clean |
 | CI installs `requirements_test.txt` | yes (intentionally unpinned, includes `mypy`) |
 | CI matrix | full HA suite on Python 3.13; pure unit tests on Python 3.12 and 3.13 |
-| GitHub CI run confirmed | green through `aeab87d`; the later commits await the owner's push |
+| GitHub CI run confirmed | green through `aeab87d`; the 0.8.3/0.8.4 runs are not recorded in this handover |
 | Measured statement coverage | **92 %** (91.8 %, gate 75 %) |
 
 `pytest-homeassistant-custom-component` is wired into `tests/conftest.py`, and the integration suite lives in
