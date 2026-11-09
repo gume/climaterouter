@@ -25,5 +25,6 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
-          # The integration has no brand assets in home-assistant/brands yet.
+          # Local brand assets live in custom_components/climaterouter/brand/;
+          # the HACS check looks for assets in home-assistant/brands.
           ignore: brands
