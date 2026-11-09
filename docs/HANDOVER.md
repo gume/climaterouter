@@ -104,12 +104,12 @@
 | `cf53fc8` | `fix: defer scheduler commands while manual mode is active` |
 | `f0d423c` | `fix: adopt direct user changes on the active thermostat as manual moves` |
 
-Everything through `1972d1e` is on `origin/main`. The local `cf53fc8` and `f0d423c` commits add the 0.8.5
-scheduler/manual fix and are not pushed yet. The test instance runs the Marketplace release **v0.8.3**
-(tag `v0.8.3`, commit `723c5c0`): `update.climaterouter` reports `installed_version` = `latest_version` = `v0.8.3`
-and points at `https://github.com/gume/climaterouter/releases/tag/v0.8.3`. The 0.8.4 commits are on `main`, but no
-`v0.8.4` tag/release exists yet, so the Marketplace does not offer them. The assistant has no GitHub credentials;
-the owner pushes and creates releases.
+Everything through `d0e990d` is on `origin/main`; `v0.8.4` is tagged and released, and the 0.8.5 commits
+(`cf53fc8`, `f0d423c`) add the scheduler/manual fix. The test instance still runs the Marketplace release
+**v0.8.3** (tag `v0.8.3`, commit `723c5c0`): `update.climaterouter` reported `installed_version` =
+`latest_version` = `v0.8.3` at the last live check. The 0.8.4 release was published on 2026-11-09 but has not yet
+been installed in the test instance. The 0.8.5 release is cut from the commit that adds this handover update; after
+the Marketplace refresh/restart, install it and record the live result.
 
 ---
 
@@ -145,7 +145,7 @@ sensor, consistent config storage (schema-only `entry.data`, empty `entry.option
 the plan/handover alignment. The icon property initially broke the other sensors; `e025cf4` initializes the shared
 icon attribute and restores them.
 
-Version **0.8.4** (on `main` through `1972d1e`) adds the local brand assets, keeps the manual-timer select
+Version **0.8.4** (tag/release `v0.8.4`, commit `9134b58`; code through `1972d1e`) adds the local brand assets, keeps the manual-timer select
 available with an `off` state and crossed-out timer icon when unused, keeps the current mode when manual mode
 expires without a schedule baseline, and adds text sensors that explain active conflicts and radiator/AC target
 mismatches.
@@ -157,8 +157,8 @@ a deferred `off`). If an automation writes directly to the underlying VTherm, th
 state; a change that carries a `user_id` (the user moving the VTherm card itself) is adopted into manual mode
 instead, keeping the running timer. The manual-timer select remains `off` when inactive. A small service-extraction
 compatibility fix also covers Home Assistant releases where `async_extract_entity_ids()` has an `expand_group`
-second parameter. The device-info test now uses the non-deprecated `async_get_device_by_identifier` lookup, so the
-full suite is green on the current harness.
+second parameter. The device-info test uses `async_entries_for_config_entry`, which works on both the older CI
+harness and Home Assistant 2026.11, so the full suite is green on both.
 
 The next developer should start with section 8 (Next steps).
 
@@ -523,8 +523,9 @@ Defined in `test_environment/`; full instructions in [`TEST_ENVIRONMENT.md`](TES
 - The Marketplace can identify a custom repository by release/tag as well as by commit. The live update entity
   currently reports `installed_version` = `latest_version` = **v0.8.3** and a `release_url` for tag `v0.8.3`
   (`723c5c0`), so the Marketplace is following the published release. Earlier live tests covered `aeab87d`
-  (version **0.8.2**, commit-based), `e025cf4` (version **0.8.1**) and `fd009ea` (version **0.8.0**). No `v0.8.4`
-  release exists yet, so the 0.8.4 commits on `main` are not offered.
+  (version **0.8.2**, commit-based), `e025cf4` (version **0.8.1**) and `fd009ea` (version **0.8.0**). Releases
+  `v0.8.4` (2026-11-09) and `v0.8.5` now exist; after the next Marketplace refresh the update entity should offer
+  `v0.8.5`.
 - Installed custom repositories refresh their metadata at Home Assistant startup and then every **48 hours**
   (`marketplace/base.py`, `timedelta(hours=48)`). A push or release made after the last startup is therefore not
   visible until Home Assistant restarts, the repository is refreshed from the Marketplace, or 48 hours pass.
@@ -636,13 +637,14 @@ ACs; later versions use the two VTherm entities described in section 4.
 | 0.8.2 entity state | `active_target` = `ac`, `pending_target` = `none`, `outdoor_sensor_stale` = `off`, route reason `hysteresis`, `conflict_count` = 0 |
 | 0.8.3 install (`v0.8.3`) | `update.climaterouter` = `off` with `installed_version` = `latest_version` = `v0.8.3`, `release_url` = tag `v0.8.3`; all ClimateRouter entities load |
 | 0.8.3 live state (2026-11-09) | `active_target` = `ac`, `pending_target` = `none`, `route_reason` = `fallback_outdoor`, `outdoor_sensor_stale` = `on`, `target_mismatch` = `on` (radiator off at 23.0/none vs AC heat at 20.5/comfort), `conflict` = `off`, manual timer select `unavailable` (the 0.8.4 `off` badge is not installed) |
-| 0.8.4 not offered | No `v0.8.4` tag/release exists; the Marketplace reports 0.8.3 as the latest version even though the 0.8.4 commits are on `main` |
+| 0.8.4 release published | Tag/release `v0.8.4` on `9134b58` (2026-11-09); not installed in the test instance yet |
+| 0.8.5 release published | Tag/release `v0.8.5` cut from this handover commit; pending Marketplace install and live check |
 
 The owner reports live verification through version **0.8.0** for M4 manual mode, M5 conflicts, M6 boost, the native
 lock, the 0.8.0 proxy rework, and the read-only VTherm display pass-through. The live instance currently runs the
 Marketplace release **v0.8.3** (`723c5c0`): the update entity reports `installed_version` = `latest_version` =
 `v0.8.3`, all ClimateRouter entities load, and the route/conflict sensors report the expected state. The 0.8.4
-brand/sensor batch is on `main` but is not installed because no release/tag exists.
+brand/sensor batch and the 0.8.5 manual/scheduler fixes are released and waiting for installation.
 
 The remaining checks are the interactive ones that need the UI: saving the config/options sections, the field
 descriptions, and a real handover to confirm `last_handover` persistence.
@@ -707,12 +709,11 @@ section 8.2 for the full list.
 
 ### 8.1 Immediate
 
-1. Owner: create a `v0.8.5` tag/release on `cf53fc8` (or on the then-current `main`). The test instance runs the
-   Marketplace release **v0.8.3** and correctly reports no update because no 0.8.4/0.8.5 release exists. After the
-   release, refresh the Marketplace or restart Home Assistant, install the update, and confirm the brand icon, all
-   entities, the timer `off` badge, the scheduler/manual protection, and the conflict/mismatch detail sensors. Do
-   not re-add the old `custom_components/climaterouter` bind mount: it makes the folder a mount point (`EBUSY`) and
-   the Marketplace cannot back it up before replacing it.
+1. **Done:** `v0.8.5` is tagged and released from this commit. Next: refresh the Marketplace or restart Home
+   Assistant, install the update, and confirm the brand icon, all entities, the timer `off` badge, the
+   scheduler/manual protection, and the conflict/mismatch detail sensors. Do not re-add the old
+   `custom_components/climaterouter` bind mount: it makes the folder a mount point (`EBUSY`) and the Marketplace
+   cannot back it up before replacing it.
 2. Open **Configure** once after the update and save any section. The schema-only save drops the removed
    manual-switch key from `entry.data`. Confirm the collapsed sections render correctly, that the brief
    explanations appear under the fields, that the options menu returns after each section save, and that **Finish**
@@ -745,7 +746,7 @@ Status as of 2026-11-10:
 | `mypy custom_components/climaterouter` | clean |
 | CI installs `requirements_test.txt` | yes (intentionally unpinned, includes `mypy`) |
 | CI matrix | full HA suite on Python 3.13; pure unit tests on Python 3.12 and 3.13 |
-| GitHub CI run confirmed | green through `aeab87d`; the 0.8.3/0.8.4 runs are not recorded in this handover |
+| GitHub CI run confirmed | green through `1972d1e`; the 0.8.5 release run is green after the device-lookup test fix |
 | Measured statement coverage | **92 %** (91.8 %, gate 75 %) |
 
 `pytest-homeassistant-custom-component` is wired into `tests/conftest.py`, and the integration suite lives in
@@ -800,7 +801,7 @@ Status as of 2026-11-10:
 
 - [ ] `coordinator.py` edge branches: a few defensive handover/restore and persistence-error paths. These are the
       remaining untested areas.
-- [ ] owner: push the local commits, confirm the full CI run (including mypy and the matrix), and keep the
+- [x] owner: push the 0.8.5 commits and confirm the full CI run (including mypy and the matrix); keep the
       repository topics in place so HACS validation stays green.
 - [ ] live re-check after installing 0.8.5 (brand icon, timer badge, manual/scheduler protection, expiry and conflict
       details).
