@@ -74,8 +74,8 @@ _EXTRACT_TAKES_HASS = len(inspect.signature(async_extract_entity_ids).parameters
 async def _async_extract_entity_ids(call: ServiceCall) -> set[str]:
     """Call the version-appropriate ``async_extract_entity_ids`` signature."""
     if _EXTRACT_TAKES_HASS:
-        return await async_extract_entity_ids(call.hass, call)
-    return await async_extract_entity_ids(call)
+        return await async_extract_entity_ids(call.hass, call)  # type: ignore[arg-type]
+    return await async_extract_entity_ids(call)  # type: ignore[call-arg, arg-type]
 
 
 async def _async_coordinators(

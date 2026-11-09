@@ -263,7 +263,7 @@ class ManualMode:
             desired = baseline.copy()
             kind = data.get("kind")
             value = data.get("value")
-            if kind == "temperature":
+            if kind == "temperature" and value is not None:
                 desired.setpoint_kind = SetpointKind.TEMPERATURE
                 desired.target_temperature = float(value)
                 desired.preset_mode = None

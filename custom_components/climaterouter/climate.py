@@ -120,12 +120,11 @@ class RouterClimate(RouterEntity, ClimateEntity):
     @property
     def native_current_temperature(self) -> float | None:
         snapshot = self._snapshot
-        values = [
-            snapshot.targets[target].current_temperature
-            for target in snapshot.active_targets
-            if target in snapshot.targets
-            and snapshot.targets[target].current_temperature is not None
-        ]
+        values: list[float] = []
+        for target in snapshot.active_targets:
+            state = snapshot.targets.get(target)
+            if state is not None and state.current_temperature is not None:
+                values.append(state.current_temperature)
         if values:
             return round(sum(values) / len(values), 2)
         return self._active_state.current_temperature if self._active_state else None

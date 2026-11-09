@@ -28,7 +28,13 @@ from homeassistant.const import (
     STATE_UNKNOWN,
     UnitOfTemperature,
 )
-from homeassistant.core import Context, Event, HomeAssistant, callback
+from homeassistant.core import (
+    Context,
+    Event,
+    EventStateChangedData,
+    HomeAssistant,
+    callback,
+)
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.event import (
     async_call_later,
@@ -105,7 +111,9 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self.entry = entry
         self.config = config
 
-        self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY.format(entry_id=entry.entry_id))
+        self._store: Store[dict[str, Any]] = Store(
+            hass, STORAGE_VERSION, STORAGE_KEY.format(entry_id=entry.entry_id)
+        )
         self._lock = asyncio.Lock()
 
         self._states: dict[Target, UnderlyingState] = {
@@ -1630,7 +1638,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
     # Inputs and snapshot
     # ------------------------------------------------------------------
     @callback
-    def _handle_state_change(self, event: Event) -> None:
+    def _handle_state_change(self, event: Event[EventStateChangedData]) -> None:
         """Schedule evaluation, coalescing bursts of state changes."""
         self._refresh_inputs()
         self._remember_event_source(event)
@@ -1642,7 +1650,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._update_scheduled = True
         self.hass.async_create_task(self._async_run_scheduled_update())
 
-    def _remember_event_source(self, event: Event) -> None:
+    def _remember_event_source(self, event: Event[EventStateChangedData]) -> None:
         """Track who changed a target and suppress our own calls."""
         new_state = event.data.get("new_state")
         entity_id = event.data.get("entity_id")
@@ -1661,7 +1669,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         else:
             self._last_state_source[target] = self._source_from_event(event)
 
-    def _event_is_own(self, event: Event) -> bool:
+    def _event_is_own(self, event: Event[EventStateChangedData]) -> bool:
         context = getattr(event, "context", None)
         ids = [
             getattr(context, "id", None) if context is not None else None,
@@ -1674,7 +1682,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         return any(context_id and context_id in self._contexts for context_id in ids)
 
     @staticmethod
-    def _source_from_event(event: Event) -> str:
+    def _source_from_event(event: Event[EventStateChangedData]) -> str:
         context = getattr(event, "context", None)
         if context is None:
             return "unknown"
@@ -1834,7 +1842,8 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             presets = set(radiator.preset_modes) or set(ac.preset_modes)
         presets.add("none")
 
-        active_state = self._states.get(self._single_active()) if self._single_active() else None
+        active = self._single_active()
+        active_state = self._states.get(active) if active is not None else None
         if active_state is None:
             active_state = ac if ac.available else radiator
 

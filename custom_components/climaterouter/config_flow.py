@@ -137,15 +137,15 @@ def _defaults(current: Mapping[str, Any] | None = None) -> dict[str, Any]:
 
 
 def _number(minimum: float, maximum: float, step: float, unit: str | None = None) -> NumberSelector:
-    return NumberSelector(
-        NumberSelectorConfig(
-            min=minimum,
-            max=maximum,
-            step=step,
-            unit_of_measurement=unit,
-            mode=NumberSelectorMode.BOX,
-        )
+    config = NumberSelectorConfig(
+        min=minimum,
+        max=maximum,
+        step=step,
+        mode=NumberSelectorMode.BOX,
     )
+    if unit is not None:
+        config["unit_of_measurement"] = unit
+    return NumberSelector(config)
 
 
 def _basic_schema(defaults: Mapping[str, Any]) -> vol.Schema:
