@@ -574,9 +574,10 @@ the clean `e025cf4` build and checked live as described above.
 The remaining 0.8.1 checks are the interactive ones that need the UI: saving the config/options sections, the field
 descriptions, and a real handover to confirm `last_handover` persistence.
 
-Not yet covered by automated tests: natural manual/boost expiry, conflict `reassert`/`adopt`/auto-resolve,
-both-targets-on startup conflicts, auto-relock persistence, remaining config validation, diagnostics, and
-`vt_display.py`. See section 8.2 for the full list.
+Automated coverage now includes natural manual/boost expiry callbacks, conflict `reassert`/`adopt`/auto-resolve,
+both-targets-on startup conflicts, auto-relock persistence, the remaining services and diagnostics. The remaining
+gaps are watchdog-driven expiry, unasserted `inactive_target_on`, config validation and `vt_display.py`. See section
+8.2 for the full list.
 
 ---
 
@@ -587,24 +588,26 @@ both-targets-on startup conflicts, auto-relock persistence, remaining config val
    the correct `async_extract_entity_ids` signature, and `climate.py` exposes the legacy temperature properties when
    the base class lacks the `native_*` ones. The suite passes on a 2025.1.4 harness; CI tracks the newest harness.
    Intermediate releases are expected to work but are not individually tested.
-2. **Automated coverage is still partial (81 %, gate 75 %).** High-risk handover, persistence, manual start/return,
-   boost start/cancel, conflict monitoring, lock, services and entity behaviour are covered. See section 8.2 for the
-   remaining medium/low gaps; `coordinator.py` (74 %) and `diagnostics.py` (0 %) are the largest untested areas.
-3. **Manual mode is live-verified through 0.8.0 and partially covered.** Start/return, `off`, conflicting-argument
-   rejection and deadline persistence are automated. Natural timer expiry, handover carry-over and Lock B
-   (`manual_blocks_schedule`) automation rejection still need tests. A user temperature/preset move started while
-   the proxy has no mode/active target updates the baseline but does not by itself start heating; start the proxy
-   (`heat`/`cool`) first.
-4. **M5 is live-verified through 0.8.0 and partially covered.** Only the `monitor` setpoint-mismatch path is
-   automated. Policy behaviour (`reassert`, `adopt`, auto-resolve switches), context suppression, settle windows,
-   reassert grace and history/clear still live in the pure classifier tests. Detection deliberately pauses during
+2. **Automated coverage is still partial (85 %, gate 75 %).** High-risk handover, persistence, manual start/return,
+   expiry, boost start/cancel, conflict policies, lock, services, diagnostics and entity behaviour are covered. See
+   section 8.2 for the remaining medium/low gaps; `coordinator.py` (78 %) and `vt_display.py` (0 % due to the dual
+   import path) are the largest untested areas.
+3. **Manual mode is live-verified through 0.8.0 and well covered.** Start/return, `off`, conflicting-argument
+   rejection, deadline persistence and the expiry callback are automated. Watchdog-driven expiry, handover carry-over
+   and Lock B (`manual_blocks_schedule`) automation rejection still need tests. A user temperature/preset move
+   started while the proxy has no mode/active target updates the baseline but does not by itself start heating; start
+   the proxy (`heat`/`cool`) first.
+4. **M5 is live-verified through 0.8.0 and well covered.** Monitor, `reassert`, `adopt`, `both_targets_on`, startup
+   conflicts, context suppression and settle windows are automated. `inactive_target_on`, history/clear and the
+   reassert grace across a reload are still only partially asserted. Detection deliberately pauses during
    handover and during the post-command settle window, so very short mismatches may never be reported.
    `_guess_source()` is heuristic.
 5. **Boost is live-verified through 0.8.0 and partially covered.** Activation on both targets, cancel, the feature
-   flag, both-target routing and deadline persistence are automated; natural expiry and expiry during a pending
-   handover are not. It is feature-flagged and only supports `targets=both`. It requires heat mode, both targets
-   available and no pending handover. The return to single-target routing reuses the handover state machine, so the
-   dropped target is only stopped once idle; if it never becomes idle the normal off-confirm timeout applies.
+   flag, both-target routing, deadline persistence and the expiry callback are automated; expiry triggered through
+   the watchdog and during a pending handover are not. It is feature-flagged and only supports `targets=both`. It
+   requires heat mode, both targets available and no pending handover. The return to single-target routing reuses
+   the handover state machine, so the dropped target is only stopped once idle; if it never becomes idle the normal
+   off-confirm timeout applies.
 6. **`handover_max_wait` from the plan is not implemented.** `off_confirm_timeout` bounds the off confirmation, and
    the manual `force_handover` button/service can end a stuck handover. There is still no automatic timeout that
    interrupts an active old target.
@@ -660,11 +663,11 @@ Status as of 2026-11-09:
 | `ruff check .` | clean |
 | `ruff format --check .` | clean |
 | Pure unit tests (no HA) | 56 passed |
-| Integration tests (HA harness) | 37 passed |
-| Full suite (HA harness) | 93 passed |
+| Integration tests (HA harness) | 53 passed |
+| Full suite (HA harness) | 109 passed |
 | CI installs `requirements_test.txt` | yes (intentionally unpinned) |
-| GitHub CI run confirmed | first run failed on the event-capture race and hassfest key order; fixed in `724111f` and `c560616`, rerun pending |
-| Measured statement coverage | **81 %** (gate 75 %) |
+| GitHub CI run confirmed | green through `aeab87d`; `58f0ba5` and `1b1c818` await the owner's push |
+| Measured statement coverage | **85 %** (gate 75 %) |
 
 `pytest-homeassistant-custom-component` is wired into `tests/conftest.py`, and the integration suite lives in
 `tests/integration/`. Without the harness, pytest runs the pure tests and skips the integration directory.
@@ -690,26 +693,26 @@ Status as of 2026-11-09:
 - [x] runtime HA 2025.1.4 compatibility (no test-only shims): dual `async_extract_entity_ids` signature and legacy
       climate properties (`bd35514`, `8c81271`).
 - [x] CI coverage gate at 75 % (`57d68e2`); `requirements_test.txt` intentionally unpinned (`06841d0`).
+- [x] manual/boost expiry callbacks, auto-relock scheduling and deadline persistence (`58f0ba5`).
+- [x] conflict `reassert`/`adopt`, `both_targets_on` auto-resolve and startup conflicts (`58f0ba5`).
+- [x] remaining services: clear route override, manual-override alias/cancel, set/cancel boost, lock/unlock,
+      foreign-entity and missing-target rejection (`1b1c818`).
+- [x] diagnostics serialization and lock-code redaction (`1b1c818`).
 
 #### Missing
 
 Medium priority:
 
-- [ ] remaining services: clear route override, clear conflicts, force-handover service, `set_manual_override`
-      alias, cancel manual override, set/cancel boost, lock/unlock, target-resolution errors;
-- [ ] conflict policies `reassert`/`adopt`, `both_targets_on`, `inactive_target_on`, auto-resolve switches;
-- [ ] natural manual/boost expiry through the watchdog, boost expiry during a pending handover;
-- [ ] startup with both targets already on (`startup_conflict`) and auto-relock deadline persistence;
+- [ ] watchdog-driven manual/boost expiry and boost expiry during a pending handover;
+- [ ] `inactive_target_on` and conflict history/clear assertions;
 - [ ] config-flow validation: invalid entity domain, invalid lock code, manual order, tolerance/duration errors,
       unknown entry, duplicate reconfigure, remaining options sections.
 
 Low priority:
 
-- [ ] diagnostics (`diagnostics.py` is currently untested);
 - [ ] `vt_display.py` coverage is reported as 0 % due to the dual import path used by the pure and integration
       suites; confirm with a combined coverage run;
 - [ ] type checking and a Python version matrix in CI (the coverage gate is in place);
-- [ ] confirm the CI rerun after `c560616` passes;
 - [ ] owner: add repository topics so the HACS validation passes (for example
       `home-assistant`, `home-assistant-custom-component`, `hacs`, `integration`).
 
@@ -717,17 +720,17 @@ Low priority:
 
 | Module | Coverage |
 |---|---|
-| `const.py`, `entity.py`, `switch.py` | 100 % |
+| `const.py`, `entity.py`, `switch.py`, `diagnostics.py` | 100 % |
 | `router.py`, `sensor.py` | 98 % |
 | `button.py` | 97 % |
 | `select.py` | 96 % |
 | `binary_sensor.py`, `models.py` | 95 % |
 | `__init__.py`, `climate.py`, `lock.py` | 94 % |
+| `services.py` | 92 % |
 | `config_flow.py` | 90 % |
-| `services.py` | 75 % |
-| `coordinator.py` | 74 % |
-| `diagnostics.py`, `vt_display.py` | 0 % (see note above) |
-| **Total** | **81 %** |
+| `coordinator.py` | 78 % |
+| `vt_display.py` | 0 % (see note above) |
+| **Total** | **85 %** |
 
 The local PyPI snapshot only offers `pytest-homeassistant-custom-component` 0.13.205 (HA 2025.1.4), not 2026.11.
 CI installs the newest release. Production code supports both versions; no test-only shims remain.
