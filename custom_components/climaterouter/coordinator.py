@@ -584,6 +584,9 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
                 self._manual.until = (
                     self._manual_deadline(timer, now) if timer is not None else None
                 )
+                # Velair's pause was sized from the previous deadline, so align
+                # it with the new remaining manual time.
+                await self._async_velair_pause()
 
         self._manual.baseline = self._baseline.copy()
         self._last_command = now
@@ -699,6 +702,9 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             self._manual.until = self._manual_deadline(timer, now)
             self._manual.timer_minutes = timer
         self._schedule_manual_expiry()
+        # Re-size the Velair pause to the new remaining manual time (or make it
+        # open-ended again when the countdown was switched off).
+        await self._async_velair_pause()
         self._store.async_delay_save(self._data_to_save, 1)
         self.hass.bus.async_fire(
             EVENT_MANUAL_TIMER_CHANGED,
@@ -711,14 +717,25 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._publish()
 
     async def _async_velair_pause(self) -> None:
-        """Pause Velair's schedule while proxy-owned manual mode is active."""
+        """Pause Velair for the remaining manual-mode duration.
+
+        Velair counts the duration from the moment it receives the command, so
+        the remaining minutes are derived from the manual deadline every time
+        this is called (manual start, timer change, or a restored session).
+        Without a countdown the pause stays open-ended.
+        """
         if not self.config.velair_enabled:
             return
         if not self.hass.services.has_service("velair", "pause"):
             _LOGGER.debug("Velair is enabled but velair.pause is not registered")
             return
+        data: dict[str, Any] = {}
+        if self._manual is not None:
+            remaining = self._manual.remaining_minutes(dt_util.utcnow())
+            if remaining is not None:
+                data["duration_minutes"] = max(1, remaining)
         try:
-            await self.hass.services.async_call("velair", "pause", {}, blocking=True)
+            await self.hass.services.async_call("velair", "pause", data, blocking=True)
         except HomeAssistantError as err:
             _LOGGER.warning("Failed to pause Velair: %s", err)
 

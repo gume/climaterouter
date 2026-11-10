@@ -1494,6 +1494,7 @@ async def test_manual_mode_pauses_and_resumes_velair(hass) -> None:
     await hass.async_block_till_done()
 
     assert len(pause) == 1
+    assert pause[0].data == {"duration_minutes": 30}
     assert resume == []
     assert coordinator.climate_entity_id is not None
 
@@ -1507,6 +1508,43 @@ async def test_manual_mode_pauses_and_resumes_velair(hass) -> None:
 
     assert len(resume) == 1
     assert resume[-1].data == {"entity_id": coordinator.climate_entity_id}
+
+
+async def test_velair_pause_uses_the_remaining_manual_minutes(hass, monkeypatch) -> None:
+    """Velair is paused for the time left, not for the original duration."""
+    from custom_components.climaterouter import coordinator as coordinator_module
+
+    entry, coordinator = await _setup(hass, velair_enabled=True)
+    pause = async_mock_service(hass, "velair", "pause")
+    async_mock_service(hass, "velair", "resume_automatic_control")
+
+    await coordinator.async_enter_manual_mode(temperature=22, duration_minutes=45, context=USER)
+    await hass.async_block_till_done()
+    assert pause[-1].data == {"duration_minutes": 45}
+
+    # Advance the coordinator clock by eight minutes and reload so the manual
+    # session is restored from its absolute deadline with 37 minutes left.
+    base = coordinator_module.dt_util.utcnow()
+    monkeypatch.setattr(
+        coordinator_module.dt_util,
+        "utcnow",
+        lambda: base + timedelta(minutes=8),
+    )
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert pause[-1].data == {"duration_minutes": 37}
+
+    restored = entry.runtime_data
+    await restored.async_set_manual_timer(minutes=25, context=USER)
+    await hass.async_block_till_done()
+    assert pause[-1].data == {"duration_minutes": 25}
+
+    # Switching the countdown off leaves Velair paused without a deadline.
+    await restored.async_set_manual_timer(minutes=0, context=USER)
+    await hass.async_block_till_done()
+    assert pause[-1].data == {}
 
 
 async def test_velair_calls_are_opt_in(hass) -> None:
