@@ -12,13 +12,19 @@
               "name": "Name",
               "radiator_entity_id": "Radiator thermostat (over_switch)",
               "ac_entity_id": "AC thermostat (over_climate)",
-              "outdoor_sensor_entity_id": "Outdoor temperature sensor"
+              "outdoor_sensor_entity_id": "Outdoor temperature sensor",
+              "ac_idle_bypass_entity_id": "AC device thermostat (optional)",
+              "ac_idle_bypass_enabled": "Stop the AC device when the VTherm is idle",
+              "ac_idle_bypass_preset": "Idle setpoint preset"
             },
             "data_description": {
               "name": "Name shown on the device and its entities.",
               "radiator_entity_id": "Versatile Thermostat that controls the radiator.",
               "ac_entity_id": "Versatile Thermostat that controls the AC.",
-              "outdoor_sensor_entity_id": "Temperature sensor used to choose the route."
+              "outdoor_sensor_entity_id": "Temperature sensor used to choose the route.",
+              "ac_idle_bypass_entity_id": "Climate entity controlled by the AC VTherm. Leave empty to use the first underlying climate reported by the VTherm.",
+              "ac_idle_bypass_enabled": "In heat mode, when the AC VTherm reports idle, write the preset temperature directly to the device thermostat so it stops heating.",
+              "ac_idle_bypass_preset": "VTherm preset whose temperature is used for the idle setpoint. The VTherm is expected to restore its own setpoint when heating resumes."
             }
           },
           "routing": {
@@ -126,13 +132,19 @@
               "name": "Name",
               "radiator_entity_id": "Radiator thermostat (over_switch)",
               "ac_entity_id": "AC thermostat (over_climate)",
-              "outdoor_sensor_entity_id": "Outdoor temperature sensor"
+              "outdoor_sensor_entity_id": "Outdoor temperature sensor",
+              "ac_idle_bypass_entity_id": "AC device thermostat (optional)",
+              "ac_idle_bypass_enabled": "Stop the AC device when the VTherm is idle",
+              "ac_idle_bypass_preset": "Idle setpoint preset"
             },
             "data_description": {
               "name": "Name shown on the device and its entities.",
               "radiator_entity_id": "Versatile Thermostat that controls the radiator.",
               "ac_entity_id": "Versatile Thermostat that controls the AC.",
-              "outdoor_sensor_entity_id": "Temperature sensor used to choose the route."
+              "outdoor_sensor_entity_id": "Temperature sensor used to choose the route.",
+              "ac_idle_bypass_entity_id": "Climate entity controlled by the AC VTherm. Leave empty to use the first underlying climate reported by the VTherm.",
+              "ac_idle_bypass_enabled": "In heat mode, when the AC VTherm reports idle, write the preset temperature directly to the device thermostat so it stops heating.",
+              "ac_idle_bypass_preset": "VTherm preset whose temperature is used for the idle setpoint. The VTherm is expected to restore its own setpoint when heating resumes."
             }
           },
           "routing": {
@@ -269,13 +281,19 @@
           "name": "Name",
           "radiator_entity_id": "Radiator thermostat (over_switch)",
           "ac_entity_id": "AC thermostat (over_climate)",
-          "outdoor_sensor_entity_id": "Outdoor temperature sensor"
+          "outdoor_sensor_entity_id": "Outdoor temperature sensor",
+          "ac_idle_bypass_entity_id": "AC device thermostat (optional)",
+          "ac_idle_bypass_enabled": "Stop the AC device when the VTherm is idle",
+          "ac_idle_bypass_preset": "Idle setpoint preset"
         },
         "data_description": {
           "name": "Name shown on the device and its entities.",
           "radiator_entity_id": "Versatile Thermostat that controls the radiator.",
           "ac_entity_id": "Versatile Thermostat that controls the AC.",
-          "outdoor_sensor_entity_id": "Temperature sensor used to choose the route."
+          "outdoor_sensor_entity_id": "Temperature sensor used to choose the route.",
+          "ac_idle_bypass_entity_id": "Climate entity controlled by the AC VTherm. Leave empty to use the first underlying climate reported by the VTherm.",
+          "ac_idle_bypass_enabled": "In heat mode, when the AC VTherm reports idle, write the preset temperature directly to the device thermostat so it stops heating.",
+          "ac_idle_bypass_preset": "VTherm preset whose temperature is used for the idle setpoint. The VTherm is expected to restore its own setpoint when heating resumes."
         }
       },
       "routing": {

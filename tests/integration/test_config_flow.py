@@ -23,6 +23,9 @@ from custom_components.climaterouter.config_flow import (
 )
 from custom_components.climaterouter.const import (
     CONF_AC_ENTITY_ID,
+    CONF_AC_IDLE_BYPASS_ENABLED,
+    CONF_AC_IDLE_BYPASS_ENTITY_ID,
+    CONF_AC_IDLE_BYPASS_PRESET,
     CONF_AUTO_RELOCK_SEC,
     CONF_AUTO_RESOLVE_IDLE_TARGETS,
     CONF_AUTO_RESOLVE_SIMULTANEOUS,
@@ -529,3 +532,66 @@ async def test_options_manual_section_saves_velair_flag(hass) -> None:
 
     assert result["type"] is data_entry_flow.FlowResultType.MENU
     assert entry.data[CONF_VELAIR_ENABLED] is True
+
+
+async def test_options_basic_section_saves_ac_idle_bypass(hass) -> None:
+    """The basic section persists the AC idle bypass settings."""
+    _set_entities(hass)
+    hass.states.async_set("climate.device_ac", STATE_OFF)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Test Router",
+        data=_form_input()["basic"],
+        unique_id=f"{RADIATOR}|{AC}",
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": SECTION_BASIC}
+    )
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_AC_IDLE_BYPASS_ENABLED: True,
+            CONF_AC_IDLE_BYPASS_ENTITY_ID: "climate.device_ac",
+            CONF_AC_IDLE_BYPASS_PRESET: "eco",
+        },
+    )
+
+    assert result["type"] is data_entry_flow.FlowResultType.MENU
+    assert entry.data[CONF_AC_IDLE_BYPASS_ENABLED] is True
+    assert entry.data[CONF_AC_IDLE_BYPASS_ENTITY_ID] == "climate.device_ac"
+    assert entry.data[CONF_AC_IDLE_BYPASS_PRESET] == "eco"
+
+
+async def test_validate_input_rejects_unknown_idle_bypass_entity(hass) -> None:
+    """A configured device thermostat must exist and be a climate entity."""
+    _set_entities(hass)
+
+    errors = _validate_input(
+        hass,
+        {
+            CONF_RADIATOR_ENTITY_ID: RADIATOR,
+            CONF_AC_ENTITY_ID: AC,
+            CONF_OUTDOOR_SENSOR_ENTITY_ID: OUTDOOR,
+            CONF_AC_IDLE_BYPASS_ENTITY_ID: "climate.missing",
+        },
+    )
+    assert errors == {CONF_AC_IDLE_BYPASS_ENTITY_ID: "entity_not_found"}
+
+    hass.states.async_set("sensor.not_a_climate", STATE_OFF)
+    errors = _validate_input(
+        hass,
+        {
+            CONF_RADIATOR_ENTITY_ID: RADIATOR,
+            CONF_AC_ENTITY_ID: AC,
+            CONF_OUTDOOR_SENSOR_ENTITY_ID: OUTDOOR,
+            CONF_AC_IDLE_BYPASS_ENTITY_ID: "sensor.not_a_climate",
+        },
+    )
+    assert errors == {CONF_AC_IDLE_BYPASS_ENTITY_ID: "invalid_entity"}

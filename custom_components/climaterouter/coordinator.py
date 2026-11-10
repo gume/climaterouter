@@ -164,6 +164,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._conflict_reasserted: set[str] = set()
         self._suppress_conflicts_until: datetime | None = None
         self._last_state_source: dict[Target, str] = {}
+        self._idle_bypass_applied = False
 
         self.climate_entity_id: str | None = None
         self.lock_entity_id: str | None = None
@@ -1259,6 +1260,8 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             if not self._active_targets:
                 self._adopt_from_active()
 
+            await self._async_apply_ac_idle_bypass()
+
             if self._desired.is_empty:
                 # Never issue commands before the first user command. If an
                 # underlying thermostat came back on after a restart, adopt it.
@@ -1637,6 +1640,102 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         )
         self._handover_from = None
         self._handover_started_at = None
+
+    def _ac_idle_bypass_entity(self) -> str | None:
+        """Return the device climate below the AC VTherm."""
+        configured = self.config.ac_idle_bypass_entity_id
+        if configured:
+            return configured if configured != self.config.ac_entity_id else None
+
+        vtherm = self.hass.states.get(self.config.ac_entity_id)
+        if vtherm is None:
+            return None
+        details = vtherm.attributes.get("vtherm_over_climate")
+        if not isinstance(details, dict):
+            return None
+        entities = details.get("underlying_entities")
+        if not isinstance(entities, (list, tuple)):
+            return None
+        for entity_id in entities:
+            if isinstance(entity_id, str) and entity_id.startswith("climate."):
+                return entity_id if entity_id != self.config.ac_entity_id else None
+        return None
+
+    def _ac_idle_bypass_temperature(self) -> float | None:
+        """Return the configured VTherm preset temperature, if usable."""
+        vtherm = self.hass.states.get(self.config.ac_entity_id)
+        if vtherm is None:
+            return None
+        presets = vtherm.attributes.get("preset_temperatures")
+        if not isinstance(presets, dict):
+            return None
+        key = {
+            "frost": "frost_temp",
+            "eco": "eco_temp",
+            "comfort": "comfort_temp",
+        }.get(self.config.ac_idle_bypass_preset)
+        if key is None:
+            return None
+        temperature = _as_float(presets.get(key))
+        if temperature is None or temperature <= 0:
+            return None
+        return temperature
+
+    async def _async_apply_ac_idle_bypass(self) -> None:
+        """Stop the device thermostat while the AC VTherm reports idle heat.
+
+        The VTherm stays the source of truth. Only its underlying device
+        thermostat is written, and the VTherm is expected to restore the
+        normal setpoint when heating resumes.
+        """
+        ac_state = self._states[Target.AC]
+        idle_episode = (
+            self.config.ac_idle_bypass_enabled
+            and self._desired.hvac_mode == HVAC_HEAT
+            and Target.AC in self._active_targets
+            and ac_state.available
+            and ac_state.hvac_mode == HVAC_HEAT
+            and ac_state.hvac_action == "idle"
+            and not ac_state.guard
+            and not ac_state.timed_preset_active
+        )
+        if not idle_episode:
+            self._idle_bypass_applied = False
+            return
+        if self._idle_bypass_applied:
+            return
+
+        entity_id = self._ac_idle_bypass_entity()
+        temperature = self._ac_idle_bypass_temperature()
+        if entity_id is None or temperature is None:
+            _LOGGER.debug(
+                "Cannot apply the AC idle bypass: entity=%s temperature=%s",
+                entity_id,
+                temperature,
+            )
+            return
+
+        state = self.hass.states.get(entity_id)
+        if state is None or state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            return
+        current = _as_float(state.attributes.get(ATTR_TEMPERATURE))
+        tolerance = self.config.temperature_tolerance or DEFAULT_TEMPERATURE_TOLERANCE
+        if current is not None and abs(current - temperature) <= tolerance:
+            self._idle_bypass_applied = True
+            return
+
+        try:
+            await self.hass.services.async_call(
+                "climate",
+                "set_temperature",
+                {"entity_id": entity_id, "temperature": temperature},
+                blocking=True,
+                context=Context(),
+            )
+        except HomeAssistantError as err:
+            _LOGGER.warning("Failed to apply the AC idle bypass on %s: %s", entity_id, err)
+            return
+        self._idle_bypass_applied = True
 
     async def _async_forward_desired(self, target: Target) -> None:
         """Forward the latest desired state to the active target."""

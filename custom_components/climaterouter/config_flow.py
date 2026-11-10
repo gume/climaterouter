@@ -28,6 +28,9 @@ from homeassistant.helpers.selector import (
 
 from .const import (
     CONF_AC_ENTITY_ID,
+    CONF_AC_IDLE_BYPASS_ENABLED,
+    CONF_AC_IDLE_BYPASS_ENTITY_ID,
+    CONF_AC_IDLE_BYPASS_PRESET,
     CONF_AUTO_RELOCK_SEC,
     CONF_AUTO_RESOLVE_IDLE_TARGETS,
     CONF_AUTO_RESOLVE_SIMULTANEOUS,
@@ -57,6 +60,8 @@ from .const import (
     DOMAIN,
 )
 from .models import (
+    AC_IDLE_BYPASS_PRESETS,
+    DEFAULT_AC_IDLE_BYPASS_PRESET,
     DEFAULT_AUTO_RELOCK_SEC,
     DEFAULT_COLD_THRESHOLD,
     DEFAULT_CONFLICT_POLICY,
@@ -135,6 +140,11 @@ def _defaults(current: Mapping[str, Any] | None = None) -> dict[str, Any]:
         CONF_AUTO_RELOCK_SEC: current.get(CONF_AUTO_RELOCK_SEC, DEFAULT_AUTO_RELOCK_SEC),
         CONF_EXPOSE_VTHERM_IDENTITY: current.get(CONF_EXPOSE_VTHERM_IDENTITY, False),
         CONF_VELAIR_ENABLED: current.get(CONF_VELAIR_ENABLED, False),
+        CONF_AC_IDLE_BYPASS_ENABLED: current.get(CONF_AC_IDLE_BYPASS_ENABLED, False),
+        CONF_AC_IDLE_BYPASS_ENTITY_ID: current.get(CONF_AC_IDLE_BYPASS_ENTITY_ID, ""),
+        CONF_AC_IDLE_BYPASS_PRESET: current.get(
+            CONF_AC_IDLE_BYPASS_PRESET, DEFAULT_AC_IDLE_BYPASS_PRESET
+        ),
     }
 
 
@@ -151,6 +161,12 @@ def _number(minimum: float, maximum: float, step: float, unit: str | None = None
 
 
 def _basic_schema(defaults: Mapping[str, Any]) -> vol.Schema:
+    bypass_entity = defaults[CONF_AC_IDLE_BYPASS_ENTITY_ID]
+    bypass_field = (
+        vol.Optional(CONF_AC_IDLE_BYPASS_ENTITY_ID, default=bypass_entity)
+        if bypass_entity
+        else vol.Optional(CONF_AC_IDLE_BYPASS_ENTITY_ID)
+    )
     return vol.Schema(
         {
             vol.Required(CONF_NAME, default=defaults[CONF_NAME]): cv.string,
@@ -164,6 +180,20 @@ def _basic_schema(defaults: Mapping[str, Any]) -> vol.Schema:
                 CONF_OUTDOOR_SENSOR_ENTITY_ID,
                 default=defaults[CONF_OUTDOOR_SENSOR_ENTITY_ID],
             ): EntitySelector(EntitySelectorConfig(domain="sensor")),
+            bypass_field: EntitySelector(EntitySelectorConfig(domain="climate")),
+            vol.Required(
+                CONF_AC_IDLE_BYPASS_ENABLED,
+                default=defaults[CONF_AC_IDLE_BYPASS_ENABLED],
+            ): BooleanSelector(),
+            vol.Required(
+                CONF_AC_IDLE_BYPASS_PRESET,
+                default=defaults[CONF_AC_IDLE_BYPASS_PRESET],
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=list(AC_IDLE_BYPASS_PRESETS),
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            ),
         }
     )
 
@@ -356,6 +386,13 @@ def _validate_input(hass: HomeAssistant, data: Mapping[str, Any]) -> dict[str, s
             errors[field] = "entity_not_found"
         elif not entity_id.startswith(f"{domain}."):
             errors[field] = "invalid_entity"
+
+    bypass_entity = str(data.get(CONF_AC_IDLE_BYPASS_ENTITY_ID) or "")
+    if bypass_entity:
+        if hass.states.get(bypass_entity) is None:
+            errors[CONF_AC_IDLE_BYPASS_ENTITY_ID] = "entity_not_found"
+        elif not bypass_entity.startswith("climate."):
+            errors[CONF_AC_IDLE_BYPASS_ENTITY_ID] = "invalid_entity"
 
     cold = float(data.get(CONF_COLD_THRESHOLD, DEFAULT_COLD_THRESHOLD))
     mild = float(data.get(CONF_MILD_THRESHOLD, DEFAULT_MILD_THRESHOLD))

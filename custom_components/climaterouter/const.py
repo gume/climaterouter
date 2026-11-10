@@ -47,6 +47,9 @@ CONF_LOCK_CODE: Final = "lock_code"
 CONF_AUTO_RELOCK_SEC: Final = "auto_relock_sec"
 CONF_EXPOSE_VTHERM_IDENTITY: Final = "expose_vtherm_identity"
 CONF_VELAIR_ENABLED: Final = "velair_enabled"
+CONF_AC_IDLE_BYPASS_ENABLED: Final = "ac_idle_bypass_enabled"
+CONF_AC_IDLE_BYPASS_ENTITY_ID: Final = "ac_idle_bypass_entity_id"
+CONF_AC_IDLE_BYPASS_PRESET: Final = "ac_idle_bypass_preset"
 
 CONFLICT_POLICIES: Final = ["monitor", "reassert", "adopt"]
 

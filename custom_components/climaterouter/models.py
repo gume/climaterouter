@@ -23,6 +23,8 @@ ROUTE_AC = "ac"
 ROUTE_BOTH = "both"
 
 DEFAULT_AUTO_RELOCK_SEC = 30
+AC_IDLE_BYPASS_PRESETS = ("frost", "eco", "comfort")
+DEFAULT_AC_IDLE_BYPASS_PRESET = "frost"
 
 
 class Target(str, Enum):  # noqa: UP042
@@ -544,6 +546,9 @@ class RouterConfig:
     manual_blocks_schedule: bool = True
     expose_vtherm_identity: bool = False
     velair_enabled: bool = False
+    ac_idle_bypass_enabled: bool = False
+    ac_idle_bypass_entity_id: str = ""
+    ac_idle_bypass_preset: str = DEFAULT_AC_IDLE_BYPASS_PRESET
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> RouterConfig:
@@ -600,6 +605,13 @@ class RouterConfig:
             manual_blocks_schedule=_bool("manual_blocks_schedule", True),
             expose_vtherm_identity=_bool("expose_vtherm_identity", False),
             velair_enabled=_bool("velair_enabled", False),
+            ac_idle_bypass_enabled=_bool("ac_idle_bypass_enabled", False),
+            ac_idle_bypass_entity_id=str(data.get("ac_idle_bypass_entity_id") or ""),
+            ac_idle_bypass_preset=(
+                str(data.get("ac_idle_bypass_preset"))
+                if str(data.get("ac_idle_bypass_preset")) in AC_IDLE_BYPASS_PRESETS
+                else DEFAULT_AC_IDLE_BYPASS_PRESET
+            ),
         )
 
 

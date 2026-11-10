@@ -1521,3 +1521,139 @@ async def test_velair_calls_are_opt_in(hass) -> None:
 
     assert pause == []
     assert resume == []
+
+
+DEVICE_AC = "climate.device_ac"
+
+
+def _idle_ac_attributes(**overrides: Any) -> dict[str, Any]:
+    """Return VTherm attributes for an idle heat episode."""
+    attrs: dict[str, Any] = {
+        "hvac_modes": [HVAC_HEAT, HVAC_COOL],
+        "hvac_action": "idle",
+        "min_temp": 16,
+        "max_temp": 30,
+        "preset_temperatures": {
+            "frost_temp": 7,
+            "eco_temp": 17,
+            "comfort_temp": 21,
+        },
+        "vtherm_over_climate": {"underlying_entities": [DEVICE_AC]},
+    }
+    attrs.update(overrides)
+    return attrs
+
+
+async def _active_ac(hass, **data: Any):
+    """Set up an entry routed to the AC in heat mode."""
+    _entry, coordinator = await _setup(hass, outdoor=15.0, **data)
+    hass.states.async_set(
+        DEVICE_AC,
+        HVAC_HEAT,
+        {"temperature": 21, "min_temp": 16, "max_temp": 30},
+    )
+    await coordinator.async_set_temperature(temperature=21, hvac_mode=HVAC_HEAT)
+    await coordinator.async_set_route_override(ROUTE_AC)
+    await hass.async_block_till_done()
+    assert coordinator.data.active_targets == frozenset({Target.AC})
+    return _entry, coordinator
+
+
+def _bypass_calls(calls, entity_id: str = DEVICE_AC):
+    """Filter climate.set_temperature calls sent to the device thermostat."""
+    return [call for call in calls if call.data.get("entity_id") == entity_id]
+
+
+async def test_ac_idle_bypass_writes_the_preset_temperature(hass) -> None:
+    """An idle AC VTherm pushes its frost setpoint to the device thermostat."""
+    _entry, coordinator = await _active_ac(hass, ac_idle_bypass_enabled=True)
+    calls = async_mock_service(hass, "climate", "set_temperature")
+
+    hass.states.async_set(AC, HVAC_HEAT, _idle_ac_attributes())
+    await coordinator.async_recalculate()
+    await hass.async_block_till_done()
+
+    bypass = _bypass_calls(calls)
+    assert len(bypass) == 1
+    assert bypass[0].data == {"entity_id": DEVICE_AC, "temperature": 7}
+
+    # A repeated evaluation of the same idle episode must not repeat the write.
+    await coordinator.async_recalculate()
+    await hass.async_block_till_done()
+    assert len(_bypass_calls(calls)) == 1
+
+
+async def test_ac_idle_bypass_reapplies_after_a_heating_episode(hass) -> None:
+    """The next idle episode writes the setpoint again."""
+    _entry, coordinator = await _active_ac(hass, ac_idle_bypass_enabled=True)
+    calls = async_mock_service(hass, "climate", "set_temperature")
+
+    hass.states.async_set(AC, HVAC_HEAT, _idle_ac_attributes())
+    await coordinator.async_recalculate()
+    await hass.async_block_till_done()
+    assert len(_bypass_calls(calls)) == 1
+
+    # The VTherm restores its own setpoint when heating resumes.
+    hass.states.async_set(DEVICE_AC, HVAC_HEAT, {"temperature": 21, "min_temp": 16, "max_temp": 30})
+    hass.states.async_set(AC, HVAC_HEAT, _idle_ac_attributes(hvac_action="heating"))
+    await coordinator.async_recalculate()
+    await hass.async_block_till_done()
+    assert len(_bypass_calls(calls)) == 1
+
+    hass.states.async_set(AC, HVAC_HEAT, _idle_ac_attributes())
+    await coordinator.async_recalculate()
+    await hass.async_block_till_done()
+    assert len(_bypass_calls(calls)) == 2
+
+
+async def test_ac_idle_bypass_is_opt_in(hass) -> None:
+    """Without the option nothing is written below the VTherm."""
+    _entry, coordinator = await _active_ac(hass)
+    calls = async_mock_service(hass, "climate", "set_temperature")
+
+    hass.states.async_set(AC, HVAC_HEAT, _idle_ac_attributes())
+    await coordinator.async_recalculate()
+    await hass.async_block_till_done()
+
+    assert _bypass_calls(calls) == []
+
+
+async def test_ac_idle_bypass_only_applies_to_idle_heat(hass) -> None:
+    """A missing preset or a heating VTherm leaves the device alone."""
+    _entry, coordinator = await _active_ac(hass, ac_idle_bypass_enabled=True)
+    calls = async_mock_service(hass, "climate", "set_temperature")
+
+    hass.states.async_set(AC, HVAC_HEAT, _idle_ac_attributes(hvac_action="heating"))
+    await coordinator.async_recalculate()
+    await hass.async_block_till_done()
+    assert _bypass_calls(calls) == []
+
+    # A VTherm without preset temperatures cannot provide a setpoint.
+    attrs = _idle_ac_attributes()
+    attrs.pop("preset_temperatures")
+    hass.states.async_set(AC, HVAC_HEAT, attrs)
+    await coordinator.async_recalculate()
+    await hass.async_block_till_done()
+    assert _bypass_calls(calls) == []
+
+
+async def test_ac_idle_bypass_uses_configured_entity_and_preset(hass) -> None:
+    """An explicit entity overrides detection and the preset selects the value."""
+    device = "climate.device_ac_2"
+    _entry, coordinator = await _active_ac(
+        hass,
+        ac_idle_bypass_enabled=True,
+        ac_idle_bypass_entity_id=device,
+        ac_idle_bypass_preset="comfort",
+    )
+    hass.states.async_set(device, HVAC_HEAT, {"temperature": 19})
+    calls = async_mock_service(hass, "climate", "set_temperature")
+
+    hass.states.async_set(AC, HVAC_HEAT, _idle_ac_attributes())
+    await coordinator.async_recalculate()
+    await hass.async_block_till_done()
+
+    assert _bypass_calls(calls, DEVICE_AC) == []
+    bypass = _bypass_calls(calls, device)
+    assert len(bypass) == 1
+    assert bypass[0].data == {"entity_id": device, "temperature": 21}
