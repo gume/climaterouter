@@ -80,6 +80,9 @@ user-initiated commands; schedule and automation traffic keeps running. See
 | Observability | Binary sensors and sensors for active target, pending handover, manual mode, boost, stale inputs, conflicts, and last handover. |
 | Conflict detection | Detects direct changes to either VTherm, both-targets-on, unavailable targets, and stale inputs; `monitor` by default, with `reassert`/`adopt` policies and guarded states excluded. |
 | Boost | `climaterouter.set_boost` runs both targets for a bounded time when `boost_enabled` is on; heat-only, both targets must be available, and ending boost hands back to single-target routing. |
+| AC fan proxy | The AC fan mode is mirrored, stored while the AC is inactive, and applied or replayed only when the AC is active. Fan changes do not start manual mode. |
+| AC idle bypass | Optional: while the AC VTherm reports idle in heat mode, write a `frost`/`eco`/`comfort` preset temperature to the device thermostat below it. The VTherm restores its own setpoint when heating resumes. |
+| Velair | Optional: pause Velair when manual mode starts and resume automatic control on the ClimateRouter proxy when it ends. |
 | Two locks | Optional `lock.climaterouter_lock` (UI lock, user commands only) with a 4–8 digit code and auto-relock; `manual_blocks_schedule` keeps scheduler/automation moves out of manual mode and remembers the latest schedule state. |
 
 ## Planned entities
@@ -97,9 +100,9 @@ user-initiated commands; schedule and automation traffic keeps running. See
 - `sensor.climaterouter_pending_target` — pending handover target.
 - `sensor.climaterouter_route_reason` — why the current route was chosen.
 - `sensor.climaterouter_outdoor_temperature` — mirrored outdoor temperature for dashboards/history.
-- `sensor.climaterouter_manual_remaining` — minutes left in manual mode (unknown when the timer is off).
+- `sensor.climaterouter_manual_remaining` — minutes left in manual mode (`0` when the timer is off or expired).
 - `sensor.climaterouter_manual_until` — absolute manual-mode deadline.
-- `sensor.climaterouter_boost_remaining` — minutes left in boost.
+- `sensor.climaterouter_boost_remaining` — minutes left in boost (`0` when boost is inactive).
 - `sensor.climaterouter_last_handover` — timestamp of the last completed handover.
 - `sensor.climaterouter_conflict_count` — diagnostic conflict counter.
 - `select.climaterouter_route_override` — `auto` / `radiator` / `ac` (manual route override).

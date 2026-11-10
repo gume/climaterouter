@@ -1,6 +1,6 @@
 # Handover — ClimateRouter
 
-**Date:** 2026-11-09
+**Date:** 2026-11-10
 **Branch:** `main`
 **Relevant commits:**
 
@@ -103,13 +103,20 @@
 | `1972d1e` | `ci: clarify the local brand asset location` |
 | `cf53fc8` | `fix: defer scheduler commands while manual mode is active` |
 | `f0d423c` | `fix: adopt direct user changes on the active thermostat as manual moves` |
+| `16e56ca` | `feat: proxy the AC fan mode` |
+| `2bbaae5` | `fix: report zero remaining time when a timer is inactive` |
+| `15e50c7` | `fix: group diagnostic and configuration entities correctly` |
+| `f9dd2b1` | `feat: optionally pause Velair during manual mode` |
+| `e4c829b` | `feat: stop the AC device thermostat while the VTherm is idle` |
 
 Everything through `d0e990d` is on `origin/main`; `v0.8.4` is tagged and released, and the 0.8.5 commits
 (`cf53fc8`, `f0d423c`) add the scheduler/manual fix. The test instance still runs the Marketplace release
 **v0.8.3** (tag `v0.8.3`, commit `723c5c0`): `update.climaterouter` reported `installed_version` =
 `latest_version` = `v0.8.3` at the last live check. The 0.8.4 release was published on 2026-11-09 but has not yet
 been installed in the test instance. The 0.8.5 release is cut from the commit that adds this handover update; after
-the Marketplace refresh/restart, install it and record the live result.
+the Marketplace refresh/restart, install it and record the live result. The **0.8.6** commits (`16e56ca` through
+`e4c829b`) add the fan proxy, inactive-timer reporting, diagnostic grouping, opt-in Velair pause, and the AC idle
+bypass. None of 0.8.4–0.8.6 has been verified live yet.
 
 ---
 
@@ -159,6 +166,23 @@ instead, keeping the running timer. The manual-timer select remains `off` when i
 compatibility fix also covers Home Assistant releases where `async_extract_entity_ids()` has an `expand_group`
 second parameter. The device-info test uses `async_entries_for_config_entry`, which works on both the older CI
 harness and Home Assistant 2026.11, so the full suite is green on both.
+
+Version **0.8.6** implements the first batch of owner-reported issues (`issues.txt`):
+
+1. **Fan proxy** — the AC fan mode is stored in the desired state and applied only while the AC is active. A user
+   fan change never starts or extends manual mode.
+2. **Inactive timers report zero** — `manual_remaining`/`boost_remaining` and the climate/select
+   `remaining_minutes` attributes return `0` (not `null`) when the timer is off or expired.
+3. **Diagnostic grouping** — the target/reason/detail sensors are `EntityCategory.DIAGNOSTIC`, and the route
+   override, manual timer, recalculate and clear-conflict controls are `EntityCategory.CONFIG`.
+4. **Opt-in Velair integration** — `velair_enabled` calls `velair.pause` when manual mode starts (including a
+   restored session) and `velair.resume_automatic_control` on the ClimateRouter proxy when manual mode ends.
+5. **Optional AC idle bypass** — in heat mode, when the AC VTherm reports `idle`, write a VTherm preset temperature
+   (`frost`/`eco`/`comfort`, default `frost`) directly to the device thermostat below it. The entity is auto-detected
+   from `vtherm_over_climate.underlying_entities` or configured explicitly. Nothing is restored by ClimateRouter;
+   the VTherm is expected to restore its own setpoint when heating resumes.
+
+Issue 4 in `issues.txt` ("overview on the filed names") was intentionally skipped by the owner for this batch.
 
 The next developer should start with section 8 (Next steps).
 
@@ -303,6 +327,8 @@ Events fired on the HA bus:
   then mirror the active target.
 - `current_temperature` averages the active targets (one in normal operation).
 - `hvac_modes` always contains `off`/`heat`; `cool` is offered when the AC target advertises it.
+- `fan_mode` and `fan_modes` come from the AC target. A fan change is stored in the desired state but only sent to
+  an **active** AC; it is replayed on handover. Fan changes never start or extend manual mode.
 - Presets are the intersection of both targets' presets, or the union when the intersection is empty, plus `none`.
 - `min_temp`, `max_temp` and `target_temperature_step` come from the active target (or the AC/first available one).
 - `sensor.<name>_active_target` and `sensor.<name>_pending_target` use a state-dependent icon (`mdi:radiator` for
@@ -349,7 +375,11 @@ Events fired on the HA bus:
   baseline so the target keeps running instead of the proxy going blank.
 - The climate entity exposes `manual_mode`, `manual_active`, `manual_until`, `manual_timer_minutes`, and
   `manual_remaining_minutes`; the legacy `override` attribute is still present for older cards. A timer that is off
-  reports `null`/unknown rather than a fake countdown.
+  or expired reports `0` minutes (and the manual-timer select stays `off`) rather than a fake countdown.
+- **Optional Velair integration** (`velair_enabled`, default off): when manual mode starts, including a session
+  restored after a restart, the coordinator calls the global `velair.pause`; when manual mode ends (timer,
+  return-to-schedule, or `off`) it calls `velair.resume_automatic_control` on the ClimateRouter proxy entity. The
+  user's Velair setup is expected to manage the proxy while manual mode is not active.
 
 ### 3.7 Conflict detection (M5)
 
@@ -484,9 +514,9 @@ All three flows share the same sectioned schema (`config_flow.py`):
 
 | Section | Contents |
 |---|---|
-| Thermostats | name, radiator, AC, outdoor sensor |
+| Thermostats | name, radiator, AC, outdoor sensor, AC idle-bypass entity/flag/preset |
 | Routing | thresholds, dwell, handover/off/startup/settle timings, fallback |
-| Manual mode | `default_manual_minutes`, `max_manual_minutes`, `manual_blocks_schedule` |
+| Manual mode | `default_manual_minutes`, `max_manual_minutes`, `manual_blocks_schedule`, `velair_enabled` |
 | Conflicts | policy, auto-resolve flags, outdoor staleness, setpoint tolerance |
 | Boost | `boost_enabled` |
 | UI lock | `lock_enabled`, `lock_code`, `auto_relock_sec` |
@@ -505,6 +535,27 @@ All three flows share the same sectioned schema (`config_flow.py`):
   flags are no longer part of the schema. `RouterConfig.from_mapping` still reads the old override keys as a
   fallback for entries created before 0.8.0; the schema-only save drops them from `entry.data`.
 - There is no manual-switch configuration: routing is forced only through the built-in route-override `select`.
+- Entity categories: the active/pending target, route reason, conflict detail, mismatch detail, timer minutes and
+  other explanatory read-only entities are `EntityCategory.DIAGNOSTIC`; the route-override/manual-timer selects and
+  the recalculate/clear-conflict buttons are `EntityCategory.CONFIG`.
+
+### 3.12 AC idle bypass
+
+Some AC units keep a minimum compressor/indoor-fan speed while the VTherm reports `idle`, so the room keeps
+heating slowly. The optional AC idle bypass writes a low setpoint directly to the **device thermostat below the AC
+VTherm**:
+
+- Enabled with `ac_idle_bypass_enabled` (default off); `ac_idle_bypass_preset` selects a VTherm preset
+  (`frost`, `eco`, or `comfort`; default `frost`) and its `preset_temperatures` value is used as the idle setpoint.
+  There is no fixed 7 °C option; the preset comes from the VTherm configuration.
+- `ac_idle_bypass_entity_id` may be empty. Auto-detection uses the first `climate.*` entry in the AC VTherm's
+  `vtherm_over_climate.underlying_entities`. A configured entity equal to the AC VTherm is ignored.
+- It applies only while the desired mode is `heat`, the AC is the active target, the AC VTherm is in `heat` with
+  `hvac_action=idle`, and no VTherm guard or timed preset is active. It is applied once per idle episode; a later
+  idle episode after the VTherm has heated again triggers a new write.
+- ClimateRouter does **not** restore the device setpoint. Versatile Thermostat is expected to restore its own
+  setpoint when heating resumes. The write is skipped when the device is missing/unavailable, when the VTherm has
+  no usable preset temperature, or when the device is already within `temperature_tolerance` of the target.
 
 ---
 
@@ -666,7 +717,7 @@ section 8.2 for the full list.
    Intermediate releases are expected to work but are not individually tested.
 2. **Automated coverage is still partial (91 %, gate 75 %).** High-risk handover, persistence, manual start/return,
    expiry, boost start/cancel, conflict policies, lock, services, diagnostics and entity behaviour are covered. See
-   section 8.2 for the remaining gaps; `coordinator.py` (84 %) is the largest untested area.
+   section 8.2 for the remaining gaps; `coordinator.py` (85 %) is the largest untested area.
 3. **Manual mode is live-verified through 0.8.0 and well covered.** Start/return, `off`, conflicting-argument
    rejection, deadline persistence, watchdog expiry, handover carry-over and Lock B (`manual_blocks_schedule`)
    automation rejection are automated. A user temperature/preset move
@@ -694,14 +745,19 @@ section 8.2 for the full list.
    full M5 mismatch detector. `sensor.<name>_target_mismatch_detail` explains the difference and exposes both
    values. Use `binary_sensor.<name>_conflict` / `sensor.<name>_conflict_detail` for the desired-vs-actual
    comparison.
-10. **Fan/swing/humidity pass-through is not exposed.** `DesiredState` carries `fan_mode`/`swing_mode`, but the
-    climate entity only advertises temperature, preset, turn-on and turn-off.
+10. **Swing/humidity pass-through is not exposed.** `DesiredState` carries `swing_mode`, but the climate entity
+    only advertises temperature, preset, fan mode, turn-on and turn-off. Fan mode is proxied from the AC since
+    0.8.6 and is applied only to an active AC.
 11. **Equinox's lock button still cannot drive the native lock.** Equinox hard-codes
     `versatile_thermostat.lock`/`unlock` on the card entity, and those are VTherm platform entity services, so a
     ClimateRouter proxy cannot receive them. `vt_display.py` therefore never forwards `is_lock_configured` or
     `lock_manager`. Use `hide_lock_button: true` with the native `lock.<name>_lock` entity (0.7.0) or the
     `climaterouter.lock`/`unlock` services, and request upstream Equinox support for a configurable lock
     service/entity.
+12. **0.8.6 features are tested but not live-verified.** The AC idle bypass depends on the AC VTherm exposing both
+    `preset_temperatures` and `vtherm_over_climate.underlying_entities`; when auto-detection is not possible, set
+    `ac_idle_bypass_entity_id` explicitly or the bypass is skipped. It deliberately does not restore the device
+    setpoint, relying on Versatile Thermostat to do so when heating resumes.
 
 ---
 
@@ -714,6 +770,14 @@ section 8.2 for the full list.
    scheduler/manual protection, and the conflict/mismatch detail sensors. Do not re-add the old
    `custom_components/climaterouter` bind mount: it makes the folder a mount point (`EBUSY`) and the Marketplace
    cannot back it up before replacing it.
+2. After 0.8.6 is pushed, refresh the Marketplace and verify:
+   - the fan mode card control mirrors the AC and survives a handover;
+   - inactive manual/boost timers show `0`/`off`, not `unknown`;
+   - diagnostic entities are grouped separately and configuration controls show under configuration;
+   - with Velair enabled, a manual session pauses Velair and returning to schedule resumes it on the proxy;
+   - with the AC idle bypass enabled, `climate.<device>` receives the chosen preset temperature while the AC
+     VTherm is idle in heat, and the VTherm restores its own setpoint when heating resumes. Record the entity and
+     preset used in section 6.
 2. Open **Configure** once after the update and save any section. The schema-only save drops the removed
    manual-switch key from `entry.data`. Confirm the collapsed sections render correctly, that the brief
    explanations appear under the fields, that the options menu returns after each section save, and that **Finish**
@@ -741,13 +805,13 @@ Status as of 2026-11-10:
 | `ruff check .` | clean |
 | `ruff format --check .` | clean |
 | Pure unit tests (no HA) | 59 passed |
-| Integration tests (HA harness) | 89 passed |
-| Full suite (HA harness) | 148 passed, 0 failures |
+| Integration tests (HA harness) | 105 passed |
+| Full suite (HA harness) | 164 passed, 0 failures |
 | `mypy custom_components/climaterouter` | clean |
 | CI installs `requirements_test.txt` | yes (intentionally unpinned, includes `mypy`) |
 | CI matrix | full HA suite on Python 3.13; pure unit tests on Python 3.12 and 3.13 |
 | GitHub CI run confirmed | green through `1972d1e`; the 0.8.5 release run is green after the device-lookup test fix |
-| Measured statement coverage | **92 %** (91.8 %, gate 75 %) |
+| Measured statement coverage | **91 %** (91.0 %, gate 75 %) |
 
 `pytest-homeassistant-custom-component` is wired into `tests/conftest.py`, and the integration suite lives in
 `tests/integration/`. Without the harness, pytest runs the pure tests and skips the integration directory.
@@ -893,6 +957,21 @@ Run the suite with the HA venv:
 - [x] Manual expiry without a schedule baseline keeps the current mode running.
 - [x] `sensor.<name>_conflict_detail` and `sensor.<name>_target_mismatch_detail` explain the two diagnostic binary
       sensors, with full values in their attributes and an explicit off/unavailable note for the mismatch case.
+
+### 8.7 0.8.6 owner-issue batch
+
+Source: the owner's `issues.txt` (not committed). Issue 4 ("overview on the filed names") is intentionally
+skipped for this batch.
+
+- [x] Fan mode proxied from the AC, stored while inactive, applied/replayed only to an active AC (`16e56ca`).
+- [x] Inactive/expired manual and boost timers report `0` minutes; the manual-timer select stays `off` (`2bbaae5`).
+- [x] Diagnostic entities use `EntityCategory.DIAGNOSTIC`; configuration controls use `EntityCategory.CONFIG`
+      (`15e50c7`).
+- [x] Opt-in Velair pause/resume around manual mode (`f9dd2b1`).
+- [x] Optional AC idle bypass using the VTherm `frost`/`eco`/`comfort` preset temperature, with explicit or
+      auto-detected device entity (`e4c829b`).
+- [x] Integration tests for all five features and the new config-flow fields; full suite 164 passed.
+- [ ] Live verification in the test HA after the owner pushes and the Marketplace update is installed.
 
 ---
 
