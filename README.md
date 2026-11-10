@@ -31,7 +31,7 @@ Scheduler / User UI / Automations
 
 ## Status
 
-**M1–M6 implemented, plus the 0.8.x proxy rework (current release 0.8.5).** The integration package provides the config flow, proxy climate
+**M1–M6 implemented, plus the 0.8.x proxy rework (current version 0.8.6).** The integration package provides the config flow, proxy climate
 entity, outdoor routing, safe handover, proxy-owned manual mode/timer, conflict detection, feature-flagged boost,
 two separate locks, status entities, services and diagnostics. See [`docs/HANDOVER.md`](docs/HANDOVER.md) for the
 exact state, test results, known gaps and next steps.
@@ -125,6 +125,13 @@ user-initiated commands; schedule and automation traffic keeps running. See
 - `climaterouter.clear_conflicts`
 - `climaterouter.force_handover`
 - `climaterouter.lock` / `climaterouter.unlock` (optional `code`; requires `lock_enabled`)
+
+## Releasing
+
+The repository owner can run `scripts/release.sh` to see a release plan without changing anything. It reads the
+version from `manifest.json`, `const.py` and `pyproject.toml` (they must agree), lists the commits since the latest
+`v*` tag, includes the open items from `issues.txt`, and previews the generated release notes. `--push` runs the
+checks, pushes `main`, creates and pushes the `v<version>` tag, and creates the GitHub release.
 
 ## Documentation
 

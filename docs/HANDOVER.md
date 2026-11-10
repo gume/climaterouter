@@ -960,8 +960,8 @@ Run the suite with the HA venv:
 
 ### 8.7 0.8.6 owner-issue batch
 
-Source: the owner's `issues.txt` (not committed). Issue 4 ("overview on the filed names") is intentionally
-skipped for this batch.
+Source: the owner's `issues.txt`, now tracked and kept as the resolved/open issue list. Issue 4 ("overview on the
+filed names") is the only open item and is intentionally skipped for this batch.
 
 - [x] Fan mode proxied from the AC, stored while inactive, applied/replayed only to an active AC (`16e56ca`).
 - [x] Inactive/expired manual and boost timers report `0` minutes; the manual-timer select stays `off` (`2bbaae5`).
@@ -1017,6 +1017,10 @@ docker compose logs -f homeassistant | grep -i climaterouter
 /path/to/venv/bin/pytest -q
 /path/to/venv/bin/ruff check .
 /path/to/venv/bin/ruff format --check .
+
+# release plan (dry run; safe) and the owner-only push
+scripts/release.sh
+scripts/release.sh --push
 
 # fake hardware (name required when several systems exist)
 # Developer Tools -> Actions -> fake_hvac.set_outdoor_temperature

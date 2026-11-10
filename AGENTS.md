@@ -62,10 +62,15 @@ release is required.
 To make a new build visible in the test instance:
 
 1. Finish and test the change locally (`pytest`, optional `ruff`).
-2. Bump the version in **both** places:
+2. Bump the version in **all three** places:
    - `custom_components/climaterouter/manifest.json`
    - `custom_components/climaterouter/const.py` (`VERSION`)
-3. Commit the change (no push); the owner pushes `main`.
+   - `pyproject.toml` (`version`)
+3. Commit the change (no push); the owner pushes `main`. The owner can use
+   `scripts/release.sh` for the push: it is a dry run by default, runs the checks,
+   derives the version and release notes automatically from the source files and
+   `git log`, then `--push` pushes `main`, creates/pushes `v<version>` and creates
+   the GitHub release.
 4. Refresh the Marketplace metadata. Installed custom repositories re-read
    `last_commit` at Home Assistant startup and then only every **48 hours**, so
    either restart Home Assistant or use the repository **Refresh** action in the
@@ -79,3 +84,5 @@ Do not claim a change is verified in the live instance until the API confirms it
 
 `docs/HANDOVER.md` is the authoritative state-of-work document. Update it when a
 milestone advances, the live test setup changes, or a new known gap is found.
+`issues.txt` is the owner-facing issue list with resolved/open status; update it
+when an issue is implemented, deferred, or clarified.
