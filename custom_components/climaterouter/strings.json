@@ -13,9 +13,9 @@
               "radiator_entity_id": "Radiator thermostat (over_switch)",
               "ac_entity_id": "AC thermostat (over_climate)",
               "outdoor_sensor_entity_id": "Outdoor temperature sensor",
-              "ac_idle_bypass_entity_id": "AC device thermostat (optional)",
-              "ac_idle_bypass_enabled": "Stop the AC device when the VTherm is idle",
-              "ac_idle_bypass_preset": "Idle setpoint preset"
+              "ac_idle_bypass_entity_id": "Device thermostat below the AC VTherm (optional)",
+              "ac_idle_bypass_enabled": "Enable AC idle bypass",
+              "ac_idle_bypass_preset": "Preset used for the idle setpoint"
             },
             "data_description": {
               "name": "Name shown on the device and its entities.",
@@ -31,14 +31,14 @@
             "name": "Routing",
             "description": "Outdoor hysteresis, handover safety, and timing.",
             "data": {
-              "cold_threshold": "Cold threshold",
-              "mild_threshold": "Mild threshold",
-              "min_route_dwell": "Minimum time between handovers",
-              "handover_idle_confirm": "Idle confirmation before handover",
+              "cold_threshold": "Outdoor cold threshold",
+              "mild_threshold": "Outdoor mild threshold",
+              "min_route_dwell": "Minimum route dwell time",
+              "handover_idle_confirm": "Handover idle confirmation time",
               "off_confirm_timeout": "Off confirmation timeout",
               "startup_grace": "Startup grace period",
               "settle_time": "Command settle time",
-              "fallback_on_unavailable": "Fall back to the other target"
+              "fallback_on_unavailable": "Fall back when a target is unavailable"
             },
             "data_description": {
               "cold_threshold": "At or below this outdoor temperature, prefer the radiator.",
@@ -58,7 +58,7 @@
               "default_manual_minutes": "Default manual timer (0 = no timer)",
               "max_manual_minutes": "Maximum manual timer",
               "manual_blocks_schedule": "Block schedule/automation commands while manual",
-              "velair_enabled": "Pause Velair during manual mode"
+              "velair_enabled": "Pause Velair in manual mode"
             },
             "data_description": {
               "default_manual_minutes": "Timer for a new manual session. 0 keeps manual mode active until ended.",
@@ -72,9 +72,9 @@
             "description": "How direct changes to the underlying thermostats are handled.",
             "data": {
               "conflict_policy": "Conflict policy",
-              "auto_resolve_idle_targets": "Turn off idle non-selected targets",
-              "auto_resolve_simultaneous": "Turn off idle targets when both are on",
-              "outdoor_stale_after": "Outdoor sensor staleness",
+              "auto_resolve_idle_targets": "Turn off non-selected targets when idle",
+              "auto_resolve_simultaneous": "Turn off the idle target when both are on",
+              "outdoor_stale_after": "Outdoor sensor stale after",
               "temperature_tolerance": "Setpoint tolerance"
             },
             "data_description": {
@@ -89,7 +89,7 @@
             "name": "Boost",
             "description": "Run both targets for a bounded time.",
             "data": {
-              "boost_enabled": "Enable boost (experimental)"
+              "boost_enabled": "Enable boost"
             },
             "data_description": {
               "boost_enabled": "Allow set_boost to run both targets for a bounded time."
@@ -133,9 +133,9 @@
               "radiator_entity_id": "Radiator thermostat (over_switch)",
               "ac_entity_id": "AC thermostat (over_climate)",
               "outdoor_sensor_entity_id": "Outdoor temperature sensor",
-              "ac_idle_bypass_entity_id": "AC device thermostat (optional)",
-              "ac_idle_bypass_enabled": "Stop the AC device when the VTherm is idle",
-              "ac_idle_bypass_preset": "Idle setpoint preset"
+              "ac_idle_bypass_entity_id": "Device thermostat below the AC VTherm (optional)",
+              "ac_idle_bypass_enabled": "Enable AC idle bypass",
+              "ac_idle_bypass_preset": "Preset used for the idle setpoint"
             },
             "data_description": {
               "name": "Name shown on the device and its entities.",
@@ -151,14 +151,14 @@
             "name": "Routing",
             "description": "Outdoor hysteresis, handover safety, and timing.",
             "data": {
-              "cold_threshold": "Cold threshold",
-              "mild_threshold": "Mild threshold",
-              "min_route_dwell": "Minimum time between handovers",
-              "handover_idle_confirm": "Idle confirmation before handover",
+              "cold_threshold": "Outdoor cold threshold",
+              "mild_threshold": "Outdoor mild threshold",
+              "min_route_dwell": "Minimum route dwell time",
+              "handover_idle_confirm": "Handover idle confirmation time",
               "off_confirm_timeout": "Off confirmation timeout",
               "startup_grace": "Startup grace period",
               "settle_time": "Command settle time",
-              "fallback_on_unavailable": "Fall back to the other target"
+              "fallback_on_unavailable": "Fall back when a target is unavailable"
             },
             "data_description": {
               "cold_threshold": "At or below this outdoor temperature, prefer the radiator.",
@@ -178,7 +178,7 @@
               "default_manual_minutes": "Default manual timer (0 = no timer)",
               "max_manual_minutes": "Maximum manual timer",
               "manual_blocks_schedule": "Block schedule/automation commands while manual",
-              "velair_enabled": "Pause Velair during manual mode"
+              "velair_enabled": "Pause Velair in manual mode"
             },
             "data_description": {
               "default_manual_minutes": "Timer for a new manual session. 0 keeps manual mode active until ended.",
@@ -192,9 +192,9 @@
             "description": "How direct changes to the underlying thermostats are handled.",
             "data": {
               "conflict_policy": "Conflict policy",
-              "auto_resolve_idle_targets": "Turn off idle non-selected targets",
-              "auto_resolve_simultaneous": "Turn off idle targets when both are on",
-              "outdoor_stale_after": "Outdoor sensor staleness",
+              "auto_resolve_idle_targets": "Turn off non-selected targets when idle",
+              "auto_resolve_simultaneous": "Turn off the idle target when both are on",
+              "outdoor_stale_after": "Outdoor sensor stale after",
               "temperature_tolerance": "Setpoint tolerance"
             },
             "data_description": {
@@ -209,7 +209,7 @@
             "name": "Boost",
             "description": "Run both targets for a bounded time.",
             "data": {
-              "boost_enabled": "Enable boost (experimental)"
+              "boost_enabled": "Enable boost"
             },
             "data_description": {
               "boost_enabled": "Allow set_boost to run both targets for a bounded time."
@@ -282,9 +282,9 @@
           "radiator_entity_id": "Radiator thermostat (over_switch)",
           "ac_entity_id": "AC thermostat (over_climate)",
           "outdoor_sensor_entity_id": "Outdoor temperature sensor",
-          "ac_idle_bypass_entity_id": "AC device thermostat (optional)",
-          "ac_idle_bypass_enabled": "Stop the AC device when the VTherm is idle",
-          "ac_idle_bypass_preset": "Idle setpoint preset"
+          "ac_idle_bypass_entity_id": "Device thermostat below the AC VTherm (optional)",
+          "ac_idle_bypass_enabled": "Enable AC idle bypass",
+          "ac_idle_bypass_preset": "Preset used for the idle setpoint"
         },
         "data_description": {
           "name": "Name shown on the device and its entities.",
@@ -300,14 +300,14 @@
         "title": "Routing",
         "description": "Outdoor hysteresis, handover safety, and timing.",
         "data": {
-          "cold_threshold": "Cold threshold",
-          "mild_threshold": "Mild threshold",
-          "min_route_dwell": "Minimum time between handovers",
-          "handover_idle_confirm": "Idle confirmation before handover",
+          "cold_threshold": "Outdoor cold threshold",
+          "mild_threshold": "Outdoor mild threshold",
+          "min_route_dwell": "Minimum route dwell time",
+          "handover_idle_confirm": "Handover idle confirmation time",
           "off_confirm_timeout": "Off confirmation timeout",
           "startup_grace": "Startup grace period",
           "settle_time": "Command settle time",
-          "fallback_on_unavailable": "Fall back to the other target"
+          "fallback_on_unavailable": "Fall back when a target is unavailable"
         },
         "data_description": {
           "cold_threshold": "At or below this outdoor temperature, prefer the radiator.",
@@ -327,7 +327,7 @@
           "default_manual_minutes": "Default manual timer (0 = no timer)",
           "max_manual_minutes": "Maximum manual timer",
           "manual_blocks_schedule": "Block schedule/automation commands while manual",
-          "velair_enabled": "Pause Velair during manual mode"
+          "velair_enabled": "Pause Velair in manual mode"
         },
         "data_description": {
           "default_manual_minutes": "Timer for a new manual session. 0 keeps manual mode active until ended.",
@@ -341,9 +341,9 @@
         "description": "How direct changes to the underlying thermostats are handled.",
         "data": {
           "conflict_policy": "Conflict policy",
-          "auto_resolve_idle_targets": "Turn off idle non-selected targets",
-          "auto_resolve_simultaneous": "Turn off idle targets when both are on",
-          "outdoor_stale_after": "Outdoor sensor staleness",
+          "auto_resolve_idle_targets": "Turn off non-selected targets when idle",
+          "auto_resolve_simultaneous": "Turn off the idle target when both are on",
+          "outdoor_stale_after": "Outdoor sensor stale after",
           "temperature_tolerance": "Setpoint tolerance"
         },
         "data_description": {
@@ -358,7 +358,7 @@
         "title": "Boost",
         "description": "Run both targets for a bounded time.",
         "data": {
-          "boost_enabled": "Enable boost (experimental)"
+          "boost_enabled": "Enable boost"
         },
         "data_description": {
           "boost_enabled": "Allow set_boost to run both targets for a bounded time."
