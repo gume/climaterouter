@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -33,6 +34,7 @@ class RouterRouteOverrideSelect(RouterEntity, SelectEntity):
 
     _attr_name = "Route override"
     _attr_icon = "mdi:source-branch"
+    _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(self, coordinator: ClimateRouterCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator)
@@ -54,6 +56,7 @@ class RouterManualTimerSelect(RouterEntity, SelectEntity):
     """Choose or switch off the manual-mode countdown."""
 
     _attr_name = "Manual timer"
+    _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(self, coordinator: ClimateRouterCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator)

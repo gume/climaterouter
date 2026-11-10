@@ -387,3 +387,35 @@ async def test_remaining_sensors_report_zero_when_inactive(hass) -> None:
 
     remaining = hass.states.get("sensor.test_router_manual_remaining")
     assert remaining is not None and remaining.state == "0"
+
+
+async def test_internal_entities_use_the_diagnostic_and_config_sections(hass) -> None:
+    """Verbose values are diagnostics; setup actions are configuration."""
+    from homeassistant.const import EntityCategory
+
+    entry, _coordinator = await _setup(hass)
+    registry = er.async_get(hass)
+
+    def category(domain: str, key: str) -> EntityCategory | None:
+        entity_id = registry.async_get_entity_id(domain, DOMAIN, f"{entry.entry_id}_{key}")
+        assert entity_id is not None
+        entity = registry.async_get(entity_id)
+        assert entity is not None
+        return entity.entity_category
+
+    for key in (
+        "active_target",
+        "pending_target",
+        "route_reason",
+        "conflict_detail",
+        "target_mismatch_detail",
+    ):
+        assert category("sensor", key) is EntityCategory.DIAGNOSTIC
+
+    assert category("sensor", "manual_remaining") is None
+    assert category("sensor", "boost_remaining") is None
+    assert category("select", "route_override") is EntityCategory.CONFIG
+    assert category("select", "manual_timer") is EntityCategory.CONFIG
+    assert category("button", "recalculate_route") is EntityCategory.CONFIG
+    assert category("button", "clear_conflicts") is EntityCategory.CONFIG
+    assert category("button", "force_handover") is None

@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -46,6 +47,7 @@ async def async_setup_entry(
                 "Recalculate route",
                 "mdi:refresh",
                 coordinator.async_recalculate,
+                entity_category=EntityCategory.CONFIG,
             ),
             RouterButton(
                 coordinator,
@@ -63,6 +65,7 @@ async def async_setup_entry(
                 "Clear conflicts",
                 "mdi:check-circle-outline",
                 coordinator.async_clear_conflicts,
+                entity_category=EntityCategory.CONFIG,
             ),
             RouterButton(
                 coordinator,
@@ -89,6 +92,7 @@ class RouterButton(RouterEntity, ButtonEntity):
         icon: str,
         action: Callable[[], Awaitable[None]],
         available: Callable[[ClimateRouterCoordinator], bool] | None = None,
+        entity_category: EntityCategory | None = None,
     ) -> None:
         super().__init__(coordinator)
         self._action = action
@@ -96,6 +100,7 @@ class RouterButton(RouterEntity, ButtonEntity):
         self._attr_name = name
         self._attr_icon = icon
         self._attr_unique_id = f"{entry.entry_id}_{key}"
+        self._attr_entity_category = entity_category
 
     @property
     def available(self) -> bool:
