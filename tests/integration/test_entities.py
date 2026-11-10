@@ -361,3 +361,29 @@ async def test_climate_exposes_the_ac_fan_modes(hass) -> None:
     assert state.attributes["fan_modes"] == ["low", "high"]
     assert state.attributes["fan_mode"] == "low"
     assert state.attributes["supported_features"] & ClimateEntityFeature.FAN_MODE
+
+
+async def test_remaining_sensors_report_zero_when_inactive(hass) -> None:
+    """Inactive and expired countdowns read as zero, not unknown."""
+    from homeassistant.util import dt as dt_util
+
+    _entry, coordinator = await _setup(hass)
+    remaining = hass.states.get("sensor.test_router_manual_remaining")
+    boost = hass.states.get("sensor.test_router_boost_remaining")
+    assert remaining is not None and remaining.state == "0"
+    assert boost is not None and boost.state == "0"
+
+    await coordinator.async_enter_manual_mode(
+        temperature=22, duration_minutes=30, context=Context(user_id="user-1")
+    )
+    await hass.async_block_till_done()
+    remaining = hass.states.get("sensor.test_router_manual_remaining")
+    assert remaining is not None and remaining.state == "30"
+
+    assert coordinator.data.manual_mode is not None
+    coordinator.data.manual_mode.until = dt_util.utcnow() - timedelta(minutes=1)
+    coordinator._publish()
+    await hass.async_block_till_done()
+
+    remaining = hass.states.get("sensor.test_router_manual_remaining")
+    assert remaining is not None and remaining.state == "0"

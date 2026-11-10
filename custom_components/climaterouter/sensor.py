@@ -132,8 +132,10 @@ def _pending_target(snapshot: RouterSnapshot) -> str:
 
 
 def _manual_remaining(snapshot: RouterSnapshot) -> int | None:
-    if snapshot.manual_mode is None:
-        return None
+    if snapshot.manual_mode is None or snapshot.manual_mode.is_expired(dt_util.utcnow()):
+        # An inactive or expired countdown reads as zero instead of unknown, so
+        # dashboards and templates keep a numeric state.
+        return 0
     return snapshot.manual_mode.remaining_minutes(dt_util.utcnow())
 
 

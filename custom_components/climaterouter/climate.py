@@ -259,7 +259,7 @@ class RouterClimate(RouterEntity, ClimateEntity):
             "manual_remaining_minutes": (
                 snapshot.manual_mode.remaining_minutes(dt_util.utcnow())
                 if snapshot.manual_mode is not None
-                else None
+                else 0
             ),
             "ui_lock_active": snapshot.locked,
             "schedule_lock_active": snapshot.schedule_locked,

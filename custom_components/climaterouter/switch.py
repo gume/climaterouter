@@ -49,7 +49,7 @@ class RouterManualModeSwitch(RouterEntity, SwitchEntity):
             "remaining_minutes": (
                 snapshot.manual_mode.remaining_minutes(dt_util.utcnow())
                 if snapshot.manual_mode is not None
-                else None
+                else 0
             ),
         }
 
