@@ -1,6 +1,6 @@
 # Handover — ClimateRouter
 
-**Date:** 2026-11-10
+**Date:** 2026-11-11
 **Branch:** `main`
 **Relevant commits:**
 
@@ -112,6 +112,7 @@
 | `2aaf9d1` | `docs: record the published 0.8.6 release` |
 | `fe3168d` | `chore: bump version to 0.8.7` |
 | `e8380bb` | `fix: clarify the config field labels` |
+| `74ef5c6` | `fix: size the Velair pause to the remaining manual time` |
 
 Everything through `d0e990d` is on `origin/main`; `v0.8.4` is tagged and released, and the 0.8.5 commits
 (`cf53fc8`, `f0d423c`) add the scheduler/manual fix. The test instance still runs the Marketplace release
@@ -124,8 +125,9 @@ and the AC idle bypass. It was published on 2026-11-10 but has not been installe
 follows it with a release-helper fix that reports an already published version cleanly instead of failing on an
 empty commit range. The **0.8.7** release (tag/release `v0.8.7`, commit `0d96b48`) is a maintenance release with
 the release-helper fix and documentation, and no integration behaviour changes. **0.8.8** (tag/release `v0.8.8`,
-commit `9ca79ad`, published 2026-11-10) adds the config field-label review (issue 4). Neither has been installed
-or live-verified yet.
+commit `9ca79ad`, published 2026-11-10) adds the config field-label review (issue 4). **0.8.9** (code commit
+`74ef5c6`, pending release) sizes the Velair pause to the remaining manual time. None of 0.8.6–0.8.9 has been
+installed or live-verified yet.
 
 ---
 
@@ -199,6 +201,12 @@ notes. It contains no integration behaviour changes.
 
 Version **0.8.8** is the config field-label review (issue 4). Only user-facing labels changed; storage keys and
 routing/climate behaviour are untouched. Tag/release `v0.8.8` on `9ca79ad`, published 2026-11-10.
+
+Version **0.8.9** fixes the Velair pause length (owner issue in `issues.txt`). `velair.pause` now receives
+`duration_minutes` equal to the remaining manual-mode time at the moment of the call, instead of an open-ended
+pause. The same adjustment is re-sent when the manual timer changes; an infinite manual session still pauses
+Velair without a deadline. Because Velair counts the duration from receipt, the value is recomputed from the
+absolute manual deadline on every call, including a session restored after a restart.
 
 The next developer should start with section 8 (Next steps).
 
@@ -393,9 +401,12 @@ Events fired on the HA bus:
   `manual_remaining_minutes`; the legacy `override` attribute is still present for older cards. A timer that is off
   or expired reports `0` minutes (and the manual-timer select stays `off`) rather than a fake countdown.
 - **Optional Velair integration** (`velair_enabled`, default off): when manual mode starts, including a session
-  restored after a restart, the coordinator calls the global `velair.pause`; when manual mode ends (timer,
-  return-to-schedule, or `off`) it calls `velair.resume_automatic_control` on the ClimateRouter proxy entity. The
-  user's Velair setup is expected to manage the proxy while manual mode is not active.
+  restored after a restart, the coordinator calls the global `velair.pause` with `duration_minutes` set to the
+  remaining manual time (Velair counts from receipt, so this is recomputed from the absolute deadline). Changing
+  the manual timer re-sends the pause with the new remaining time; an infinite manual session pauses Velair
+  without a deadline. When manual mode ends (timer, return-to-schedule, or `off`) the coordinator calls
+  `velair.resume_automatic_control` on the ClimateRouter proxy entity. The user's Velair setup is expected to
+  manage the proxy while manual mode is not active.
 
 ### 3.7 Conflict detection (M5)
 
@@ -728,6 +739,7 @@ ACs; later versions use the two VTherm entities described in section 4.
 | 0.8.6 release published | Tag/release `v0.8.6` on `c002372` (2026-11-10); not installed in the test instance yet |
 | 0.8.7 release published | Tag/release `v0.8.7` on `0d96b48` (2026-11-10); release-helper fix and docs only |
 | 0.8.8 release published | Tag/release `v0.8.8` on `9ca79ad` (2026-11-10); pending Marketplace install and live check |
+| 0.8.9 release candidate | `74ef5c6` sizes `velair.pause` to the remaining manual minutes; covered by automated tests, pending release/install and live check |
 
 The owner reports live verification through version **0.8.0** for M4 manual mode, M5 conflicts, M6 boost, the native
 lock, the 0.8.0 proxy rework, and the read-only VTherm display pass-through. The live instance currently runs the
@@ -1016,6 +1028,14 @@ filed names") is the only open item and is intentionally skipped for this batch.
 - [x] Tag/release published as `v0.8.8` (`9ca79ad`) on 2026-11-10.
 - [ ] Owner: refresh the Marketplace, install 0.8.8 and record the live result.
 - [ ] Live verification in the test HA after the Marketplace update is installed.
+
+### 8.8 0.8.9 Velair pause length
+
+- [x] `velair.pause` receives `duration_minutes` equal to the remaining manual minutes, recomputed from the
+      absolute deadline on manual start, timer change and restore (`74ef5c6`).
+- [x] Integration tests cover the original duration, a restored session with 37 of 45 minutes left, a timer
+      change to 25 minutes, and the open-ended pause when the countdown is switched off; full suite 165 passed.
+- [ ] Release 0.8.9 and verify live that a manual session with 37 minutes left pauses Velair for 37 minutes.
 
 ---
 

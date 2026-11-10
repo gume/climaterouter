@@ -1,48 +1,11 @@
 # ClimateRouter issue tracker
 
-Owner-reported issues, last updated 2026-11-10 for release 0.8.8.
-
-## Resolved
-
-- [x] **Fan setting should be proxied from the AC unit. Store it, but apply it only if the AC is active.**
-  Resolved in `16e56ca`. The climate entity exposes `fan_mode`/`fan_modes`, stores fan changes in the desired
-  state, applies them only to an active AC and replays them on handover. A fan change never starts or extends
-  manual mode.
-
-- [x] **Remaining-time display: off or 0 when expired.**
-  Resolved in `2bbaae5`. `manual_remaining` and `boost_remaining` report `0` minutes when the timer is off or
-  expired, the climate/select `remaining_minutes` attributes report `0`, and the manual-timer select stays `off`.
-
-- [x] **Diagnostic values are not in the diagnostic section.**
-  Resolved in `15e50c7`. Active/pending target, route reason, conflict detail, target-mismatch detail and the other
-  explanatory read-only entities are now `EntityCategory.DIAGNOSTIC`; the route-override/manual-timer selects and
-  the recalculate/clear-conflict buttons are `EntityCategory.CONFIG`.
-
-- [x] **Velair integration: call `velair.pause` and `velair.resume_automatic_control`.**
-  Resolved in `f9dd2b1`. Opt-in with `velair_enabled`. Manual-mode start (including a restored session) calls
-  `velair.pause`; manual-mode end calls `velair.resume_automatic_control` on the ClimateRouter proxy.
-
-- [x] **When the AC is active and idle, optionally set a low setpoint on the underlying climate.**
-  Resolved in `e4c829b` as the "AC idle bypass". The device entity is auto-detected from
-  `vtherm_over_climate.underlying_entities` or configured explicitly. The setpoint is the VTherm preset
-  temperature (`frost`, `eco` or `comfort`; default `frost`). The fixed 7 °C option was deliberately not added;
-  only the preset-temperature mode was kept. ClimateRouter does not restore the device setpoint; the VTherm is
-  expected to restore its own setpoint when heating resumes.
-
-- [x] **Overview on the field names.**
-  Resolved in 0.8.8 (`e8380bb`). The config/options labels were reviewed and clarified: outdoor cold/mild
-  thresholds, route dwell and handover idle confirmation, non-selected/idle conflict resolution, the AC idle
-  bypass device/flag/preset, Velair manual pause, and boost no longer marked experimental. Storage keys were
-  deliberately kept stable so existing entries keep working; this was a label/UX review, not a schema rename.
+- [x] Velair integration is there, but the amount of pause is wrong. This pause should be the same length as it is with the manual mode. So if there is 37 minutes left, then the pause should be adjusted for 37 minutes. Velair counts the duration from the receival of the command.
+  Resolved in `74ef5c6` (0.8.9). `velair.pause` now receives `duration_minutes` computed from the manual
+  deadline at the moment of the call (start, timer change, or restored session), so a session with 37 minutes
+  left pauses Velair for 37 minutes. An infinite manual session still pauses Velair without a deadline.
 
 ## Open
 
 None.
 
-## Notes
-
-- Release 0.8.8 (tag `v0.8.8`, commit `9ca79ad`) contains the config field-label review and is published, but not
-  installed. None of 0.8.6, 0.8.7 or 0.8.8 has been verified in the live test Home Assistant yet; see
-  `docs/HANDOVER.md` §8.7.
-- This file is the owner-facing issue list. Implementation detail and verification status live in
-  `docs/HANDOVER.md`.

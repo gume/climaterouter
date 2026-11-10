@@ -31,7 +31,7 @@ Scheduler / User UI / Automations
 
 ## Status
 
-**M1–M6 implemented, plus the 0.8.x proxy rework (current version 0.8.8).** The integration package provides the config flow, proxy climate
+**M1–M6 implemented, plus the 0.8.x proxy rework (current version 0.8.9).** The integration package provides the config flow, proxy climate
 entity, outdoor routing, safe handover, proxy-owned manual mode/timer, conflict detection, feature-flagged boost,
 two separate locks, status entities, services and diagnostics. See [`docs/HANDOVER.md`](docs/HANDOVER.md) for the
 exact state, test results, known gaps and next steps.
@@ -82,7 +82,7 @@ user-initiated commands; schedule and automation traffic keeps running. See
 | Boost | `climaterouter.set_boost` runs both targets for a bounded time when `boost_enabled` is on; heat-only, both targets must be available, and ending boost hands back to single-target routing. |
 | AC fan proxy | The AC fan mode is mirrored, stored while the AC is inactive, and applied or replayed only when the AC is active. Fan changes do not start manual mode. |
 | AC idle bypass | Optional: while the AC VTherm reports idle in heat mode, write a `frost`/`eco`/`comfort` preset temperature to the device thermostat below it. The VTherm restores its own setpoint when heating resumes. |
-| Velair | Optional: pause Velair when manual mode starts and resume automatic control on the ClimateRouter proxy when it ends. |
+| Velair | Optional: pause Velair for the remaining manual time when manual mode starts and resume automatic control on the ClimateRouter proxy when it ends. |
 | Two locks | Optional `lock.climaterouter_lock` (UI lock, user commands only) with a 4–8 digit code and auto-relock; `manual_blocks_schedule` keeps scheduler/automation moves out of manual mode and remembers the latest schedule state. |
 
 ## Planned entities
