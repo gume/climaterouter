@@ -41,7 +41,8 @@ None.
 
 ## Notes
 
-- Release 0.8.8 contains the config field-label review. None of 0.8.6, 0.8.7 or 0.8.8 has been verified in the
-  live test Home Assistant yet; see `docs/HANDOVER.md` §8.7.
+- Release 0.8.8 (tag `v0.8.8`, commit `9ca79ad`) contains the config field-label review and is published, but not
+  installed. None of 0.8.6, 0.8.7 or 0.8.8 has been verified in the live test Home Assistant yet; see
+  `docs/HANDOVER.md` §8.7.
 - This file is the owner-facing issue list. Implementation detail and verification status live in
   `docs/HANDOVER.md`.

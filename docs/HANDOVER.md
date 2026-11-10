@@ -123,8 +123,9 @@ the Marketplace refresh/restart, install it and record the live result. The **0.
 and the AC idle bypass. It was published on 2026-11-10 but has not been installed or verified live yet. `28ae295`
 follows it with a release-helper fix that reports an already published version cleanly instead of failing on an
 empty commit range. The **0.8.7** release (tag/release `v0.8.7`, commit `0d96b48`) is a maintenance release with
-the release-helper fix and documentation, and no integration behaviour changes. **0.8.8** adds the config
-field-label review (issue 4) on top; it is pending the owner's push.
+the release-helper fix and documentation, and no integration behaviour changes. **0.8.8** (tag/release `v0.8.8`,
+commit `9ca79ad`, published 2026-11-10) adds the config field-label review (issue 4). Neither has been installed
+or live-verified yet.
 
 ---
 
@@ -197,7 +198,7 @@ failed when re-run after a release because it used the current tag as the previo
 notes. It contains no integration behaviour changes.
 
 Version **0.8.8** is the config field-label review (issue 4). Only user-facing labels changed; storage keys and
-routing/climate behaviour are untouched.
+routing/climate behaviour are untouched. Tag/release `v0.8.8` on `9ca79ad`, published 2026-11-10.
 
 The next developer should start with section 8 (Next steps).
 
@@ -726,7 +727,7 @@ ACs; later versions use the two VTherm entities described in section 4.
 | 0.8.5 release published | Tag/release `v0.8.5` cut from this handover commit; pending Marketplace install and live check |
 | 0.8.6 release published | Tag/release `v0.8.6` on `c002372` (2026-11-10); not installed in the test instance yet |
 | 0.8.7 release published | Tag/release `v0.8.7` on `0d96b48` (2026-11-10); release-helper fix and docs only |
-| 0.8.8 release prepared | Config field-label review (`e8380bb`); pending the owner's push |
+| 0.8.8 release published | Tag/release `v0.8.8` on `9ca79ad` (2026-11-10); pending Marketplace install and live check |
 
 The owner reports live verification through version **0.8.0** for M4 manual mode, M5 conflicts, M6 boost, the native
 lock, the 0.8.0 proxy rework, and the read-only VTherm display pass-through. The live instance currently runs the
@@ -1012,7 +1013,8 @@ filed names") is the only open item and is intentionally skipped for this batch.
 - [x] Release helper reports an already published version cleanly (`28ae295`).
 - [x] 0.8.7 maintenance release published: `v0.8.7` on `0d96b48`, containing the release-helper fix and docs.
 - [x] Config field-label review applied and committed (`e8380bb`); ships in 0.8.8.
-- [ ] Owner: run `scripts/release.sh --push` for 0.8.8, refresh the Marketplace and install it.
+- [x] Tag/release published as `v0.8.8` (`9ca79ad`) on 2026-11-10.
+- [ ] Owner: refresh the Marketplace, install 0.8.8 and record the live result.
 - [ ] Live verification in the test HA after the Marketplace update is installed.
 
 ---
