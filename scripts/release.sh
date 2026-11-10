@@ -146,7 +146,7 @@ fi
 VERSION="$version_from_manifest"
 TAG="v$VERSION"
 
-PREVIOUS_TAG="$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)"
+PREVIOUS_TAG="$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude "$TAG" HEAD 2>/dev/null || true)"
 if [[ -n "$PREVIOUS_TAG" ]]; then
   RANGE="$PREVIOUS_TAG..HEAD"
 else
@@ -155,12 +155,38 @@ fi
 
 TAG_AT_HEAD=0
 if git rev-parse --verify --quiet "refs/tags/$TAG" >/dev/null; then
-  if [[ "$(git rev-list -n1 "$TAG")" == "$(git rev-parse HEAD)" ]]; then
+  tag_commit="$(git rev-list -n1 "$TAG")"
+  if [[ "$tag_commit" == "$(git rev-parse HEAD)" ]]; then
     TAG_AT_HEAD=1
-    warn "tag $TAG already exists at HEAD; it will not be recreated"
   else
-    die "tag $TAG already exists at another commit; bump the version first"
+    commits_since_tag="$(git rev-list --count "$TAG..HEAD")"
+    die "version $VERSION is already released as $TAG (tag at ${tag_commit:0:7}). $commits_since_tag commit(s) have been made since; bump the version in manifest.json, const.py and pyproject.toml to publish them."
   fi
+fi
+
+gh_release_exists() {
+  command -v gh >/dev/null 2>&1 || return 1
+  gh auth status >/dev/null 2>&1 || return 1
+  gh release view "$TAG" >/dev/null 2>&1
+}
+
+remote_tag_exists() {
+  git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1
+}
+
+# Version tag already at HEAD: it is only a real no-op when main and the tag are
+# pushed and (if requested) the GitHub release exists. Otherwise continue so the
+# missing part can be completed.
+if (( TAG_AT_HEAD )) && (( AHEAD == 0 )); then
+  if remote_tag_exists && { (( ! CREATE_RELEASE )) || gh_release_exists; }; then
+    printf 'Version %s is already released: tag %s is at HEAD' "$VERSION" "$TAG"
+    if (( CREATE_RELEASE )); then
+      printf ' and the GitHub release exists'
+    fi
+    printf '.\nNothing to do. Bump the version in manifest.json, const.py and pyproject.toml to prepare the next release.\n'
+    exit 0
+  fi
+  warn "tag $TAG already exists at HEAD; only the missing part of the release will be completed"
 fi
 
 if [[ -n "$PREVIOUS_TAG" ]]; then
