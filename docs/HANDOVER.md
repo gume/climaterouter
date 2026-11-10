@@ -108,15 +108,18 @@
 | `15e50c7` | `fix: group diagnostic and configuration entities correctly` |
 | `f9dd2b1` | `feat: optionally pause Velair during manual mode` |
 | `e4c829b` | `feat: stop the AC device thermostat while the VTherm is idle` |
+| `28ae295` | `fix: report an already published release instead of failing` |
 
 Everything through `d0e990d` is on `origin/main`; `v0.8.4` is tagged and released, and the 0.8.5 commits
 (`cf53fc8`, `f0d423c`) add the scheduler/manual fix. The test instance still runs the Marketplace release
 **v0.8.3** (tag `v0.8.3`, commit `723c5c0`): `update.climaterouter` reported `installed_version` =
 `latest_version` = `v0.8.3` at the last live check. The 0.8.4 release was published on 2026-11-09 but has not yet
 been installed in the test instance. The 0.8.5 release is cut from the commit that adds this handover update; after
-the Marketplace refresh/restart, install it and record the live result. The **0.8.6** commits (`16e56ca` through
-`e4c829b`) add the fan proxy, inactive-timer reporting, diagnostic grouping, opt-in Velair pause, and the AC idle
-bypass. None of 0.8.4–0.8.6 has been verified live yet.
+the Marketplace refresh/restart, install it and record the live result. The **0.8.6** release (tag/release
+`v0.8.6`, commit `c002372`) adds the fan proxy, inactive-timer reporting, diagnostic grouping, opt-in Velair pause,
+and the AC idle bypass. It was published on 2026-11-10 but has not been installed or verified live yet. `28ae295`
+follows it with a release-helper fix that reports an already published version cleanly instead of failing on an
+empty commit range.
 
 ---
 
@@ -690,6 +693,7 @@ ACs; later versions use the two VTherm entities described in section 4.
 | 0.8.3 live state (2026-11-09) | `active_target` = `ac`, `pending_target` = `none`, `route_reason` = `fallback_outdoor`, `outdoor_sensor_stale` = `on`, `target_mismatch` = `on` (radiator off at 23.0/none vs AC heat at 20.5/comfort), `conflict` = `off`, manual timer select `unavailable` (the 0.8.4 `off` badge is not installed) |
 | 0.8.4 release published | Tag/release `v0.8.4` on `9134b58` (2026-11-09); not installed in the test instance yet |
 | 0.8.5 release published | Tag/release `v0.8.5` cut from this handover commit; pending Marketplace install and live check |
+| 0.8.6 release published | Tag/release `v0.8.6` on `c002372` (2026-11-10); not installed in the test instance yet |
 
 The owner reports live verification through version **0.8.0** for M4 manual mode, M5 conflicts, M6 boost, the native
 lock, the 0.8.0 proxy rework, and the read-only VTherm display pass-through. The live instance currently runs the
@@ -770,7 +774,7 @@ section 8.2 for the full list.
    scheduler/manual protection, and the conflict/mismatch detail sensors. Do not re-add the old
    `custom_components/climaterouter` bind mount: it makes the folder a mount point (`EBUSY`) and the Marketplace
    cannot back it up before replacing it.
-2. After 0.8.6 is pushed, refresh the Marketplace and verify:
+2. 0.8.6 is pushed and released as `v0.8.6` (`c002372`). Refresh the Marketplace and verify:
    - the fan mode card control mirrors the AC and survives a handover;
    - inactive manual/boost timers show `0`/`off`, not `unknown`;
    - diagnostic entities are grouped separately and configuration controls show under configuration;
@@ -971,7 +975,9 @@ filed names") is the only open item and is intentionally skipped for this batch.
 - [x] Optional AC idle bypass using the VTherm `frost`/`eco`/`comfort` preset temperature, with explicit or
       auto-detected device entity (`e4c829b`).
 - [x] Integration tests for all five features and the new config-flow fields; full suite 164 passed.
-- [ ] Live verification in the test HA after the owner pushes and the Marketplace update is installed.
+- [x] Tag/release published as `v0.8.6` (`c002372`) on 2026-11-10.
+- [x] Release helper reports an already published version cleanly (`28ae295`).
+- [ ] Live verification in the test HA after the Marketplace update is installed.
 
 ---
 
