@@ -1,6 +1,6 @@
 [project]
 name = "climaterouter"
-version = "0.8.6"
+version = "0.8.7"
 description = "Home Assistant climate proxy that routes between a radiator and an AC VTherm"
 requires-python = ">=3.12"
 license = { text = "MIT" }

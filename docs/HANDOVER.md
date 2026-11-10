@@ -109,6 +109,7 @@
 | `f9dd2b1` | `feat: optionally pause Velair during manual mode` |
 | `e4c829b` | `feat: stop the AC device thermostat while the VTherm is idle` |
 | `28ae295` | `fix: report an already published release instead of failing` |
+| `2aaf9d1` | `docs: record the published 0.8.6 release` |
 
 Everything through `d0e990d` is on `origin/main`; `v0.8.4` is tagged and released, and the 0.8.5 commits
 (`cf53fc8`, `f0d423c`) add the scheduler/manual fix. The test instance still runs the Marketplace release
@@ -119,7 +120,9 @@ the Marketplace refresh/restart, install it and record the live result. The **0.
 `v0.8.6`, commit `c002372`) adds the fan proxy, inactive-timer reporting, diagnostic grouping, opt-in Velair pause,
 and the AC idle bypass. It was published on 2026-11-10 but has not been installed or verified live yet. `28ae295`
 follows it with a release-helper fix that reports an already published version cleanly instead of failing on an
-empty commit range.
+empty commit range. **0.8.7** is a maintenance release cut from this handover commit: it contains only the
+release-helper fix and documentation, with no integration behaviour changes. After the owner pushes it, refresh
+the Marketplace and install it.
 
 ---
 
@@ -186,6 +189,10 @@ Version **0.8.6** implements the first batch of owner-reported issues (`issues.t
    the VTherm is expected to restore its own setpoint when heating resumes.
 
 Issue 4 in `issues.txt` ("overview on the filed names") was intentionally skipped by the owner for this batch.
+
+Version **0.8.7** is a maintenance release. It publishes the fixed `scripts/release.sh` (the previous version
+failed when re-run after a release because it used the current tag as the previous one) and the updated handover
+notes. It contains no integration behaviour changes.
 
 The next developer should start with section 8 (Next steps).
 
@@ -694,6 +701,7 @@ ACs; later versions use the two VTherm entities described in section 4.
 | 0.8.4 release published | Tag/release `v0.8.4` on `9134b58` (2026-11-09); not installed in the test instance yet |
 | 0.8.5 release published | Tag/release `v0.8.5` cut from this handover commit; pending Marketplace install and live check |
 | 0.8.6 release published | Tag/release `v0.8.6` on `c002372` (2026-11-10); not installed in the test instance yet |
+| 0.8.7 release prepared | Version bumped to 0.8.7; maintenance release with the release-helper fix only, pending the owner's push |
 
 The owner reports live verification through version **0.8.0** for M4 manual mode, M5 conflicts, M6 boost, the native
 lock, the 0.8.0 proxy rework, and the read-only VTherm display pass-through. The live instance currently runs the
@@ -977,6 +985,9 @@ filed names") is the only open item and is intentionally skipped for this batch.
 - [x] Integration tests for all five features and the new config-flow fields; full suite 164 passed.
 - [x] Tag/release published as `v0.8.6` (`c002372`) on 2026-11-10.
 - [x] Release helper reports an already published version cleanly (`28ae295`).
+- [x] 0.8.7 maintenance release prepared: version aligned in `manifest.json`, `const.py` and `pyproject.toml`;
+      it contains only the release-helper fix and documentation.
+- [ ] Owner: run `scripts/release.sh --push`, refresh the Marketplace and install 0.8.7.
 - [ ] Live verification in the test HA after the Marketplace update is installed.
 
 ---
