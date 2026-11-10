@@ -51,12 +51,14 @@
             "data": {
               "default_manual_minutes": "Default manual timer (0 = no timer)",
               "max_manual_minutes": "Maximum manual timer",
-              "manual_blocks_schedule": "Block schedule/automation commands while manual"
+              "manual_blocks_schedule": "Block schedule/automation commands while manual",
+              "velair_enabled": "Pause Velair during manual mode"
             },
             "data_description": {
               "default_manual_minutes": "Timer for a new manual session. 0 keeps manual mode active until ended.",
               "max_manual_minutes": "Upper limit for the manual timer.",
-              "manual_blocks_schedule": "Keep schedule and automation commands out while manual mode is active. The latest schedule state is remembered and applied when manual mode ends. User commands still work."
+              "manual_blocks_schedule": "Keep schedule and automation commands out while manual mode is active. The latest schedule state is remembered and applied when manual mode ends. User commands still work.",
+              "velair_enabled": "Call velair.pause when manual mode starts and resume automatic control on the ClimateRouter proxy when it ends."
             }
           },
           "conflicts": {
@@ -163,12 +165,14 @@
             "data": {
               "default_manual_minutes": "Default manual timer (0 = no timer)",
               "max_manual_minutes": "Maximum manual timer",
-              "manual_blocks_schedule": "Block schedule/automation commands while manual"
+              "manual_blocks_schedule": "Block schedule/automation commands while manual",
+              "velair_enabled": "Pause Velair during manual mode"
             },
             "data_description": {
               "default_manual_minutes": "Timer for a new manual session. 0 keeps manual mode active until ended.",
               "max_manual_minutes": "Upper limit for the manual timer.",
-              "manual_blocks_schedule": "Keep schedule and automation commands out while manual mode is active. The latest schedule state is remembered and applied when manual mode ends. User commands still work."
+              "manual_blocks_schedule": "Keep schedule and automation commands out while manual mode is active. The latest schedule state is remembered and applied when manual mode ends. User commands still work.",
+              "velair_enabled": "Call velair.pause when manual mode starts and resume automatic control on the ClimateRouter proxy when it ends."
             }
           },
           "conflicts": {
@@ -304,12 +308,14 @@
         "data": {
           "default_manual_minutes": "Default manual timer (0 = no timer)",
           "max_manual_minutes": "Maximum manual timer",
-          "manual_blocks_schedule": "Block schedule/automation commands while manual"
+          "manual_blocks_schedule": "Block schedule/automation commands while manual",
+          "velair_enabled": "Pause Velair during manual mode"
         },
         "data_description": {
           "default_manual_minutes": "Timer for a new manual session. 0 keeps manual mode active until ended.",
           "max_manual_minutes": "Upper limit for the manual timer.",
-          "manual_blocks_schedule": "Keep schedule and automation commands out while manual mode is active. The latest schedule state is remembered and applied when manual mode ends. User commands still work."
+          "manual_blocks_schedule": "Keep schedule and automation commands out while manual mode is active. The latest schedule state is remembered and applied when manual mode ends. User commands still work.",
+          "velair_enabled": "Call velair.pause when manual mode starts and resume automatic control on the ClimateRouter proxy when it ends."
         }
       },
       "conflicts": {

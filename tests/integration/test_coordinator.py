@@ -1482,3 +1482,42 @@ async def test_fan_mode_validation(hass) -> None:
     await hass.async_block_till_done()
     with pytest.raises(HomeAssistantError):
         await coordinator.async_set_fan_mode("low")
+
+
+async def test_manual_mode_pauses_and_resumes_velair(hass) -> None:
+    """Velair is paused on manual start and resumed on the proxy when it ends."""
+    _entry, coordinator = await _setup(hass, velair_enabled=True)
+    pause = async_mock_service(hass, "velair", "pause")
+    resume = async_mock_service(hass, "velair", "resume_automatic_control")
+
+    await coordinator.async_enter_manual_mode(temperature=22, duration_minutes=30, context=USER)
+    await hass.async_block_till_done()
+
+    assert len(pause) == 1
+    assert resume == []
+    assert coordinator.climate_entity_id is not None
+
+    # A further move must not pause Velair again.
+    await coordinator.async_set_temperature(temperature=23, context=USER)
+    await hass.async_block_till_done()
+    assert len(pause) == 1
+
+    await coordinator.async_return_to_schedule()
+    await hass.async_block_till_done()
+
+    assert len(resume) == 1
+    assert resume[-1].data == {"entity_id": coordinator.climate_entity_id}
+
+
+async def test_velair_calls_are_opt_in(hass) -> None:
+    """Without the option, ClimateRouter leaves Velair alone."""
+    _entry, coordinator = await _setup(hass)
+    pause = async_mock_service(hass, "velair", "pause")
+    resume = async_mock_service(hass, "velair", "resume_automatic_control")
+
+    await coordinator.async_enter_manual_mode(temperature=22, duration_minutes=30, context=USER)
+    await coordinator.async_return_to_schedule()
+    await hass.async_block_till_done()
+
+    assert pause == []
+    assert resume == []

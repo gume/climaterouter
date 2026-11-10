@@ -46,6 +46,7 @@ CONF_LOCK_ENABLED: Final = "lock_enabled"
 CONF_LOCK_CODE: Final = "lock_code"
 CONF_AUTO_RELOCK_SEC: Final = "auto_relock_sec"
 CONF_EXPOSE_VTHERM_IDENTITY: Final = "expose_vtherm_identity"
+CONF_VELAIR_ENABLED: Final = "velair_enabled"
 
 CONFLICT_POLICIES: Final = ["monitor", "reassert", "adopt"]
 

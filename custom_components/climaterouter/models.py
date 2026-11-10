@@ -543,6 +543,7 @@ class RouterConfig:
     auto_relock_sec: int = DEFAULT_AUTO_RELOCK_SEC
     manual_blocks_schedule: bool = True
     expose_vtherm_identity: bool = False
+    velair_enabled: bool = False
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> RouterConfig:
@@ -598,6 +599,7 @@ class RouterConfig:
             auto_relock_sec=_int("auto_relock_sec", DEFAULT_AUTO_RELOCK_SEC),
             manual_blocks_schedule=_bool("manual_blocks_schedule", True),
             expose_vtherm_identity=_bool("expose_vtherm_identity", False),
+            velair_enabled=_bool("velair_enabled", False),
         )
 
 

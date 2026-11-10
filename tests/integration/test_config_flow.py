@@ -41,6 +41,7 @@ from custom_components.climaterouter.const import (
     CONF_OUTDOOR_STALE_AFTER,
     CONF_RADIATOR_ENTITY_ID,
     CONF_TEMPERATURE_TOLERANCE,
+    CONF_VELAIR_ENABLED,
     DOMAIN,
 )
 
@@ -501,3 +502,30 @@ def test_flatten_sections_keeps_legacy_scalars() -> None:
         "a": 1,
         "legacy_key": 2,
     }
+
+
+async def test_options_manual_section_saves_velair_flag(hass) -> None:
+    """The manual section persists the opt-in Velair integration flag."""
+    _set_entities(hass)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Test Router",
+        data=_form_input()["basic"],
+        unique_id=f"{RADIATOR}|{AC}",
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": SECTION_MANUAL}
+    )
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_VELAIR_ENABLED: True}
+    )
+
+    assert result["type"] is data_entry_flow.FlowResultType.MENU
+    assert entry.data[CONF_VELAIR_ENABLED] is True

@@ -179,6 +179,8 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._refresh_inputs()
         if self._manual is not None:
             self._schedule_manual_expiry()
+            # A restored manual session must continue to keep Velair out.
+            await self._async_velair_pause()
         if self._boost is not None:
             self._schedule_boost_expiry()
         if self._auto_relock_at is not None:
@@ -230,6 +232,8 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._cancel_manual_timer()
         self._cancel_boost_timer()
         self._cancel_auto_relock()
+        if self._manual is not None:
+            await self._async_velair_resume()
         await self._store.async_save(self._data_to_save())
 
     # ------------------------------------------------------------------
@@ -557,6 +561,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
                 baseline=self._baseline.copy(),
                 timer_minutes=timer,
             )
+            await self._async_velair_pause()
             self.hass.bus.async_fire(
                 EVENT_MANUAL_MODE_STARTED,
                 {
@@ -604,6 +609,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             baseline=self._baseline.copy(),
             timer_minutes=timer,
         )
+        self.hass.async_create_task(self._async_velair_pause())
         self._schedule_manual_expiry()
         self._store.async_delay_save(self._data_to_save, 1)
         self.hass.bus.async_fire(
@@ -703,6 +709,39 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         )
         self._publish()
 
+    async def _async_velair_pause(self) -> None:
+        """Pause Velair's schedule while proxy-owned manual mode is active."""
+        if not self.config.velair_enabled:
+            return
+        if not self.hass.services.has_service("velair", "pause"):
+            _LOGGER.debug("Velair is enabled but velair.pause is not registered")
+            return
+        try:
+            await self.hass.services.async_call("velair", "pause", {}, blocking=True)
+        except HomeAssistantError as err:
+            _LOGGER.warning("Failed to pause Velair: %s", err)
+
+    async def _async_velair_resume(self) -> None:
+        """Resume Velair automatic control for the ClimateRouter proxy."""
+        if not self.config.velair_enabled:
+            return
+        entity_id = self.climate_entity_id
+        if not entity_id:
+            _LOGGER.debug("Cannot resume Velair before the proxy entity exists")
+            return
+        if not self.hass.services.has_service("velair", "resume_automatic_control"):
+            _LOGGER.debug("Velair is enabled but velair.resume_automatic_control is not registered")
+            return
+        try:
+            await self.hass.services.async_call(
+                "velair",
+                "resume_automatic_control",
+                {"entity_id": entity_id},
+                blocking=True,
+            )
+        except HomeAssistantError as err:
+            _LOGGER.warning("Failed to resume Velair: %s", err)
+
     async def async_return_to_schedule(self, cause: str = "return_to_schedule") -> None:
         """End manual mode and restore the latest schedule command."""
         if self._manual is None:
@@ -728,6 +767,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._cancel_manual_timer()
         self._manual = None
         self._sync_desired()
+        self.hass.async_create_task(self._async_velair_resume())
         self.hass.bus.async_fire(
             EVENT_MANUAL_MODE_ENDED,
             {

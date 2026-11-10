@@ -52,6 +52,7 @@ from .const import (
     CONF_SETTLE_TIME,
     CONF_STARTUP_GRACE,
     CONF_TEMPERATURE_TOLERANCE,
+    CONF_VELAIR_ENABLED,
     CONFLICT_POLICIES,
     DOMAIN,
 )
@@ -133,6 +134,7 @@ def _defaults(current: Mapping[str, Any] | None = None) -> dict[str, Any]:
         CONF_LOCK_CODE: current.get(CONF_LOCK_CODE, ""),
         CONF_AUTO_RELOCK_SEC: current.get(CONF_AUTO_RELOCK_SEC, DEFAULT_AUTO_RELOCK_SEC),
         CONF_EXPOSE_VTHERM_IDENTITY: current.get(CONF_EXPOSE_VTHERM_IDENTITY, False),
+        CONF_VELAIR_ENABLED: current.get(CONF_VELAIR_ENABLED, False),
     }
 
 
@@ -213,6 +215,10 @@ def _manual_schema(defaults: Mapping[str, Any]) -> vol.Schema:
             vol.Required(
                 CONF_MANUAL_BLOCKS_SCHEDULE,
                 default=defaults[CONF_MANUAL_BLOCKS_SCHEDULE],
+            ): BooleanSelector(),
+            vol.Required(
+                CONF_VELAIR_ENABLED,
+                default=defaults[CONF_VELAIR_ENABLED],
             ): BooleanSelector(),
         }
     )
