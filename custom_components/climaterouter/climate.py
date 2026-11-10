@@ -50,6 +50,7 @@ class RouterClimate(RouterEntity, ClimateEntity):
     _attr_supported_features = (
         ClimateEntityFeature.TARGET_TEMPERATURE
         | ClimateEntityFeature.PRESET_MODE
+        | ClimateEntityFeature.FAN_MODE
         | ClimateEntityFeature.TURN_ON
         | ClimateEntityFeature.TURN_OFF
     )
@@ -86,6 +87,26 @@ class RouterClimate(RouterEntity, ClimateEntity):
     @property
     def preset_modes(self) -> list[str]:
         return list(self._snapshot.preset_modes)
+
+    @property
+    def fan_modes(self) -> list[str] | None:
+        """Return the AC fan modes, or ``None`` when the AC has none."""
+        return list(self._snapshot.fan_modes) or None
+
+    @property
+    def fan_mode(self) -> str | None:
+        """Return the AC fan mode, preferring a fresh proxy command."""
+        desired = self._snapshot.desired
+        if self._optimistic and desired.fan_mode is not None:
+            return desired.fan_mode
+        ac_state = self._snapshot.targets.get(Target.AC)
+        if (
+            Target.AC in self._snapshot.active_targets
+            and ac_state is not None
+            and ac_state.fan_mode is not None
+        ):
+            return ac_state.fan_mode
+        return desired.fan_mode or (ac_state.fan_mode if ac_state is not None else None)
 
     @property
     def min_temp(self) -> float:
@@ -225,9 +246,11 @@ class RouterClimate(RouterEntity, ClimateEntity):
             "desired_hvac_mode": snapshot.desired.hvac_mode,
             "desired_preset_mode": snapshot.desired.preset_mode,
             "desired_temperature": snapshot.desired.target_temperature,
+            "desired_fan_mode": snapshot.desired.fan_mode,
             "active_target_hvac_mode": state.hvac_mode if state else None,
             "active_target_preset_mode": state.preset_mode if state else None,
             "active_target_temperature": state.target_temperature if state else None,
+            "active_target_fan_mode": state.fan_mode if state else None,
             "override": snapshot.manual_mode.to_dict() if snapshot.manual_mode else None,
             "manual_mode": snapshot.manual_mode.to_dict() if snapshot.manual_mode else None,
             "manual_active": snapshot.manual_active,
@@ -255,6 +278,7 @@ class RouterClimate(RouterEntity, ClimateEntity):
                     "hvac_mode": target_state.hvac_mode,
                     "hvac_action": target_state.hvac_action,
                     "preset_mode": target_state.preset_mode,
+                    "fan_mode": target_state.fan_mode,
                     "target_temperature": target_state.target_temperature,
                     "current_temperature": target_state.current_temperature,
                     "guard": target_state.guard,
@@ -280,6 +304,9 @@ class RouterClimate(RouterEntity, ClimateEntity):
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         await self.coordinator.async_set_preset_mode(preset_mode, context=self._context)
+
+    async def async_set_fan_mode(self, fan_mode: str) -> None:
+        await self.coordinator.async_set_fan_mode(fan_mode, context=self._context)
 
     async def async_turn_on(self) -> None:
         await self.coordinator.async_turn_on(context=self._context)

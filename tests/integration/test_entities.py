@@ -337,3 +337,27 @@ async def test_conflict_and_target_mismatch_detail_sensors(hass, freezer) -> Non
     assert mismatch.attributes["reasons"]
     assert mismatch.attributes["radiator_target_temperature"] == 25
     assert mismatch.attributes["ac_target_temperature"] == 18
+
+
+async def test_climate_exposes_the_ac_fan_modes(hass) -> None:
+    """The proxy advertises fan modes from the AC target."""
+    from homeassistant.components.climate import ClimateEntityFeature
+
+    _entry, coordinator = await _setup(hass)
+    hass.states.async_set(
+        AC,
+        STATE_OFF,
+        {
+            "hvac_modes": [HVAC_HEAT, "cool"],
+            "fan_modes": ["low", "high"],
+            "fan_mode": "low",
+        },
+    )
+    await coordinator.async_recalculate()
+    await hass.async_block_till_done()
+
+    state = hass.states.get(coordinator.climate_entity_id)
+    assert state is not None
+    assert state.attributes["fan_modes"] == ["low", "high"]
+    assert state.attributes["fan_mode"] == "low"
+    assert state.attributes["supported_features"] & ClimateEntityFeature.FAN_MODE

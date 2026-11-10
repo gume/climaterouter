@@ -11,6 +11,8 @@ from typing import Any
 
 from homeassistant.components.climate.const import (
     ATTR_CURRENT_TEMPERATURE,
+    ATTR_FAN_MODE,
+    ATTR_FAN_MODES,
     ATTR_HVAC_ACTION,
     ATTR_HVAC_MODES,
     ATTR_MAX_TEMP,
@@ -379,6 +381,27 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             self._start_manual(dt_util.utcnow(), desired=desired)
         else:
             self._apply_setpoint(self._baseline, temperature=None, preset_mode=preset_mode)
+        await self._async_command_received()
+
+    async def async_set_fan_mode(self, fan_mode: str, context: Context | None = None) -> None:
+        """Store a fan mode and apply it only while the AC target is active."""
+        self._ensure_unlocked(context)
+        if not fan_mode:
+            raise HomeAssistantError("No fan mode supplied")
+        ac_state = self._states[Target.AC]
+        if not ac_state.available:
+            raise HomeAssistantError("The AC target is not available")
+        if ac_state.fan_modes and fan_mode not in ac_state.fan_modes:
+            raise HomeAssistantError(f"Unsupported fan mode: {fan_mode}")
+
+        # A fan setting is a device preference, not a setpoint: it never starts
+        # or extends manual mode. While manual mode is active it is stored in
+        # the manual desired state so returning to the schedule does not lose
+        # it, but the timer keeps running.
+        if self._manual is not None:
+            self._manual.desired.fan_mode = fan_mode
+        else:
+            self._baseline.fan_mode = fan_mode
         await self._async_command_received()
 
     async def async_turn_on(self, context: Context | None = None) -> None:
@@ -1535,6 +1558,17 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
                     "set_preset_mode",
                     {"preset_mode": self._desired.preset_mode},
                 )
+
+            if (
+                target is Target.AC
+                and self._desired.fan_mode is not None
+                and self._states[target].fan_mode != self._desired.fan_mode
+            ):
+                await self._async_climate_call(
+                    target,
+                    "set_fan_mode",
+                    {"fan_mode": self._desired.fan_mode},
+                )
         except HomeAssistantError as err:
             _LOGGER.warning("Failed to start %s: %s", target.value, err)
             self._handover_state = HandoverState.CONFLICT
@@ -1599,6 +1633,16 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             await self._async_climate_call(
                 target, "set_preset_mode", {"preset_mode": desired.preset_mode}
             )
+
+        # Fan is AC-only. It is stored even while the radiator is active, but it
+        # is never sent to the radiator or to an AC that is currently off.
+        if (
+            target is Target.AC
+            and desired.fan_mode is not None
+            and state.hvac_mode not in (None, HVAC_OFF)
+            and state.fan_mode != desired.fan_mode
+        ):
+            await self._async_climate_call(target, "set_fan_mode", {"fan_mode": desired.fan_mode})
 
     async def _async_stop_all(self) -> None:
         """Turn off every target that is not already off."""
@@ -1694,6 +1738,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             else SetpointKind.NONE,
             preset_mode=preset,
             target_temperature=state.target_temperature,
+            fan_mode=state.fan_mode,
         )
 
     # ------------------------------------------------------------------
@@ -1874,6 +1919,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             hvac_mode=state.state,
             hvac_action=attrs.get(ATTR_HVAC_ACTION),
             preset_mode=attrs.get(ATTR_PRESET_MODE),
+            fan_mode=attrs.get(ATTR_FAN_MODE),
             target_temperature=_as_float(attrs.get(ATTR_TEMPERATURE)),
             current_temperature=_as_float(attrs.get(ATTR_CURRENT_TEMPERATURE)),
             min_temp=_as_float(attrs.get(ATTR_MIN_TEMP)),
@@ -1881,6 +1927,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             target_temp_step=_as_float(attrs.get(ATTR_TARGET_TEMP_STEP)),
             hvac_modes=tuple(attrs.get(ATTR_HVAC_MODES) or ()),
             preset_modes=tuple(attrs.get(ATTR_PRESET_MODES) or ()),
+            fan_modes=tuple(attrs.get(ATTR_FAN_MODES) or ()),
             last_updated=state.last_updated,
             guard=_extract_guard(attrs),
             timed_preset_active=_is_timed_preset(attrs),
@@ -2000,6 +2047,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             targets=dict(self._states),
             hvac_modes=tuple(hvac_modes),
             preset_modes=tuple(sorted(presets)),
+            fan_modes=ac.fan_modes,
             min_temp=active_state.min_temp or 7.0,
             max_temp=active_state.max_temp or 35.0,
             target_temp_step=active_state.target_temp_step or 0.5,

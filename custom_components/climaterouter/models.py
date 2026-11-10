@@ -81,6 +81,7 @@ class UnderlyingState:
     hvac_mode: str | None = None
     hvac_action: str | None = None
     preset_mode: str | None = None
+    fan_mode: str | None = None
     target_temperature: float | None = None
     current_temperature: float | None = None
     min_temp: float | None = None
@@ -88,6 +89,7 @@ class UnderlyingState:
     target_temp_step: float | None = None
     hvac_modes: tuple[str, ...] = ()
     preset_modes: tuple[str, ...] = ()
+    fan_modes: tuple[str, ...] = ()
     last_updated: datetime | None = None
     guard: str | None = None
     timed_preset_active: bool = False
@@ -407,6 +409,7 @@ class RouterSnapshot:
     targets: dict[Target, UnderlyingState] = field(default_factory=dict)
     hvac_modes: tuple[str, ...] = (HVAC_OFF, HVAC_HEAT)
     preset_modes: tuple[str, ...] = ("none",)
+    fan_modes: tuple[str, ...] = ()
     min_temp: float = 7.0
     max_temp: float = 35.0
     target_temp_step: float = 0.5

@@ -1398,3 +1398,87 @@ async def test_manual_mode_carries_over_handover(hass) -> None:
     assert coordinator.data.manual_mode is not None
     assert coordinator.data.manual_mode.desired.target_temperature == 23
     assert coordinator.data.desired.target_temperature == 23
+
+
+async def test_fan_mode_is_stored_while_the_ac_is_inactive(hass) -> None:
+    """Fan is stored from the AC but never sent to the radiator."""
+    _entry, coordinator = await _setup(hass, outdoor=5.0)
+    hass.states.async_set(
+        AC,
+        STATE_OFF,
+        {
+            "hvac_modes": [HVAC_HEAT, HVAC_COOL],
+            "fan_modes": ["low", "high"],
+            "fan_mode": "low",
+            "min_temp": 16,
+            "max_temp": 30,
+        },
+    )
+    await coordinator.async_set_temperature(temperature=21, hvac_mode=HVAC_HEAT)
+    await hass.async_block_till_done()
+    assert coordinator.data.active_targets == frozenset({Target.RADIATOR})
+
+    calls = async_mock_service(hass, "climate", "set_fan_mode")
+    await coordinator.async_set_fan_mode("high")
+    await hass.async_block_till_done()
+
+    assert calls == []
+    assert coordinator.data.desired.fan_mode == "high"
+    assert coordinator.data.fan_modes == ("low", "high")
+    assert coordinator.data.manual_mode is None
+
+
+async def test_fan_mode_is_replayed_when_the_ac_starts(hass) -> None:
+    """The stored fan setting is applied when a handover starts the AC."""
+    _entry, coordinator = await _setup(hass, outdoor=5.0)
+    hass.states.async_set(
+        AC,
+        STATE_OFF,
+        {
+            "hvac_modes": [HVAC_HEAT, HVAC_COOL],
+            "fan_modes": ["low", "high"],
+            "fan_mode": "low",
+            "min_temp": 16,
+            "max_temp": 30,
+        },
+    )
+    await coordinator.async_set_temperature(temperature=21, hvac_mode=HVAC_HEAT)
+    await hass.async_block_till_done()
+    assert coordinator.data.active_targets == frozenset({Target.RADIATOR})
+
+    calls = async_mock_service(hass, "climate", "set_fan_mode")
+    await coordinator.async_set_fan_mode("high")
+    await hass.async_block_till_done()
+    assert calls == []
+
+    await coordinator.async_set_route_override(ROUTE_AC)
+    await hass.async_block_till_done()
+
+    assert coordinator.data.active_targets == frozenset({Target.AC})
+    assert any(call.data == {"entity_id": AC, "fan_mode": "high"} for call in calls)
+
+
+async def test_fan_mode_validation(hass) -> None:
+    """An unsupported fan mode or an unavailable AC is rejected."""
+    _entry, coordinator = await _setup(hass)
+    hass.states.async_set(
+        AC,
+        STATE_OFF,
+        {
+            "hvac_modes": [HVAC_HEAT, HVAC_COOL],
+            "fan_modes": ["low", "high"],
+            "min_temp": 16,
+            "max_temp": 30,
+        },
+    )
+    await coordinator.async_recalculate()
+    await hass.async_block_till_done()
+
+    with pytest.raises(HomeAssistantError):
+        await coordinator.async_set_fan_mode("turbo")
+
+    hass.states.async_set(AC, "unavailable")
+    await coordinator.async_recalculate()
+    await hass.async_block_till_done()
+    with pytest.raises(HomeAssistantError):
+        await coordinator.async_set_fan_mode("low")
