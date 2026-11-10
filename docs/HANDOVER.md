@@ -110,6 +110,7 @@
 | `e4c829b` | `feat: stop the AC device thermostat while the VTherm is idle` |
 | `28ae295` | `fix: report an already published release instead of failing` |
 | `2aaf9d1` | `docs: record the published 0.8.6 release` |
+| `fe3168d` | `chore: bump version to 0.8.7` |
 
 Everything through `d0e990d` is on `origin/main`; `v0.8.4` is tagged and released, and the 0.8.5 commits
 (`cf53fc8`, `f0d423c`) add the scheduler/manual fix. The test instance still runs the Marketplace release
