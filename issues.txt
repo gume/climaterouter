@@ -1,6 +1,6 @@
 # ClimateRouter issue tracker
 
-Owner-reported issues, last updated 2026-11-10 for release 0.8.6.
+Owner-reported issues, last updated 2026-11-10 for release 0.8.8.
 
 ## Resolved
 
@@ -29,15 +29,19 @@ Owner-reported issues, last updated 2026-11-10 for release 0.8.6.
   only the preset-temperature mode was kept. ClimateRouter does not restore the device setpoint; the VTherm is
   expected to restore its own setpoint when heating resumes.
 
+- [x] **Overview on the field names.**
+  Resolved in 0.8.8 (`e8380bb`). The config/options labels were reviewed and clarified: outdoor cold/mild
+  thresholds, route dwell and handover idle confirmation, non-selected/idle conflict resolution, the AC idle
+  bypass device/flag/preset, Velair manual pause, and boost no longer marked experimental. Storage keys were
+  deliberately kept stable so existing entries keep working; this was a label/UX review, not a schema rename.
+
 ## Open
 
-- [ ] **Overview on the field names.**
-  Deferred by the owner for the 0.8.6 batch. The intent is still unclear: it may mean a review of the config/option
-  field names, a diagnostic overview of the current field values, or an overview of the VTherm fields exposed by
-  the proxy. Clarify before implementing.
+None.
 
 ## Notes
 
-- Release 0.8.6 has not been verified in the live test Home Assistant yet; see `docs/HANDOVER.md` §8.7.
+- Release 0.8.8 contains the config field-label review. None of 0.8.6, 0.8.7 or 0.8.8 has been verified in the
+  live test Home Assistant yet; see `docs/HANDOVER.md` §8.7.
 - This file is the owner-facing issue list. Implementation detail and verification status live in
   `docs/HANDOVER.md`.

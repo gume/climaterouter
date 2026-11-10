@@ -111,6 +111,7 @@
 | `28ae295` | `fix: report an already published release instead of failing` |
 | `2aaf9d1` | `docs: record the published 0.8.6 release` |
 | `fe3168d` | `chore: bump version to 0.8.7` |
+| `e8380bb` | `fix: clarify the config field labels` |
 
 Everything through `d0e990d` is on `origin/main`; `v0.8.4` is tagged and released, and the 0.8.5 commits
 (`cf53fc8`, `f0d423c`) add the scheduler/manual fix. The test instance still runs the Marketplace release
@@ -121,9 +122,9 @@ the Marketplace refresh/restart, install it and record the live result. The **0.
 `v0.8.6`, commit `c002372`) adds the fan proxy, inactive-timer reporting, diagnostic grouping, opt-in Velair pause,
 and the AC idle bypass. It was published on 2026-11-10 but has not been installed or verified live yet. `28ae295`
 follows it with a release-helper fix that reports an already published version cleanly instead of failing on an
-empty commit range. **0.8.7** is a maintenance release cut from this handover commit: it contains only the
-release-helper fix and documentation, with no integration behaviour changes. After the owner pushes it, refresh
-the Marketplace and install it.
+empty commit range. The **0.8.7** release (tag/release `v0.8.7`, commit `0d96b48`) is a maintenance release with
+the release-helper fix and documentation, and no integration behaviour changes. **0.8.8** adds the config
+field-label review (issue 4) on top; it is pending the owner's push.
 
 ---
 
@@ -194,6 +195,9 @@ Issue 4 in `issues.txt` ("overview on the filed names") was intentionally skippe
 Version **0.8.7** is a maintenance release. It publishes the fixed `scripts/release.sh` (the previous version
 failed when re-run after a release because it used the current tag as the previous one) and the updated handover
 notes. It contains no integration behaviour changes.
+
+Version **0.8.8** is the config field-label review (issue 4). Only user-facing labels changed; storage keys and
+routing/climate behaviour are untouched.
 
 The next developer should start with section 8 (Next steps).
 
@@ -550,6 +554,25 @@ All three flows share the same sectioned schema (`config_flow.py`):
   other explanatory read-only entities are `EntityCategory.DIAGNOSTIC`; the route-override/manual-timer selects and
   the recalculate/clear-conflict buttons are `EntityCategory.CONFIG`.
 
+#### 3.11.1 Field-label review (0.8.8)
+
+Issue 4 was a review of the configuration field names. The storage keys were deliberately kept stable so existing
+entries keep working; only the user-facing labels in `strings.json` / `translations/en.json` were clarified:
+
+- Routing: "Outdoor cold threshold" / "Outdoor mild threshold" instead of the ambiguous "Cold/Mild threshold";
+  "Minimum route dwell time" and "Handover idle confirmation time" spell out the timing fields; the fallback field
+  now says "Fall back when a target is unavailable".
+- Conflicts: "Turn off non-selected targets when idle" and "Turn off the idle target when both are on" replace the
+  ambiguous "idle non-selected targets" / "simultaneous" wording; "Outdoor sensor stale after" replaces
+  "Outdoor sensor staleness".
+- AC idle bypass: the optional entity is labelled "Device thermostat below the AC VTherm", the flag is "Enable AC
+  idle bypass", and the preset is "Preset used for the idle setpoint".
+- Manual mode: "Pause Velair in manual mode".
+- Boost: the stale "(experimental)" suffix was removed.
+
+No config keys were renamed, so no migration is needed. `RouterConfig.from_mapping` continues to read the same
+keys, and the schema-only save behaviour is unchanged.
+
 ### 3.12 AC idle bypass
 
 Some AC units keep a minimum compressor/indoor-fan speed while the VTherm reports `idle`, so the room keeps
@@ -702,7 +725,8 @@ ACs; later versions use the two VTherm entities described in section 4.
 | 0.8.4 release published | Tag/release `v0.8.4` on `9134b58` (2026-11-09); not installed in the test instance yet |
 | 0.8.5 release published | Tag/release `v0.8.5` cut from this handover commit; pending Marketplace install and live check |
 | 0.8.6 release published | Tag/release `v0.8.6` on `c002372` (2026-11-10); not installed in the test instance yet |
-| 0.8.7 release prepared | Version bumped to 0.8.7; maintenance release with the release-helper fix only, pending the owner's push |
+| 0.8.7 release published | Tag/release `v0.8.7` on `0d96b48` (2026-11-10); release-helper fix and docs only |
+| 0.8.8 release prepared | Config field-label review (`e8380bb`); pending the owner's push |
 
 The owner reports live verification through version **0.8.0** for M4 manual mode, M5 conflicts, M6 boost, the native
 lock, the 0.8.0 proxy rework, and the read-only VTherm display pass-through. The live instance currently runs the
@@ -986,9 +1010,9 @@ filed names") is the only open item and is intentionally skipped for this batch.
 - [x] Integration tests for all five features and the new config-flow fields; full suite 164 passed.
 - [x] Tag/release published as `v0.8.6` (`c002372`) on 2026-11-10.
 - [x] Release helper reports an already published version cleanly (`28ae295`).
-- [x] 0.8.7 maintenance release prepared: version aligned in `manifest.json`, `const.py` and `pyproject.toml`;
-      it contains only the release-helper fix and documentation.
-- [ ] Owner: run `scripts/release.sh --push`, refresh the Marketplace and install 0.8.7.
+- [x] 0.8.7 maintenance release published: `v0.8.7` on `0d96b48`, containing the release-helper fix and docs.
+- [x] Config field-label review applied and committed (`e8380bb`); ships in 0.8.8.
+- [ ] Owner: run `scripts/release.sh --push` for 0.8.8, refresh the Marketplace and install it.
 - [ ] Live verification in the test HA after the Marketplace update is installed.
 
 ---
