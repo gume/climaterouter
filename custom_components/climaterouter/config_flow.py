@@ -44,6 +44,7 @@ from .const import (
     CONF_LOCK_CODE,
     CONF_LOCK_ENABLED,
     CONF_MANUAL_BLOCKS_SCHEDULE,
+    CONF_MANUAL_READ_ONLY_MODE,
     CONF_MAX_MANUAL_MINUTES,
     CONF_MILD_THRESHOLD,
     CONF_MIN_ROUTE_DWELL,
@@ -52,6 +53,8 @@ from .const import (
     CONF_OUTDOOR_SENSOR_ENTITY_ID,
     CONF_OUTDOOR_STALE_AFTER,
     CONF_RADIATOR_ENTITY_ID,
+    CONF_READ_ONLY_MODE,
+    CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID,
     CONF_SETTLE_TIME,
     CONF_STARTUP_GRACE,
     CONF_TEMPERATURE_TOLERANCE,
@@ -75,6 +78,8 @@ from .models import (
     DEFAULT_SETTLE_TIME,
     DEFAULT_STARTUP_GRACE,
     DEFAULT_TEMPERATURE_TOLERANCE,
+    READ_ONLY_MODES,
+    READ_ONLY_OFF,
 )
 
 SECTION_BASIC = "basic"
@@ -131,6 +136,11 @@ def _defaults(current: Mapping[str, Any] | None = None) -> dict[str, Any]:
             current.get("max_override_minutes", DEFAULT_MAX_MANUAL_MINUTES),
         ),
         CONF_MANUAL_BLOCKS_SCHEDULE: current.get(CONF_MANUAL_BLOCKS_SCHEDULE, True),
+        CONF_MANUAL_READ_ONLY_MODE: current.get(CONF_MANUAL_READ_ONLY_MODE, READ_ONLY_OFF),
+        CONF_READ_ONLY_MODE: current.get(CONF_READ_ONLY_MODE, READ_ONLY_OFF),
+        CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID: current.get(
+            CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID, ""
+        ),
         CONF_TEMPERATURE_TOLERANCE: current.get(
             CONF_TEMPERATURE_TOLERANCE, DEFAULT_TEMPERATURE_TOLERANCE
         ),
@@ -160,6 +170,26 @@ def _number(minimum: float, maximum: float, step: float, unit: str | None = None
     return NumberSelector(config)
 
 
+def _entity_field(
+    key: str,
+    default: Any,
+) -> vol.Marker:
+    """Return an optional entity field, with a default when one is configured."""
+    if default in (None, "", vol.UNDEFINED):
+        return vol.Optional(key)
+    return vol.Optional(key, default=default)
+
+
+def _read_only_selector() -> SelectSelector:
+    """Return the read-only level selector."""
+    return SelectSelector(
+        SelectSelectorConfig(
+            options=list(READ_ONLY_MODES),
+            mode=SelectSelectorMode.DROPDOWN,
+        )
+    )
+
+
 def _basic_schema(defaults: Mapping[str, Any]) -> vol.Schema:
     bypass_entity = defaults[CONF_AC_IDLE_BYPASS_ENTITY_ID]
     bypass_field = (
@@ -170,15 +200,15 @@ def _basic_schema(defaults: Mapping[str, Any]) -> vol.Schema:
     return vol.Schema(
         {
             vol.Required(CONF_NAME, default=defaults[CONF_NAME]): cv.string,
-            vol.Required(
-                CONF_RADIATOR_ENTITY_ID, default=defaults[CONF_RADIATOR_ENTITY_ID]
+            _entity_field(
+                CONF_RADIATOR_ENTITY_ID, defaults[CONF_RADIATOR_ENTITY_ID]
             ): EntitySelector(EntitySelectorConfig(domain="climate")),
-            vol.Required(CONF_AC_ENTITY_ID, default=defaults[CONF_AC_ENTITY_ID]): EntitySelector(
+            _entity_field(CONF_AC_ENTITY_ID, defaults[CONF_AC_ENTITY_ID]): EntitySelector(
                 EntitySelectorConfig(domain="climate")
             ),
-            vol.Required(
+            _entity_field(
                 CONF_OUTDOOR_SENSOR_ENTITY_ID,
-                default=defaults[CONF_OUTDOOR_SENSOR_ENTITY_ID],
+                defaults[CONF_OUTDOOR_SENSOR_ENTITY_ID],
             ): EntitySelector(EntitySelectorConfig(domain="sensor")),
             bypass_field: EntitySelector(EntitySelectorConfig(domain="climate")),
             vol.Required(
@@ -194,6 +224,9 @@ def _basic_schema(defaults: Mapping[str, Any]) -> vol.Schema:
                     mode=SelectSelectorMode.DROPDOWN,
                 )
             ),
+            vol.Required(
+                CONF_READ_ONLY_MODE, default=defaults[CONF_READ_ONLY_MODE]
+            ): _read_only_selector(),
         }
     )
 
@@ -250,6 +283,14 @@ def _manual_schema(defaults: Mapping[str, Any]) -> vol.Schema:
                 CONF_VELAIR_ENABLED,
                 default=defaults[CONF_VELAIR_ENABLED],
             ): BooleanSelector(),
+            vol.Required(
+                CONF_MANUAL_READ_ONLY_MODE,
+                default=defaults[CONF_MANUAL_READ_ONLY_MODE],
+            ): _read_only_selector(),
+            _entity_field(
+                CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID,
+                defaults[CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID],
+            ): EntitySelector(EntitySelectorConfig(domain=["switch", "input_boolean"])),
         }
     )
 
@@ -370,19 +411,25 @@ def _validate_input(hass: HomeAssistant, data: Mapping[str, Any]) -> dict[str, s
     """Validate the form values and return field errors."""
     errors: dict[str, str] = {}
 
-    radiator = data.get(CONF_RADIATOR_ENTITY_ID)
-    ac = data.get(CONF_AC_ENTITY_ID)
-    outdoor = data.get(CONF_OUTDOOR_SENSOR_ENTITY_ID)
+    radiator = str(data.get(CONF_RADIATOR_ENTITY_ID) or "")
+    ac = str(data.get(CONF_AC_ENTITY_ID) or "")
+    outdoor = str(data.get(CONF_OUTDOOR_SENSOR_ENTITY_ID) or "")
 
-    if radiator == ac:
+    if radiator and ac and radiator == ac:
         errors[CONF_AC_ENTITY_ID] = "same_entities"
+    if not radiator and not ac:
+        errors[CONF_RADIATOR_ENTITY_ID] = "at_least_one_climate"
 
     for field, entity_id, domain in (
         (CONF_RADIATOR_ENTITY_ID, radiator, "climate"),
         (CONF_AC_ENTITY_ID, ac, "climate"),
         (CONF_OUTDOOR_SENSOR_ENTITY_ID, outdoor, "sensor"),
     ):
-        if not entity_id or hass.states.get(entity_id) is None:
+        if not entity_id:
+            # Both climates are optional individually, but at least one must be
+            # configured (checked above). The outdoor sensor is fully optional.
+            continue
+        if hass.states.get(entity_id) is None:
             errors[field] = "entity_not_found"
         elif not entity_id.startswith(f"{domain}."):
             errors[field] = "invalid_entity"
@@ -393,6 +440,13 @@ def _validate_input(hass: HomeAssistant, data: Mapping[str, Any]) -> dict[str, s
             errors[CONF_AC_IDLE_BYPASS_ENTITY_ID] = "entity_not_found"
         elif not bypass_entity.startswith("climate."):
             errors[CONF_AC_IDLE_BYPASS_ENTITY_ID] = "invalid_entity"
+
+    pause_switch = str(data.get(CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID) or "")
+    if pause_switch:
+        if hass.states.get(pause_switch) is None:
+            errors[CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID] = "entity_not_found"
+        elif not pause_switch.startswith(("switch.", "input_boolean.")):
+            errors[CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID] = "invalid_entity"
 
     cold = float(data.get(CONF_COLD_THRESHOLD, DEFAULT_COLD_THRESHOLD))
     mild = float(data.get(CONF_MILD_THRESHOLD, DEFAULT_MILD_THRESHOLD))
@@ -422,7 +476,9 @@ def _validate_input(hass: HomeAssistant, data: Mapping[str, Any]) -> dict[str, s
 
 
 def _unique_id(data: Mapping[str, Any]) -> str:
-    return f"{data[CONF_RADIATOR_ENTITY_ID]}|{data[CONF_AC_ENTITY_ID]}"
+    radiator = str(data.get(CONF_RADIATOR_ENTITY_ID) or "")
+    ac = str(data.get(CONF_AC_ENTITY_ID) or "")
+    return f"{radiator}|{ac}"
 
 
 class ClimateRouterConfigFlow(ConfigFlow, domain=DOMAIN):

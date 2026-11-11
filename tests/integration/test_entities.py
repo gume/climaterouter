@@ -419,3 +419,15 @@ async def test_internal_entities_use_the_diagnostic_and_config_sections(hass) ->
     assert category("button", "recalculate_route") is EntityCategory.CONFIG
     assert category("button", "clear_conflicts") is EntityCategory.CONFIG
     assert category("button", "force_handover") is None
+
+
+async def test_climate_exposes_read_only_mode_and_off_preset(hass) -> None:
+    """The proxy exposes the read-only levels and the synthetic off preset."""
+    _entry, coordinator = await _setup(hass, read_only_mode="soft", manual_read_only_mode="hard")
+
+    state = hass.states.get(coordinator.climate_entity_id)
+    assert state is not None
+    assert state.attributes["read_only_mode"] == "soft"
+    assert state.attributes["manual_read_only_mode"] == "hard"
+    assert state.attributes["effective_read_only"] == "soft"
+    assert "off" in state.attributes["preset_modes"]

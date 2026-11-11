@@ -30,6 +30,12 @@ def choose_route(inputs: RouteInputs) -> RouteDecision:
     if inputs.hvac_mode == HVAC_OFF:
         return RouteDecision(frozenset(), "off")
 
+    if inputs.single_target is not None:
+        # With only one underlying thermostat the route is fixed; the outdoor
+        # sensor and override are still accepted but have nothing to choose.
+        # Never fall back to the unconfigured target.
+        return _with_single_target(inputs.single_target, inputs)
+
     if inputs.hvac_mode == HVAC_COOL:
         return _with_capability(
             frozenset({Target.AC}), "hvac_mode_cool", inputs, explicit_cool=True
@@ -64,6 +70,21 @@ def choose_route(inputs: RouteInputs) -> RouteDecision:
     if temperature <= inputs.cold_threshold:
         return _with_capability(frozenset({Target.RADIATOR}), "outdoor_cold", inputs)
     return _with_capability(frozenset({Target.RADIATOR}), "deadband_default", inputs)
+
+
+def _with_single_target(target: Target, inputs: RouteInputs) -> RouteDecision:
+    """Resolve the fixed route of a single-thermostat configuration."""
+    explicit_cool = inputs.hvac_mode == HVAC_COOL
+    capability = inputs.capabilities.get(target)
+    if _can_serve(capability, inputs.hvac_mode):
+        if explicit_cool:
+            reason = "hvac_mode_cool"
+        elif inputs.boost_active:
+            reason = "boost"
+        else:
+            reason = "single_target"
+        return RouteDecision(frozenset({target}), reason)
+    return RouteDecision(frozenset(), "unsupported_mode" if explicit_cool else "unavailable")
 
 
 def _with_capability(

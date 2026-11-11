@@ -5,6 +5,10 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from climaterouter.models import (
+    PRESET_OFF,
+    READ_ONLY_HARD,
+    READ_ONLY_OFF,
+    READ_ONLY_SOFT,
     BoostState,
     Conflict,
     DesiredState,
@@ -242,6 +246,85 @@ def test_conflict_serialization_is_json_safe() -> None:
     assert data["target"] == "ac"
     assert data["expected"] == 21.0
     assert isinstance(data["first_seen"], str)
+
+
+def test_router_config_parses_read_only_and_pause_settings() -> None:
+    config = RouterConfig.from_mapping(
+        {
+            "read_only_mode": "soft",
+            "manual_read_only_mode": READ_ONLY_HARD,
+            "scheduler_pause_switch_entity_id": "switch.chauffage_pause",
+        }
+    )
+    assert config.read_only_mode == READ_ONLY_SOFT
+    assert config.manual_read_only_mode == READ_ONLY_HARD
+    assert config.scheduler_pause_switch_entity_id == "switch.chauffage_pause"
+
+
+def test_router_config_read_only_defaults_and_invalid_values() -> None:
+    config = RouterConfig.from_mapping({})
+    assert config.read_only_mode == READ_ONLY_OFF
+    assert config.manual_read_only_mode == READ_ONLY_OFF
+
+    invalid = RouterConfig.from_mapping({"read_only_mode": "frozen", "manual_read_only_mode": 1})
+    assert invalid.read_only_mode == READ_ONLY_OFF
+    assert invalid.manual_read_only_mode == READ_ONLY_OFF
+
+
+def test_router_config_configured_targets_and_single_target() -> None:
+    both = RouterConfig.from_mapping(
+        {"radiator_entity_id": "climate.radiator", "ac_entity_id": "climate.ac"}
+    )
+    assert both.configured_targets == frozenset({Target.RADIATOR, Target.AC})
+    assert both.single_target is None
+
+    radiator_only = RouterConfig.from_mapping({"radiator_entity_id": "climate.radiator"})
+    assert radiator_only.configured_targets == frozenset({Target.RADIATOR})
+    assert radiator_only.single_target is Target.RADIATOR
+
+    ac_only = RouterConfig.from_mapping({"ac_entity_id": "climate.ac"})
+    assert ac_only.configured_targets == frozenset({Target.AC})
+    assert ac_only.single_target is Target.AC
+
+    assert RouterConfig.from_mapping({}).single_target is None
+
+
+def test_snapshot_effective_read_only_follows_manual_mode() -> None:
+    snapshot = RouterSnapshot(
+        read_only_mode=READ_ONLY_SOFT,
+        manual_read_only_mode=READ_ONLY_HARD,
+    )
+    assert snapshot.effective_read_only == READ_ONLY_SOFT
+    assert snapshot.soft_read_only is True
+    assert snapshot.hard_read_only is False
+
+    now = datetime.now(timezone.utc)  # noqa: UP017
+    snapshot = RouterSnapshot(
+        read_only_mode=READ_ONLY_SOFT,
+        manual_read_only_mode=READ_ONLY_HARD,
+        manual_mode=ManualMode(
+            desired=DesiredState(hvac_mode="heat"),
+            started_at=now,
+        ),
+    )
+    assert snapshot.effective_read_only == READ_ONLY_HARD
+    assert snapshot.soft_read_only is False
+    assert snapshot.hard_read_only is True
+
+
+def test_snapshot_preset_modes_include_off() -> None:
+    assert PRESET_OFF in RouterSnapshot().preset_modes
+
+
+def test_snapshot_ignores_mismatch_for_a_single_configured_target() -> None:
+    snapshot = RouterSnapshot(
+        configured_targets=frozenset({Target.RADIATOR}),
+        targets={
+            Target.RADIATOR: UnderlyingState(target_temperature=23.0),
+            Target.AC: UnderlyingState(target_temperature=19.0),
+        },
+    )
+    assert snapshot.target_mismatch_reasons() == ()
 
 
 def test_underlying_state_active_semantics() -> None:

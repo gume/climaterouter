@@ -116,6 +116,53 @@ def test_route_off_wins() -> None:
     assert decision.reason == "off"
 
 
+def test_single_radiator_route_is_fixed() -> None:
+    decision = choose_route(_inputs(single_target=Target.RADIATOR))
+    assert _targets(decision) == {Target.RADIATOR}
+    assert decision.reason == "single_target"
+
+    decision = choose_route(_inputs(single_target=Target.RADIATOR, outdoor_temperature=20.0))
+    assert _targets(decision) == {Target.RADIATOR}
+
+
+def test_single_ac_route_is_fixed() -> None:
+    decision = choose_route(_inputs(single_target=Target.AC))
+    assert _targets(decision) == {Target.AC}
+
+    decision = choose_route(_inputs(single_target=Target.AC, hvac_mode="cool"))
+    assert _targets(decision) == {Target.AC}
+    assert decision.reason == "hvac_mode_cool"
+
+
+def test_single_target_never_falls_back_to_the_unconfigured_target() -> None:
+    decision = choose_route(
+        _inputs(
+            single_target=Target.RADIATOR,
+            capabilities=_capabilities(radiator_available=False),
+        )
+    )
+    assert _targets(decision) == set()
+    assert decision.reason == "unavailable"
+
+
+def test_single_target_unsupported_cool() -> None:
+    decision = choose_route(
+        _inputs(
+            single_target=Target.RADIATOR,
+            hvac_mode="cool",
+            capabilities=_capabilities(),
+        )
+    )
+    assert _targets(decision) == set()
+    assert decision.reason == "unsupported_mode"
+
+
+def test_single_target_boost_uses_the_only_target() -> None:
+    decision = choose_route(_inputs(single_target=Target.RADIATOR, boost_active=True))
+    assert _targets(decision) == {Target.RADIATOR}
+    assert decision.reason == "boost"
+
+
 def test_route_outdoor_stale_holds_last() -> None:
     decision = choose_route(_inputs(outdoor_fresh=False, current_target=Target.AC))
     assert _targets(decision) == {Target.AC}

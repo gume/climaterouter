@@ -17,6 +17,16 @@ HVAC_COOL = "cool"
 
 MODES = (HVAC_OFF, HVAC_HEAT, HVAC_COOL)
 
+# A proxy preset that behaves like an off command. Schedulers that can only
+# set presets (for example Chauffage) can use it to switch the proxy off.
+PRESET_OFF = "off"
+
+# Read-only levels for the underlying thermostats.
+READ_ONLY_OFF = "off"
+READ_ONLY_SOFT = "soft"
+READ_ONLY_HARD = "hard"
+READ_ONLY_MODES = (READ_ONLY_OFF, READ_ONLY_SOFT, READ_ONLY_HARD)
+
 ROUTE_AUTO = "auto"
 ROUTE_RADIATOR = "radiator"
 ROUTE_AC = "ac"
@@ -408,9 +418,12 @@ class RouterSnapshot:
     lock_has_code: bool = False
     auto_relock_sec: int = DEFAULT_AUTO_RELOCK_SEC
     manual_blocks_schedule: bool = True
+    read_only_mode: str = READ_ONLY_OFF
+    manual_read_only_mode: str = READ_ONLY_OFF
+    configured_targets: frozenset[Target] = frozenset()
     targets: dict[Target, UnderlyingState] = field(default_factory=dict)
     hvac_modes: tuple[str, ...] = (HVAC_OFF, HVAC_HEAT)
-    preset_modes: tuple[str, ...] = ("none",)
+    preset_modes: tuple[str, ...] = ("none", PRESET_OFF)
     fan_modes: tuple[str, ...] = ()
     min_temp: float = 7.0
     max_temp: float = 35.0
@@ -438,6 +451,23 @@ class RouterSnapshot:
         return self.manual_mode is not None
 
     @property
+    def effective_read_only(self) -> str:
+        """Return the read-only level that applies right now."""
+        if self.manual_mode is not None:
+            return self.manual_read_only_mode
+        return self.read_only_mode
+
+    @property
+    def soft_read_only(self) -> bool:
+        """Return whether writes are suppressed but commands are displayed."""
+        return self.effective_read_only == READ_ONLY_SOFT
+
+    @property
+    def hard_read_only(self) -> bool:
+        """Return whether the proxy is a frozen mirror of the targets."""
+        return self.effective_read_only == READ_ONLY_HARD
+
+    @property
     def manual_until(self) -> datetime | None:
         """Return the manual-mode deadline, or ``None`` for infinite mode."""
         return self.manual_mode.until if self.manual_mode is not None else None
@@ -457,6 +487,9 @@ class RouterSnapshot:
         radiator = self.targets.get(Target.RADIATOR)
         ac = self.targets.get(Target.AC)
         if radiator is None or ac is None:
+            return ()
+        if self.configured_targets and len(self.configured_targets) < 2:
+            # A single-thermostat router has nothing to compare.
             return ()
 
         reasons: list[str] = []
@@ -498,6 +531,7 @@ class RouteInputs:
     mild_threshold: float = 9.0
     fallback_on_unavailable: bool = True
     boost_active: bool = False
+    single_target: Target | None = None
 
 
 DEFAULT_COLD_THRESHOLD = 7.0
@@ -549,6 +583,27 @@ class RouterConfig:
     ac_idle_bypass_enabled: bool = False
     ac_idle_bypass_entity_id: str = ""
     ac_idle_bypass_preset: str = DEFAULT_AC_IDLE_BYPASS_PRESET
+    read_only_mode: str = READ_ONLY_OFF
+    manual_read_only_mode: str = READ_ONLY_OFF
+    scheduler_pause_switch_entity_id: str = ""
+
+    @property
+    def configured_targets(self) -> frozenset[Target]:
+        """Return the underlying thermostats that are configured."""
+        targets: set[Target] = set()
+        if self.radiator_entity_id:
+            targets.add(Target.RADIATOR)
+        if self.ac_entity_id:
+            targets.add(Target.AC)
+        return frozenset(targets)
+
+    @property
+    def single_target(self) -> Target | None:
+        """Return the only configured target, or ``None`` with two targets."""
+        configured = self.configured_targets
+        if len(configured) == 1:
+            return next(iter(configured))
+        return None
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> RouterConfig:
@@ -571,6 +626,10 @@ class RouterConfig:
             if isinstance(value, str):
                 return value.lower() in ("1", "true", "yes", "on")
             return bool(value)
+
+        def _choice(key: str, options: tuple[str, ...], default: str) -> str:
+            value = str(data.get(key, default))
+            return value if value in options else default
 
         return cls(
             name=str(data.get("name") or "ClimateRouter"),
@@ -611,6 +670,11 @@ class RouterConfig:
                 str(data.get("ac_idle_bypass_preset"))
                 if str(data.get("ac_idle_bypass_preset")) in AC_IDLE_BYPASS_PRESETS
                 else DEFAULT_AC_IDLE_BYPASS_PRESET
+            ),
+            read_only_mode=_choice("read_only_mode", READ_ONLY_MODES, READ_ONLY_OFF),
+            manual_read_only_mode=_choice("manual_read_only_mode", READ_ONLY_MODES, READ_ONLY_OFF),
+            scheduler_pause_switch_entity_id=str(
+                data.get("scheduler_pause_switch_entity_id") or ""
             ),
         )
 

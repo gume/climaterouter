@@ -122,6 +122,13 @@ class RouterClimate(RouterEntity, ClimateEntity):
 
     @property
     def _optimistic(self) -> bool:
+        """Return whether the desired value should win over the target state."""
+        if self._snapshot.hard_read_only:
+            return False
+        if self._snapshot.soft_read_only:
+            # Soft read-only: commands are dismissed, but the proxy keeps
+            # pretending they were accepted.
+            return not self._snapshot.desired.is_empty
         last = self._snapshot.last_command
         if last is None:
             return False
@@ -136,6 +143,11 @@ class RouterClimate(RouterEntity, ClimateEntity):
             return snapshot.targets.get(target)
         if len(snapshot.active_targets) > 1:
             return snapshot.targets.get(Target.AC)
+        if len(snapshot.configured_targets) == 1:
+            # A single-thermostat router has a fixed route. Mirror that target
+            # even before the first command or while it is off.
+            only = next(iter(snapshot.configured_targets))
+            return snapshot.targets.get(only)
         return None
 
     @property
@@ -176,7 +188,7 @@ class RouterClimate(RouterEntity, ClimateEntity):
     def hvac_mode(self) -> HVACMode:
         snapshot = self._snapshot
         desired = snapshot.desired
-        if desired.hvac_mode == HVAC_OFF:
+        if not snapshot.hard_read_only and desired.hvac_mode == HVAC_OFF:
             return HVACMode.OFF
         if self._optimistic and desired.hvac_mode in (HVAC_HEAT, HVAC_COOL):
             return HVACMode(desired.hvac_mode)
@@ -188,7 +200,7 @@ class RouterClimate(RouterEntity, ClimateEntity):
     @property
     def hvac_action(self) -> HVACAction | None:
         snapshot = self._snapshot
-        if snapshot.desired.hvac_mode == HVAC_OFF:
+        if not snapshot.hard_read_only and snapshot.desired.hvac_mode == HVAC_OFF:
             return HVACAction.OFF
         actions = [
             snapshot.targets[target].hvac_action
@@ -254,6 +266,12 @@ class RouterClimate(RouterEntity, ClimateEntity):
             "override": snapshot.manual_mode.to_dict() if snapshot.manual_mode else None,
             "manual_mode": snapshot.manual_mode.to_dict() if snapshot.manual_mode else None,
             "manual_active": snapshot.manual_active,
+            "manual_blocks_schedule": snapshot.manual_blocks_schedule,
+            "manual_read_only_mode": snapshot.manual_read_only_mode,
+            "read_only_mode": snapshot.read_only_mode,
+            "effective_read_only": snapshot.effective_read_only,
+            "soft_read_only": snapshot.soft_read_only,
+            "hard_read_only": snapshot.hard_read_only,
             "manual_until": (snapshot.manual_until.isoformat() if snapshot.manual_until else None),
             "manual_timer_minutes": snapshot.manual_timer_minutes,
             "manual_remaining_minutes": (

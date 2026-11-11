@@ -3,28 +3,30 @@
     "step": {
       "user": {
         "title": "ClimateRouter",
-        "description": "Configure the two underlying thermostats, routing, manual mode, conflicts, and display compatibility.",
+        "description": "Configure one or two underlying thermostats, routing, manual mode, conflicts, and display compatibility.",
         "sections": {
           "basic": {
             "name": "Thermostats",
-            "description": "Choose the radiator and AC thermostats and the outdoor sensor.",
+            "description": "Choose one or two thermostats and the optional outdoor sensor.",
             "data": {
               "name": "Name",
-              "radiator_entity_id": "Radiator thermostat (over_switch)",
-              "ac_entity_id": "AC thermostat (over_climate)",
-              "outdoor_sensor_entity_id": "Outdoor temperature sensor",
+              "radiator_entity_id": "Radiator thermostat (over_switch, optional)",
+              "ac_entity_id": "AC thermostat (over_climate, optional)",
+              "outdoor_sensor_entity_id": "Outdoor temperature sensor (optional)",
               "ac_idle_bypass_entity_id": "Device thermostat below the AC VTherm (optional)",
               "ac_idle_bypass_enabled": "Enable AC idle bypass",
-              "ac_idle_bypass_preset": "Preset used for the idle setpoint"
+              "ac_idle_bypass_preset": "Preset used for the idle setpoint",
+              "read_only_mode": "Read-only level (schedule)"
             },
             "data_description": {
               "name": "Name shown on the device and its entities.",
-              "radiator_entity_id": "Versatile Thermostat that controls the radiator.",
-              "ac_entity_id": "Versatile Thermostat that controls the AC.",
-              "outdoor_sensor_entity_id": "Temperature sensor used to choose the route.",
+              "radiator_entity_id": "Versatile Thermostat that controls the radiator. Leave empty when only an AC is configured.",
+              "ac_entity_id": "Versatile Thermostat that controls the AC. Leave empty when only a radiator is configured.",
+              "outdoor_sensor_entity_id": "Temperature sensor used to choose the route. Leave empty to hold the radiator route.",
               "ac_idle_bypass_entity_id": "Climate entity controlled by the AC VTherm. Leave empty to use the first underlying climate reported by the VTherm.",
               "ac_idle_bypass_enabled": "In heat mode, when the AC VTherm reports idle, write the preset temperature directly to the device thermostat so it stops heating.",
-              "ac_idle_bypass_preset": "VTherm preset whose temperature is used for the idle setpoint. The VTherm is expected to restore its own setpoint when heating resumes."
+              "ac_idle_bypass_preset": "VTherm preset whose temperature is used for the idle setpoint. The VTherm is expected to restore its own setpoint when heating resumes.",
+              "read_only_mode": "Read-only level for the underlying thermostats while a schedule is in control."
             }
           },
           "routing": {
@@ -53,18 +55,22 @@
           },
           "manual": {
             "name": "Manual mode",
-            "description": "Default and maximum manual timer, and the manual/schedule lock.",
+            "description": "Default and maximum manual timer, read-only level, scheduler pause switch, and the manual/schedule lock.",
             "data": {
               "default_manual_minutes": "Default manual timer (0 = no timer)",
               "max_manual_minutes": "Maximum manual timer",
               "manual_blocks_schedule": "Block schedule/automation commands while manual",
-              "velair_enabled": "Pause Velair in manual mode"
+              "velair_enabled": "Pause Velair in manual mode",
+              "manual_read_only_mode": "Read-only level in manual mode",
+              "scheduler_pause_switch_entity_id": "Scheduler pause switch (optional)"
             },
             "data_description": {
               "default_manual_minutes": "Timer for a new manual session. 0 keeps manual mode active until ended.",
               "max_manual_minutes": "Upper limit for the manual timer.",
               "manual_blocks_schedule": "Keep schedule and automation commands out while manual mode is active. The latest schedule state is remembered and applied when manual mode ends. User commands still work.",
-              "velair_enabled": "Pause Velair for the remaining manual time when manual mode starts, and resume automatic control on the ClimateRouter proxy when it ends."
+              "velair_enabled": "Pause Velair for the remaining manual time when manual mode starts, and resume automatic control on the ClimateRouter proxy when it ends.",
+              "manual_read_only_mode": "Read-only level for the underlying thermostats while manual mode is active.",
+              "scheduler_pause_switch_entity_id": "Switch or input_boolean turned on while manual mode is active and off when it ends. Chauffage's pause switch can be used here."
             }
           },
           "conflicts": {
@@ -87,7 +93,7 @@
           },
           "boost": {
             "name": "Boost",
-            "description": "Run both targets for a bounded time.",
+            "description": "Run the available targets for a bounded time.",
             "data": {
               "boost_enabled": "Enable boost"
             },
@@ -123,28 +129,30 @@
       },
       "reconfigure": {
         "title": "Reconfigure ClimateRouter",
-        "description": "Change the underlying entities or any option. Values are saved together.",
+        "description": "Change the underlying thermostats or any option. Values are saved together.",
         "sections": {
           "basic": {
             "name": "Thermostats",
-            "description": "Choose the radiator and AC thermostats and the outdoor sensor.",
+            "description": "Choose one or two thermostats and the optional outdoor sensor.",
             "data": {
               "name": "Name",
-              "radiator_entity_id": "Radiator thermostat (over_switch)",
-              "ac_entity_id": "AC thermostat (over_climate)",
-              "outdoor_sensor_entity_id": "Outdoor temperature sensor",
+              "radiator_entity_id": "Radiator thermostat (over_switch, optional)",
+              "ac_entity_id": "AC thermostat (over_climate, optional)",
+              "outdoor_sensor_entity_id": "Outdoor temperature sensor (optional)",
               "ac_idle_bypass_entity_id": "Device thermostat below the AC VTherm (optional)",
               "ac_idle_bypass_enabled": "Enable AC idle bypass",
-              "ac_idle_bypass_preset": "Preset used for the idle setpoint"
+              "ac_idle_bypass_preset": "Preset used for the idle setpoint",
+              "read_only_mode": "Read-only level (schedule)"
             },
             "data_description": {
               "name": "Name shown on the device and its entities.",
-              "radiator_entity_id": "Versatile Thermostat that controls the radiator.",
-              "ac_entity_id": "Versatile Thermostat that controls the AC.",
-              "outdoor_sensor_entity_id": "Temperature sensor used to choose the route.",
+              "radiator_entity_id": "Versatile Thermostat that controls the radiator. Leave empty when only an AC is configured.",
+              "ac_entity_id": "Versatile Thermostat that controls the AC. Leave empty when only a radiator is configured.",
+              "outdoor_sensor_entity_id": "Temperature sensor used to choose the route. Leave empty to hold the radiator route.",
               "ac_idle_bypass_entity_id": "Climate entity controlled by the AC VTherm. Leave empty to use the first underlying climate reported by the VTherm.",
               "ac_idle_bypass_enabled": "In heat mode, when the AC VTherm reports idle, write the preset temperature directly to the device thermostat so it stops heating.",
-              "ac_idle_bypass_preset": "VTherm preset whose temperature is used for the idle setpoint. The VTherm is expected to restore its own setpoint when heating resumes."
+              "ac_idle_bypass_preset": "VTherm preset whose temperature is used for the idle setpoint. The VTherm is expected to restore its own setpoint when heating resumes.",
+              "read_only_mode": "Read-only level for the underlying thermostats while a schedule is in control."
             }
           },
           "routing": {
@@ -173,18 +181,22 @@
           },
           "manual": {
             "name": "Manual mode",
-            "description": "Default and maximum manual timer, and the manual/schedule lock.",
+            "description": "Default and maximum manual timer, read-only level, scheduler pause switch, and the manual/schedule lock.",
             "data": {
               "default_manual_minutes": "Default manual timer (0 = no timer)",
               "max_manual_minutes": "Maximum manual timer",
               "manual_blocks_schedule": "Block schedule/automation commands while manual",
-              "velair_enabled": "Pause Velair in manual mode"
+              "velair_enabled": "Pause Velair in manual mode",
+              "manual_read_only_mode": "Read-only level in manual mode",
+              "scheduler_pause_switch_entity_id": "Scheduler pause switch (optional)"
             },
             "data_description": {
               "default_manual_minutes": "Timer for a new manual session. 0 keeps manual mode active until ended.",
               "max_manual_minutes": "Upper limit for the manual timer.",
               "manual_blocks_schedule": "Keep schedule and automation commands out while manual mode is active. The latest schedule state is remembered and applied when manual mode ends. User commands still work.",
-              "velair_enabled": "Pause Velair for the remaining manual time when manual mode starts, and resume automatic control on the ClimateRouter proxy when it ends."
+              "velair_enabled": "Pause Velair for the remaining manual time when manual mode starts, and resume automatic control on the ClimateRouter proxy when it ends.",
+              "manual_read_only_mode": "Read-only level for the underlying thermostats while manual mode is active.",
+              "scheduler_pause_switch_entity_id": "Switch or input_boolean turned on while manual mode is active and off when it ends. Chauffage's pause switch can be used here."
             }
           },
           "conflicts": {
@@ -207,7 +219,7 @@
           },
           "boost": {
             "name": "Boost",
-            "description": "Run both targets for a bounded time.",
+            "description": "Run the available targets for a bounded time.",
             "data": {
               "boost_enabled": "Enable boost"
             },
@@ -250,10 +262,11 @@
       "manual_order": "The default manual timer must not exceed the maximum timer.",
       "invalid_tolerance": "The temperature tolerance must be greater than zero.",
       "invalid_duration": "Durations must be non-negative.",
-      "invalid_lock_code": "The lock code must contain 4 to 8 digits."
+      "invalid_lock_code": "The lock code must contain 4 to 8 digits.",
+      "at_least_one_climate": "Configure at least one thermostat (radiator or AC)."
     },
     "abort": {
-      "already_configured": "This radiator/AC pair is already configured.",
+      "already_configured": "This thermostat selection is already configured.",
       "reconfigure_successful": "Reconfiguration saved.",
       "unknown_entry": "The config entry no longer exists."
     }
@@ -276,24 +289,26 @@
       },
       "basic": {
         "title": "Thermostats",
-        "description": "Choose the radiator and AC thermostats and the outdoor sensor.",
+        "description": "Choose one or two thermostats and the optional outdoor sensor.",
         "data": {
           "name": "Name",
-          "radiator_entity_id": "Radiator thermostat (over_switch)",
-          "ac_entity_id": "AC thermostat (over_climate)",
-          "outdoor_sensor_entity_id": "Outdoor temperature sensor",
+          "radiator_entity_id": "Radiator thermostat (over_switch, optional)",
+          "ac_entity_id": "AC thermostat (over_climate, optional)",
+          "outdoor_sensor_entity_id": "Outdoor temperature sensor (optional)",
           "ac_idle_bypass_entity_id": "Device thermostat below the AC VTherm (optional)",
           "ac_idle_bypass_enabled": "Enable AC idle bypass",
-          "ac_idle_bypass_preset": "Preset used for the idle setpoint"
+          "ac_idle_bypass_preset": "Preset used for the idle setpoint",
+          "read_only_mode": "Read-only level (schedule)"
         },
         "data_description": {
           "name": "Name shown on the device and its entities.",
-          "radiator_entity_id": "Versatile Thermostat that controls the radiator.",
-          "ac_entity_id": "Versatile Thermostat that controls the AC.",
-          "outdoor_sensor_entity_id": "Temperature sensor used to choose the route.",
+          "radiator_entity_id": "Versatile Thermostat that controls the radiator. Leave empty when only an AC is configured.",
+          "ac_entity_id": "Versatile Thermostat that controls the AC. Leave empty when only a radiator is configured.",
+          "outdoor_sensor_entity_id": "Temperature sensor used to choose the route. Leave empty to hold the radiator route.",
           "ac_idle_bypass_entity_id": "Climate entity controlled by the AC VTherm. Leave empty to use the first underlying climate reported by the VTherm.",
           "ac_idle_bypass_enabled": "In heat mode, when the AC VTherm reports idle, write the preset temperature directly to the device thermostat so it stops heating.",
-          "ac_idle_bypass_preset": "VTherm preset whose temperature is used for the idle setpoint. The VTherm is expected to restore its own setpoint when heating resumes."
+          "ac_idle_bypass_preset": "VTherm preset whose temperature is used for the idle setpoint. The VTherm is expected to restore its own setpoint when heating resumes.",
+          "read_only_mode": "Read-only level for the underlying thermostats while a schedule is in control."
         }
       },
       "routing": {
@@ -322,18 +337,22 @@
       },
       "manual": {
         "title": "Manual mode",
-        "description": "Default and maximum manual timer, and the manual/schedule lock.",
+        "description": "Default and maximum manual timer, read-only level, scheduler pause switch, and the manual/schedule lock.",
         "data": {
           "default_manual_minutes": "Default manual timer (0 = no timer)",
           "max_manual_minutes": "Maximum manual timer",
           "manual_blocks_schedule": "Block schedule/automation commands while manual",
-          "velair_enabled": "Pause Velair in manual mode"
+          "velair_enabled": "Pause Velair in manual mode",
+          "manual_read_only_mode": "Read-only level in manual mode",
+          "scheduler_pause_switch_entity_id": "Scheduler pause switch (optional)"
         },
         "data_description": {
           "default_manual_minutes": "Timer for a new manual session. 0 keeps manual mode active until ended.",
           "max_manual_minutes": "Upper limit for the manual timer.",
           "manual_blocks_schedule": "Keep schedule and automation commands out while manual mode is active. The latest schedule state is remembered and applied when manual mode ends. User commands still work.",
-          "velair_enabled": "Pause Velair for the remaining manual time when manual mode starts, and resume automatic control on the ClimateRouter proxy when it ends."
+          "velair_enabled": "Pause Velair for the remaining manual time when manual mode starts, and resume automatic control on the ClimateRouter proxy when it ends.",
+          "manual_read_only_mode": "Read-only level for the underlying thermostats while manual mode is active.",
+          "scheduler_pause_switch_entity_id": "Switch or input_boolean turned on while manual mode is active and off when it ends. Chauffage's pause switch can be used here."
         }
       },
       "conflicts": {
@@ -356,7 +375,7 @@
       },
       "boost": {
         "title": "Boost",
-        "description": "Run both targets for a bounded time.",
+        "description": "Run the available targets for a bounded time.",
         "data": {
           "boost_enabled": "Enable boost"
         },
@@ -397,7 +416,8 @@
       "manual_order": "The default manual timer must not exceed the maximum timer.",
       "invalid_tolerance": "The temperature tolerance must be greater than zero.",
       "invalid_duration": "Durations must be non-negative.",
-      "invalid_lock_code": "The lock code must contain 4 to 8 digits."
+      "invalid_lock_code": "The lock code must contain 4 to 8 digits.",
+      "at_least_one_climate": "Configure at least one thermostat (radiator or AC)."
     }
   },
   "services": {
@@ -407,7 +427,7 @@
     },
     "set_route_override": {
       "name": "Set route override",
-      "description": "Force routing to the radiator or the AC.",
+      "description": "Force routing to one configured target.",
       "fields": {
         "route": {
           "name": "Route",
@@ -499,7 +519,7 @@
     },
     "set_boost": {
       "name": "Set boost",
-      "description": "Activate both targets for a bounded time. Requires boost to be enabled and the proxy to be heating.",
+      "description": "Activate the configured targets for a bounded time. Requires boost to be enabled and the proxy to be heating.",
       "fields": {
         "duration_minutes": {
           "name": "Duration",

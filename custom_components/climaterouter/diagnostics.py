@@ -33,6 +33,7 @@ def _serialize_snapshot(snapshot: RouterSnapshot) -> dict[str, Any]:
         "ready": snapshot.ready,
         "available": snapshot.available,
         "active_targets": sorted(target.value for target in snapshot.active_targets),
+        "configured_targets": sorted(target.value for target in snapshot.configured_targets),
         "pending_target": (snapshot.pending_target.value if snapshot.pending_target else None),
         "route_reason": snapshot.route_reason,
         "handover_state": snapshot.handover_state.value,
@@ -50,6 +51,9 @@ def _serialize_snapshot(snapshot: RouterSnapshot) -> dict[str, Any]:
         "lock_has_code": snapshot.lock_has_code,
         "auto_relock_sec": snapshot.auto_relock_sec,
         "manual_blocks_schedule": snapshot.manual_blocks_schedule,
+        "read_only_mode": snapshot.read_only_mode,
+        "manual_read_only_mode": snapshot.manual_read_only_mode,
+        "effective_read_only": snapshot.effective_read_only,
         "hvac_modes": list(snapshot.hvac_modes),
         "preset_modes": list(snapshot.preset_modes),
         "targets": {

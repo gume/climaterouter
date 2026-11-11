@@ -76,9 +76,10 @@ from .models import (
     HVAC_HEAT,
     HVAC_OFF,
     MODES,
-    ROUTE_AC,
+    PRESET_OFF,
+    READ_ONLY_HARD,
+    READ_ONLY_OFF,
     ROUTE_AUTO,
-    ROUTE_RADIATOR,
     BoostState,
     Conflict,
     DesiredState,
@@ -143,6 +144,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._locked = False
         self._auto_relock_unsub: Any | None = None
         self._auto_relock_at: datetime | None = None
+        self._pause_switch_on: bool | None = None
 
         self._ready = False
         self._idle_since: datetime | None = None
@@ -182,6 +184,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             self._schedule_manual_expiry()
             # A restored manual session must continue to keep Velair out.
             await self._async_velair_pause()
+            await self._async_set_pause_switch(True)
         if self._boost is not None:
             self._schedule_boost_expiry()
         if self._auto_relock_at is not None:
@@ -195,14 +198,19 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self.data = self._build_snapshot()
 
         entity_ids = [
-            self.config.radiator_entity_id,
-            self.config.ac_entity_id,
-            self.config.outdoor_sensor_entity_id,
+            entity_id
+            for entity_id in (
+                self.config.radiator_entity_id,
+                self.config.ac_entity_id,
+                self.config.outdoor_sensor_entity_id,
+            )
+            if entity_id
         ]
 
-        self._unsubs.append(
-            async_track_state_change_event(self.hass, entity_ids, self._handle_state_change)
-        )
+        if entity_ids:
+            self._unsubs.append(
+                async_track_state_change_event(self.hass, entity_ids, self._handle_state_change)
+            )
         self._timers.append(
             async_track_time_interval(
                 self.hass,
@@ -235,6 +243,8 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._cancel_auto_relock()
         if self._manual is not None:
             await self._async_velair_resume()
+        if self._pause_switch_on:
+            await self._async_set_pause_switch(False)
         await self._store.async_save(self._data_to_save())
 
     # ------------------------------------------------------------------
@@ -244,6 +254,78 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
     def _is_user_context(context: Context | None) -> bool:
         """Return whether a command came from a user (UI/service), not a schedule."""
         return context is not None and context.user_id is not None
+
+    def _read_only_mode(self) -> str:
+        """Return the read-only level that applies to the current mode."""
+        if self._manual is not None:
+            return self.config.manual_read_only_mode
+        return self.config.read_only_mode
+
+    def _configured_targets(self) -> frozenset[Target]:
+        """Return the underlying targets that are configured."""
+        return self.config.configured_targets
+
+    def _single_configured_target(self) -> Target | None:
+        """Return the only configured target, if any."""
+        return self.config.single_target
+
+    def _read_only_mirror(self) -> None:
+        """Adopt the actual underlying state without issuing any command."""
+        configured = self._configured_targets()
+        on_targets = [
+            target
+            for target in configured
+            if self._states[target].hvac_mode not in (None, HVAC_OFF)
+        ]
+        self._pending_target = None
+        self._off_sent_at = None
+        self._idle_since = None
+        if len(on_targets) == 1:
+            target = on_targets[0]
+            self._active_targets = frozenset({target})
+            self._last_route = target
+            self._handover_state = HandoverState.STEADY
+        elif len(on_targets) > 1:
+            self._active_targets = frozenset(on_targets)
+            self._handover_state = HandoverState.STEADY
+        else:
+            self._active_targets = frozenset()
+            self._handover_state = HandoverState.OFF
+        self._route_reason = "read_only"
+
+    def _evaluate_read_only(self) -> None:
+        """Recompute the visible route while writes are suppressed.
+
+        Hard mode is a frozen mirror of the underlying thermostats. Soft mode
+        keeps a command visible even though it was not written; without a
+        command both levels simply mirror the real state.
+        """
+        if self._read_only_mode() == READ_ONLY_HARD or self._desired.is_empty:
+            self._read_only_mirror()
+            return
+
+        self._pending_target = None
+        self._off_sent_at = None
+        self._idle_since = None
+
+        if self._desired.hvac_mode == HVAC_OFF:
+            self._active_targets = frozenset()
+            self._handover_state = HandoverState.OFF
+            self._route_reason = "off"
+            return
+
+        if self._desired.hvac_mode in (HVAC_HEAT, HVAC_COOL):
+            decision = self._route_decision()
+            self._active_targets = decision.targets
+            self._handover_state = HandoverState.STEADY if decision.targets else HandoverState.OFF
+            self._route_reason = decision.reason
+            single = self._single_target(decision)
+            if single is not None:
+                self._last_route = single
+            return
+
+        # A setpoint without a mode cannot pick a route.
+        self._read_only_mirror()
 
     def _apply_setpoint(
         self,
@@ -273,6 +355,9 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._ensure_unlocked(context)
         if temperature is None and hvac_mode is None and preset_mode is None:
             raise HomeAssistantError("No temperature, preset, or mode supplied")
+        if preset_mode == PRESET_OFF:
+            await self.async_set_preset_mode(PRESET_OFF, context=context)
+            return
 
         from_user = self._is_user_context(context)
         has_setpoint = temperature is not None or preset_mode is not None
@@ -373,6 +458,16 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
     async def async_set_preset_mode(self, preset_mode: str, context: Context | None = None) -> None:
         """Handle a preset change."""
         self._ensure_unlocked(context)
+        if preset_mode == PRESET_OFF:
+            # The "off" preset is a convenience for schedulers that can only
+            # set presets. It behaves exactly like an HVAC off command.
+            if self._defers_schedule_command(context):
+                self._baseline.hvac_mode = HVAC_OFF
+            else:
+                self._end_manual("off")
+                self._apply_mode(HVAC_OFF)
+            await self._async_command_received()
+            return
         if self._manual is not None and self._is_user_context(context):
             self._apply_setpoint(self._manual.desired, temperature=None, preset_mode=preset_mode)
         elif (
@@ -428,7 +523,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
 
     async def async_set_route_override(self, value: str) -> None:
         """Set the built-in route override select."""
-        if value not in (ROUTE_AUTO, ROUTE_RADIATOR, ROUTE_AC):
+        if value not in self.route_override_options:
             raise HomeAssistantError(f"Unsupported route override: {value}")
         self._route_override = value
         await self.async_evaluate(explicit=True)
@@ -441,7 +536,11 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
     @property
     def route_override_options(self) -> list[str]:
         """Return valid options for the route override select."""
-        return [ROUTE_AUTO, ROUTE_RADIATOR, ROUTE_AC]
+        configured = self._configured_targets()
+        return [
+            ROUTE_AUTO,
+            *(target.value for target in Target if target in configured),
+        ]
 
     async def async_recalculate(self) -> None:
         """Force a route evaluation."""
@@ -591,6 +690,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._manual.baseline = self._baseline.copy()
         self._last_command = now
         self._sync_desired()
+        await self._async_set_pause_switch(True)
         self._schedule_manual_expiry()
         self._store.async_delay_save(self._data_to_save, 1)
         await self.async_evaluate(explicit=True)
@@ -614,6 +714,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             timer_minutes=timer,
         )
         self.hass.async_create_task(self._async_velair_pause())
+        self.hass.async_create_task(self._async_set_pause_switch(True))
         self._schedule_manual_expiry()
         self._store.async_delay_save(self._data_to_save, 1)
         self.hass.bus.async_fire(
@@ -647,6 +748,10 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         if hvac_mode == HVAC_OFF:
             await self.async_return_to_schedule(cause="off")
             await self.async_set_hvac_mode(HVAC_OFF, context=context)
+            return
+        if preset_mode == PRESET_OFF:
+            await self.async_return_to_schedule(cause="off")
+            await self.async_set_preset_mode(PRESET_OFF, context=context)
             return
         if hvac_mode is not None and hvac_mode not in MODES:
             raise HomeAssistantError(f"Unsupported HVAC mode: {hvac_mode}")
@@ -760,6 +865,31 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         except HomeAssistantError as err:
             _LOGGER.warning("Failed to resume Velair: %s", err)
 
+    async def _async_set_pause_switch(self, on: bool) -> None:
+        """Drive an external scheduler pause switch for manual mode.
+
+        The entity is deliberately generic: Chauffage's pause switch is the
+        motivating use case, but any ``switch`` or ``input_boolean`` can be
+        wired here.
+        """
+        entity_id = self.config.scheduler_pause_switch_entity_id
+        if not entity_id:
+            return
+        if self._pause_switch_on is on:
+            return
+        service = "turn_on" if on else "turn_off"
+        try:
+            await self.hass.services.async_call(
+                "homeassistant",
+                service,
+                {"entity_id": entity_id},
+                blocking=False,
+            )
+        except HomeAssistantError as err:
+            _LOGGER.warning("Failed to %s %s: %s", service, entity_id, err)
+            return
+        self._pause_switch_on = on
+
     async def async_return_to_schedule(self, cause: str = "return_to_schedule") -> None:
         """End manual mode and restore the latest schedule command."""
         if self._manual is None:
@@ -786,6 +916,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._manual = None
         self._sync_desired()
         self.hass.async_create_task(self._async_velair_resume())
+        self.hass.async_create_task(self._async_set_pause_switch(False))
         self.hass.bus.async_fire(
             EVENT_MANUAL_MODE_ENDED,
             {
@@ -834,7 +965,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         targets: str = "both",
         context: Context | None = None,
     ) -> None:
-        """Activate both targets for a bounded time (heat only)."""
+        """Activate every configured target for a bounded time (heat only)."""
         self._ensure_unlocked(context)
         if not self.config.boost_enabled:
             raise HomeAssistantError("Boost is disabled in the ClimateRouter options")
@@ -857,7 +988,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         ):
             raise HomeAssistantError("Cannot start boost while a handover is pending")
 
-        for target in Target:
+        for target in self._configured_targets():
             state = self._states[target]
             if not state.available:
                 raise HomeAssistantError(f"{target.value} is unavailable")
@@ -873,7 +1004,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._boost = BoostState(
             until=now + timedelta(minutes=duration),
             started_at=now,
-            targets=frozenset(Target),
+            targets=self._configured_targets(),
         )
         self._last_command = now
         self._schedule_boost_expiry()
@@ -1043,6 +1174,9 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         """Compare target state with the expected state and apply the policy."""
         if not self._ready:
             return
+        if self._read_only_mode() != READ_ONLY_OFF:
+            # Differences are expected: the router is not allowed to write.
+            return
         if self._handover_state not in (
             HandoverState.STEADY,
             HandoverState.OFF,
@@ -1107,7 +1241,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         if not boost:
             on_targets = [
                 target
-                for target in Target
+                for target in self._configured_targets()
                 if self._states[target].available
                 and self._states[target].hvac_mode not in (None, HVAC_OFF)
             ]
@@ -1129,7 +1263,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
                         if target is not active and not self._states[target].is_active:
                             await self._async_turn_off_target(target)
             elif active is not None:
-                for other in Target:
+                for other in self._configured_targets():
                     if other is active:
                         continue
                     state = self._states[other]
@@ -1258,6 +1392,14 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             self._refresh_inputs()
 
             if not self._ready:
+                self._publish()
+                return
+
+            if self._read_only_mode() != READ_ONLY_OFF:
+                # No write can reach the underlying thermostats. Keep a
+                # command visible in soft mode and mirror the real state in
+                # hard mode, without running the handover state machine.
+                self._evaluate_read_only()
                 self._publish()
                 return
 
@@ -1705,6 +1847,8 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         thermostat is written, and the VTherm is expected to restore the
         normal setpoint when heating resumes.
         """
+        if self._read_only_mode() != READ_ONLY_OFF:
+            return
         ac_state = self._states[Target.AC]
         idle_episode = (
             self.config.ac_idle_bypass_enabled
@@ -1802,7 +1946,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
 
     async def _async_stop_all(self) -> None:
         """Turn off every target that is not already off."""
-        for target in Target:
+        for target in self._configured_targets():
             if not self._states[target].is_off and self._states[target].available:
                 try:
                     await self._async_climate_call(target, "set_hvac_mode", {"hvac_mode": HVAC_OFF})
@@ -1822,7 +1966,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             self._refresh_inputs()
             on_targets = [
                 target
-                for target in Target
+                for target in self._configured_targets()
                 if self._states[target].hvac_mode not in (None, HVAC_OFF)
             ]
 
@@ -1868,7 +2012,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         if active is None:
             on_targets = [
                 target
-                for target in Target
+                for target in self._configured_targets()
                 if self._states[target].hvac_mode not in (None, HVAC_OFF)
             ]
             if len(on_targets) != 1:
@@ -1923,6 +2067,10 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         """
         context = getattr(event, "context", None)
         if not self._is_user_context(context) or self._event_is_own(event):
+            return
+        if self._read_only_mode() != READ_ONLY_OFF:
+            # The proxy is a mirror here; do not turn an external VTherm move
+            # into a proxy-owned manual session.
             return
 
         new_state = event.data.get("new_state")
@@ -2135,6 +2283,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             mild_threshold=self.config.mild_threshold,
             fallback_on_unavailable=self.config.fallback_on_unavailable,
             boost_active=self._boost is not None,
+            single_target=self._single_configured_target(),
         )
         return choose_route(inputs)
 
@@ -2148,7 +2297,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
 
     def _first_on_target(self) -> Target | None:
         """Return the first target whose HVAC mode is not off, if any."""
-        for target in Target:
+        for target in self._configured_targets():
             if self._states[target].hvac_mode not in (None, HVAC_OFF):
                 return target
         return None
@@ -2162,24 +2311,39 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
     def _build_snapshot(self) -> RouterSnapshot:
         radiator = self._states[Target.RADIATOR]
         ac = self._states[Target.AC]
+        configured = self._configured_targets()
 
         hvac_modes = [HVAC_OFF, HVAC_HEAT]
-        if ac.capability.can_handle(HVAC_COOL):
+        if any(self._states[target].capability.can_handle(HVAC_COOL) for target in configured):
             hvac_modes.append(HVAC_COOL)
 
-        presets = set(radiator.preset_modes) & set(ac.preset_modes)
-        if not presets:
-            presets = set(radiator.preset_modes) or set(ac.preset_modes)
+        if len(configured) > 1:
+            presets = set(radiator.preset_modes) & set(ac.preset_modes)
+            if not presets:
+                presets = set(radiator.preset_modes) | set(ac.preset_modes)
+        else:
+            presets = set()
+            for target in configured:
+                presets.update(self._states[target].preset_modes)
         presets.add("none")
+        presets.add(PRESET_OFF)
 
         active = self._single_active()
         active_state = self._states.get(active) if active is not None else None
         if active_state is None:
-            active_state = ac if ac.available else radiator
+            for target in (Target.AC, Target.RADIATOR):
+                if target in configured and self._states[target].available:
+                    active_state = self._states[target]
+                    break
+        if active_state is None:
+            active_state = next(
+                (self._states[target] for target in configured),
+                radiator,
+            )
 
         return RouterSnapshot(
             ready=self._ready,
-            available=radiator.available or ac.available,
+            available=any(self._states[target].available for target in configured),
             active_targets=self._active_targets,
             pending_target=self._pending_target,
             route_reason=self._route_reason,
@@ -2187,7 +2351,9 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             desired=self._desired,
             manual_mode=self._manual,
             boost_until=self._boost.until if self._boost is not None else None,
-            boost_targets=self._boost.targets if self._boost is not None else frozenset(),
+            boost_targets=(
+                self._boost.targets & configured if self._boost is not None else frozenset()
+            ),
             conflicts=tuple(self._conflicts.values()),
             conflict_count=self._conflict_count,
             outdoor_temperature=self._outdoor_temperature,
@@ -2200,10 +2366,13 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             lock_has_code=bool(self.config.lock_code),
             auto_relock_sec=self.config.auto_relock_sec,
             manual_blocks_schedule=self.config.manual_blocks_schedule,
+            read_only_mode=self.config.read_only_mode,
+            manual_read_only_mode=self.config.manual_read_only_mode,
+            configured_targets=configured,
             targets=dict(self._states),
             hvac_modes=tuple(hvac_modes),
             preset_modes=tuple(sorted(presets)),
-            fan_modes=ac.fan_modes,
+            fan_modes=ac.fan_modes if Target.AC in configured else (),
             min_temp=active_state.min_temp or 7.0,
             max_temp=active_state.max_temp or 35.0,
             target_temp_step=active_state.target_temp_step or 0.5,
@@ -2224,6 +2393,15 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
     # ------------------------------------------------------------------
     async def _async_climate_call(self, target: Target, service: str, data: dict[str, Any]) -> None:
         state = self._states[target]
+        if self._read_only_mode() != READ_ONLY_OFF:
+            _LOGGER.debug(
+                "Read-only mode (%s); skipping climate.%s on %s: %s",
+                self._read_only_mode(),
+                service,
+                state.entity_id,
+                data,
+            )
+            return
         context = Context()
         self._contexts[context.id] = time.monotonic() + CONTEXT_TTL
         settle = max(self.config.settle_time, 1)

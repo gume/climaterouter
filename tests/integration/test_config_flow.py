@@ -36,6 +36,7 @@ from custom_components.climaterouter.const import (
     CONF_EXPOSE_VTHERM_IDENTITY,
     CONF_LOCK_CODE,
     CONF_LOCK_ENABLED,
+    CONF_MANUAL_READ_ONLY_MODE,
     CONF_MAX_MANUAL_MINUTES,
     CONF_MILD_THRESHOLD,
     CONF_MIN_ROUTE_DWELL,
@@ -43,6 +44,8 @@ from custom_components.climaterouter.const import (
     CONF_OUTDOOR_SENSOR_ENTITY_ID,
     CONF_OUTDOOR_STALE_AFTER,
     CONF_RADIATOR_ENTITY_ID,
+    CONF_READ_ONLY_MODE,
+    CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID,
     CONF_TEMPERATURE_TOLERANCE,
     CONF_VELAIR_ENABLED,
     DOMAIN,
@@ -595,3 +598,126 @@ async def test_validate_input_rejects_unknown_idle_bypass_entity(hass) -> None:
         },
     )
     assert errors == {CONF_AC_IDLE_BYPASS_ENTITY_ID: "invalid_entity"}
+
+
+async def test_user_flow_accepts_a_single_thermostat(hass) -> None:
+    """One climate and no outdoor sensor is a valid configuration."""
+    _set_entities(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    payload = _form_input()
+    payload["basic"] = {
+        CONF_NAME: "AC only",
+        CONF_AC_ENTITY_ID: AC,
+    }
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], payload)
+
+    assert result["type"] is data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_AC_ENTITY_ID] == AC
+    assert result["data"].get(CONF_RADIATOR_ENTITY_ID) in (None, "")
+    assert result["data"].get(CONF_OUTDOOR_SENSOR_ENTITY_ID) in (None, "")
+
+
+async def test_user_flow_requires_at_least_one_climate(hass) -> None:
+    """The form rejects an entry without any thermostat."""
+    _set_entities(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    payload = _form_input()
+    payload["basic"] = {CONF_NAME: "Neither"}
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], payload)
+
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["errors"] == {CONF_RADIATOR_ENTITY_ID: "at_least_one_climate"}
+
+
+async def test_validate_input_accepts_single_climate_and_no_outdoor(hass) -> None:
+    """Validation only requires one climate and treats the sensor as optional."""
+    _set_entities(hass)
+
+    assert _validate_input(hass, {CONF_RADIATOR_ENTITY_ID: RADIATOR}) == {}
+    assert _validate_input(hass, {CONF_AC_ENTITY_ID: AC}) == {}
+
+
+async def test_validate_input_rejects_unknown_pause_switch(hass) -> None:
+    """A configured pause switch must exist and be a switch-like entity."""
+    _set_entities(hass)
+
+    errors = _validate_input(
+        hass,
+        {
+            CONF_RADIATOR_ENTITY_ID: RADIATOR,
+            CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID: "switch.missing",
+        },
+    )
+    assert errors == {CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID: "entity_not_found"}
+
+    hass.states.async_set("sensor.not_a_switch", STATE_OFF)
+    errors = _validate_input(
+        hass,
+        {
+            CONF_RADIATOR_ENTITY_ID: RADIATOR,
+            CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID: "sensor.not_a_switch",
+        },
+    )
+    assert errors == {CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID: "invalid_entity"}
+
+
+async def test_options_manual_section_saves_read_only_and_pause_switch(hass) -> None:
+    """The manual section persists the read-only level and pause switch."""
+    _set_entities(hass)
+    hass.states.async_set("switch.chauffage_pause", STATE_OFF)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Test Router",
+        data=_form_input()["basic"],
+        unique_id=f"{RADIATOR}|{AC}",
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": SECTION_MANUAL}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_MANUAL_READ_ONLY_MODE: "soft",
+            CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID: "switch.chauffage_pause",
+        },
+    )
+
+    assert result["type"] is data_entry_flow.FlowResultType.MENU
+    assert entry.data[CONF_MANUAL_READ_ONLY_MODE] == "soft"
+    assert entry.data[CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID] == "switch.chauffage_pause"
+
+
+async def test_options_basic_section_saves_read_only_mode(hass) -> None:
+    """The basic section persists the schedule read-only level."""
+    _set_entities(hass)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Test Router",
+        data=_form_input()["basic"],
+        unique_id=f"{RADIATOR}|{AC}",
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": SECTION_BASIC}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_READ_ONLY_MODE: "hard"}
+    )
+
+    assert result["type"] is data_entry_flow.FlowResultType.MENU
+    assert entry.data[CONF_READ_ONLY_MODE] == "hard"

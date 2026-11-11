@@ -50,6 +50,9 @@ CONF_VELAIR_ENABLED: Final = "velair_enabled"
 CONF_AC_IDLE_BYPASS_ENABLED: Final = "ac_idle_bypass_enabled"
 CONF_AC_IDLE_BYPASS_ENTITY_ID: Final = "ac_idle_bypass_entity_id"
 CONF_AC_IDLE_BYPASS_PRESET: Final = "ac_idle_bypass_preset"
+CONF_READ_ONLY_MODE: Final = "read_only_mode"
+CONF_MANUAL_READ_ONLY_MODE: Final = "manual_read_only_mode"
+CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID: Final = "scheduler_pause_switch_entity_id"
 
 CONFLICT_POLICIES: Final = ["monitor", "reassert", "adopt"]
 

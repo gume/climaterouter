@@ -31,6 +31,10 @@ from custom_components.climaterouter.models import (
     HVAC_COOL,
     HVAC_HEAT,
     HVAC_OFF,
+    PRESET_OFF,
+    READ_ONLY_HARD,
+    READ_ONLY_OFF,
+    READ_ONLY_SOFT,
     ROUTE_AC,
     Target,
 )
@@ -1695,3 +1699,161 @@ async def test_ac_idle_bypass_uses_configured_entity_and_preset(hass) -> None:
     bypass = _bypass_calls(calls, device)
     assert len(bypass) == 1
     assert bypass[0].data == {"entity_id": device, "temperature": 21}
+
+
+async def test_read_only_is_off_by_default(hass) -> None:
+    """Without configuration the router keeps writing normally."""
+    _entry, coordinator = await _setup(hass)
+    assert coordinator.data.effective_read_only == READ_ONLY_OFF
+
+
+async def test_soft_read_only_shows_the_command_without_writing(hass) -> None:
+    """Soft read-only keeps the proxy optimistic but never writes the target."""
+    _entry, coordinator = await _setup(hass, read_only_mode=READ_ONLY_SOFT)
+    set_temperature = async_mock_service(hass, "climate", "set_temperature")
+    set_hvac_mode = async_mock_service(hass, "climate", "set_hvac_mode")
+
+    await coordinator.async_set_temperature(temperature=23, hvac_mode=HVAC_HEAT)
+    await hass.async_block_till_done()
+
+    assert set_temperature == []
+    assert set_hvac_mode == []
+    assert coordinator.data.effective_read_only == READ_ONLY_SOFT
+    assert coordinator.data.active_targets == frozenset({Target.RADIATOR})
+
+    state = hass.states.get(coordinator.climate_entity_id)
+    assert state is not None
+    assert state.state == HVAC_HEAT
+    assert state.attributes["temperature"] == 23
+
+
+async def test_hard_read_only_mirrors_the_target_and_dismisses_commands(hass) -> None:
+    """Hard read-only exposes the real target state, not the proxy command."""
+    _entry, coordinator = await _setup(hass, read_only_mode=READ_ONLY_HARD)
+    hass.states.async_set(
+        RADIATOR,
+        HVAC_HEAT,
+        {
+            "hvac_modes": [HVAC_HEAT],
+            "hvac_action": "heating",
+            "temperature": 20,
+            "min_temp": 7,
+            "max_temp": 35,
+        },
+    )
+    await coordinator.async_recalculate()
+    await hass.async_block_till_done()
+    set_temperature = async_mock_service(hass, "climate", "set_temperature")
+    set_hvac_mode = async_mock_service(hass, "climate", "set_hvac_mode")
+
+    await coordinator.async_set_temperature(temperature=23, hvac_mode=HVAC_HEAT, context=USER)
+    await hass.async_block_till_done()
+
+    assert set_temperature == []
+    assert set_hvac_mode == []
+    assert coordinator.data.effective_read_only == READ_ONLY_HARD
+    assert coordinator.data.active_targets == frozenset({Target.RADIATOR})
+
+    state = hass.states.get(coordinator.climate_entity_id)
+    assert state is not None
+    assert state.state == HVAC_HEAT
+    assert state.attributes["temperature"] == 20
+    assert state.attributes["effective_read_only"] == READ_ONLY_HARD
+
+
+async def test_manual_read_only_mode_applies_while_manual_is_active(hass) -> None:
+    """The manual read-only level overrides the schedule level in manual mode."""
+    _entry, coordinator = await _setup(hass, manual_read_only_mode=READ_ONLY_SOFT)
+    calls = async_mock_service(hass, "climate", "set_temperature")
+
+    await coordinator.async_enter_manual_mode(temperature=22, duration_minutes=30, context=USER)
+    await hass.async_block_till_done()
+
+    assert calls == []
+    assert coordinator.data.manual_mode is not None
+    assert coordinator.data.effective_read_only == READ_ONLY_SOFT
+    state = hass.states.get(coordinator.climate_entity_id)
+    assert state is not None
+    assert state.attributes["temperature"] == 22
+
+
+async def test_manual_mode_drives_the_scheduler_pause_switch(hass) -> None:
+    """The configured pause switch follows manual mode start and end."""
+    hass.states.async_set("switch.chauffage_pause", STATE_OFF)
+    _entry, coordinator = await _setup(
+        hass, scheduler_pause_switch_entity_id="switch.chauffage_pause"
+    )
+    turn_on = async_mock_service(hass, "homeassistant", "turn_on")
+    turn_off = async_mock_service(hass, "homeassistant", "turn_off")
+
+    await coordinator.async_enter_manual_mode(temperature=22, duration_minutes=30, context=USER)
+    await hass.async_block_till_done()
+
+    assert len(turn_on) == 1
+    assert turn_on[0].data["entity_id"] == "switch.chauffage_pause"
+    assert turn_off == []
+
+    await coordinator.async_return_to_schedule()
+    await hass.async_block_till_done()
+
+    assert len(turn_off) == 1
+    assert turn_off[0].data["entity_id"] == "switch.chauffage_pause"
+
+
+async def test_off_preset_ends_manual_mode_for_a_user(hass) -> None:
+    """The off preset behaves like an HVAC off command from the UI."""
+    _entry, coordinator = await _setup(hass)
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+    await coordinator.async_enter_manual_mode(temperature=22, duration_minutes=30, context=USER)
+    await hass.async_block_till_done()
+    assert coordinator.data.manual_mode is not None
+
+    await coordinator.async_set_preset_mode(PRESET_OFF, context=USER)
+    await hass.async_block_till_done()
+
+    assert coordinator.data.manual_mode is None
+    assert coordinator.data.desired.hvac_mode == HVAC_OFF
+    assert coordinator.data.active_targets == frozenset()
+
+
+async def test_off_preset_is_deferred_for_a_scheduler_during_manual_mode(hass) -> None:
+    """A schedule off preset is remembered and applied when manual mode ends."""
+    _entry, coordinator = await _setup(hass)
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+    await coordinator.async_enter_manual_mode(temperature=22, duration_minutes=30, context=USER)
+    await hass.async_block_till_done()
+
+    await coordinator.async_set_preset_mode(PRESET_OFF)
+    await hass.async_block_till_done()
+
+    assert coordinator.data.manual_mode is not None
+    assert coordinator.data.manual_mode.baseline.hvac_mode == HVAC_OFF
+    assert coordinator.data.desired.hvac_mode == HVAC_HEAT
+
+    await coordinator.async_return_to_schedule()
+    await hass.async_block_till_done()
+
+    assert coordinator.data.manual_mode is None
+    assert coordinator.data.desired.hvac_mode == HVAC_OFF
+
+
+async def test_single_climate_routes_to_the_only_target(hass) -> None:
+    """A single-thermostat entry bypasses outdoor routing and the AC."""
+    _entry, coordinator = await _setup(
+        hass,
+        ac_entity_id="",
+        outdoor_sensor_entity_id="",
+    )
+    calls = async_mock_service(hass, "climate", "set_hvac_mode")
+    async_mock_service(hass, "climate", "set_temperature")
+
+    await coordinator.async_set_temperature(temperature=21, hvac_mode=HVAC_HEAT)
+    await hass.async_block_till_done()
+
+    assert coordinator.data.configured_targets == frozenset({Target.RADIATOR})
+    assert coordinator.data.active_targets == frozenset({Target.RADIATOR})
+    assert coordinator.data.route_reason == "single_target"
+    assert coordinator.route_override_options == ["auto", "radiator"]
+    assert HVAC_COOL not in coordinator.data.hvac_modes
+    assert calls
+    assert {call.data["entity_id"] for call in calls} == {RADIATOR}
