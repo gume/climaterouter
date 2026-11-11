@@ -154,14 +154,42 @@ else
 fi
 
 TAG_AT_HEAD=0
-if git rev-parse --verify --quiet "refs/tags/$TAG" >/dev/null; then
-  tag_commit="$(git rev-list -n1 "$TAG")"
-  if [[ "$tag_commit" == "$(git rev-parse HEAD)" ]]; then
-    TAG_AT_HEAD=1
-  else
-    commits_since_tag="$(git rev-list --count "$TAG..HEAD")"
-    die "version $VERSION is already released as $TAG (tag at ${tag_commit:0:7}). $commits_since_tag commit(s) have been made since; bump the version in manifest.json, const.py and pyproject.toml to publish them."
+HEAD_SHA="$(git rev-parse HEAD)"
+
+local_tag_commit() {
+  git rev-parse --verify --quiet "refs/tags/$TAG^{}" 2>/dev/null \
+    || git rev-parse --verify --quiet "refs/tags/$TAG" 2>/dev/null
+}
+
+remote_tag_commit() {
+  local output sha
+  output="$(git ls-remote origin "refs/tags/$TAG" "refs/tags/$TAG^{}" 2>/dev/null || true)"
+  [[ -n "$output" ]] || return 1
+  sha="$(printf '%s\n' "$output" | awk -v ref="refs/tags/$TAG^{}" '$2 == ref { print $1; exit }')"
+  if [[ -z "$sha" ]]; then
+    sha="$(printf '%s\n' "$output" | awk -v ref="refs/tags/$TAG" '$2 == ref { print $1; exit }')"
   fi
+  [[ -n "$sha" ]] || return 1
+  printf '%s\n' "$sha"
+}
+
+LOCAL_TAG_COMMIT="$(local_tag_commit || true)"
+REMOTE_TAG_COMMIT="$(remote_tag_commit || true)"
+
+if [[ -n "$LOCAL_TAG_COMMIT" && "$LOCAL_TAG_COMMIT" != "$HEAD_SHA" ]]; then
+  commits_since_tag="$(git rev-list --count "$LOCAL_TAG_COMMIT..HEAD")"
+  die "version $VERSION is already released as $TAG (tag at ${LOCAL_TAG_COMMIT:0:7}). $commits_since_tag commit(s) have been made since; bump the version in manifest.json, const.py and pyproject.toml to publish them."
+fi
+
+if [[ -n "$REMOTE_TAG_COMMIT" && "$REMOTE_TAG_COMMIT" != "$HEAD_SHA" ]]; then
+  die "version $VERSION is already released as $TAG on origin (tag at ${REMOTE_TAG_COMMIT:0:7}). Bump the version in manifest.json, const.py and pyproject.toml to publish new commits."
+fi
+
+# Local and remote tags are independent: a tag may exist on either side only.
+# Treat the version as tagged at HEAD when either one points at HEAD so a rerun
+# never tries to create or push an existing tag again.
+if [[ -n "$LOCAL_TAG_COMMIT" || -n "$REMOTE_TAG_COMMIT" ]]; then
+  TAG_AT_HEAD=1
 fi
 
 gh_release_exists() {
@@ -170,15 +198,11 @@ gh_release_exists() {
   gh release view "$TAG" >/dev/null 2>&1
 }
 
-remote_tag_exists() {
-  git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1
-}
-
 # Version tag already at HEAD: it is only a real no-op when main and the tag are
 # pushed and (if requested) the GitHub release exists. Otherwise continue so the
 # missing part can be completed.
 if (( TAG_AT_HEAD )) && (( AHEAD == 0 )); then
-  if remote_tag_exists && { (( ! CREATE_RELEASE )) || gh_release_exists; }; then
+  if [[ -n "$REMOTE_TAG_COMMIT" ]] && { (( ! CREATE_RELEASE )) || gh_release_exists; }; then
     printf 'Version %s is already released: tag %s is at HEAD' "$VERSION" "$TAG"
     if (( CREATE_RELEASE )); then
       printf ' and the GitHub release exists'
@@ -339,10 +363,12 @@ cat "$NOTES_FILE"
 
 printf '\n--- Commands ---\n'
 push_cmd git push origin main
-if (( ! TAG_AT_HEAD )); then
+if [[ -z "$LOCAL_TAG_COMMIT" ]]; then
   push_cmd git tag -a "$TAG" -m "ClimateRouter $TAG"
 fi
-push_cmd git push origin "refs/tags/$TAG"
+if [[ -z "$REMOTE_TAG_COMMIT" ]]; then
+  push_cmd git push origin "refs/tags/$TAG"
+fi
 if (( CREATE_RELEASE )); then
   push_cmd gh release create "$TAG" --title "ClimateRouter $TAG" --notes-file "$NOTES_FILE"
 else
@@ -365,12 +391,13 @@ if (( CREATE_RELEASE )); then
   gh auth status >/dev/null 2>&1 || die "gh is not authenticated; run gh auth login or use --no-release"
 fi
 
-if (( TAG_AT_HEAD )); then
-  git push origin main
-  git push origin "refs/tags/$TAG"
-else
+if [[ -z "$LOCAL_TAG_COMMIT" ]]; then
   git tag -a "$TAG" -m "ClimateRouter $TAG"
+fi
+if [[ -z "$REMOTE_TAG_COMMIT" ]]; then
   git push --atomic origin main "refs/tags/$TAG"
+else
+  git push origin main
 fi
 
 if (( CREATE_RELEASE )); then
