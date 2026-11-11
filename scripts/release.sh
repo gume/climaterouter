@@ -72,14 +72,6 @@ run_cmd() {
   "$@"
 }
 
-push_cmd() {
-  if (( DRY_RUN )); then
-    print_cmd "$@"
-  else
-    run_cmd "$@"
-  fi
-}
-
 while (($#)); do
   case "$1" in
     --push) DRY_RUN=0 ;;
@@ -362,15 +354,16 @@ printf '\n--- Release notes ---\n'
 cat "$NOTES_FILE"
 
 printf '\n--- Commands ---\n'
-push_cmd git push origin main
 if [[ -z "$LOCAL_TAG_COMMIT" ]]; then
-  push_cmd git tag -a "$TAG" -m "ClimateRouter $TAG"
+  print_cmd git tag -a "$TAG" -m "ClimateRouter $TAG"
 fi
 if [[ -z "$REMOTE_TAG_COMMIT" ]]; then
-  push_cmd git push origin "refs/tags/$TAG"
+  print_cmd git push --atomic origin main "refs/tags/$TAG"
+else
+  print_cmd git push origin main
 fi
 if (( CREATE_RELEASE )); then
-  push_cmd gh release create "$TAG" --title "ClimateRouter $TAG" --notes-file "$NOTES_FILE"
+  print_cmd gh release create "$TAG" --title "ClimateRouter $TAG" --notes-file "$NOTES_FILE"
 else
   printf '    # GitHub release skipped (--no-release)\n'
 fi
