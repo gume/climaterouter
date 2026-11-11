@@ -1,11 +1,29 @@
 # ClimateRouter issue tracker
 
+## Resolved
+
 - [x] Velair integration is there, but the amount of pause is wrong. This pause should be the same length as it is with the manual mode. So if there is 37 minutes left, then the pause should be adjusted for 37 minutes. Velair counts the duration from the receival of the command.
   Resolved in `74ef5c6` (0.8.9). `velair.pause` now receives `duration_minutes` computed from the manual
   deadline at the moment of the call (start, timer change, or restored session), so a session with 37 minutes
   left pauses Velair for 37 minutes. An infinite manual session still pauses Velair without a deadline.
+- [x] Add soft/hard read-only modes for the underlying climates, both for schedule and manual control.
+  Resolved in `b8430f6` (0.9.0). `read_only_mode` and `manual_read_only_mode` select `off`/`soft`/`hard`;
+  `soft` suppresses every underlying write while the proxy keeps the requested state, and `hard` mirrors the
+  real underlying state and dismisses commands.
+- [x] Support setups with only one climate (radiator or AC) while keeping all other features.
+  Resolved in `b8430f6` (0.9.0). Either the radiator or the AC may be omitted (at least one is required); the
+  route is fixed to the configured target and never falls back to an unconfigured one.
+- [x] Support Chauffage by driving its pause switch while manual mode is active.
+  Resolved in `b8430f6` (0.9.0). The generic `scheduler_pause_switch_entity_id` accepts a `switch` or
+  `input_boolean` and is turned on/off with manual mode, independent of the scheduler.
+- [x] Expose a general `off` preset that turns the climate off.
+  Resolved in `b8430f6` (0.9.0). `off` is always exposed and follows the same manual-mode and scheduler
+  semantics as an HVAC off command.
+- [x] The release script fails when the tag it creates already exists.
+  Resolved in `29fc2bf`. Local and remote tags are checked independently, a tag pointing at another commit is
+  refused, and only missing tags are created/pushed, so reruns are idempotent.
 
 ## Open
 
-None.
-
+- [ ] Release 0.9.0, install it in the test HA through the Marketplace, and live-verify read-only soft/hard,
+      a single-thermostat entry, the Chauffage pause switch and the `off` preset.

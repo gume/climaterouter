@@ -31,16 +31,17 @@ Scheduler / User UI / Automations
 
 ## Status
 
-**M1–M6 implemented, plus the 0.8.x proxy rework (current version 0.8.9).** The integration package provides the config flow, proxy climate
+**M1–M6 implemented, plus the 0.8.x proxy rework and the 0.9.0 single/read-only batch (current version 0.9.0).** The integration package provides the config flow, proxy climate
 entity, outdoor routing, safe handover, proxy-owned manual mode/timer, conflict detection, feature-flagged boost,
-two separate locks, status entities, services and diagnostics. See [`docs/HANDOVER.md`](docs/HANDOVER.md) for the
-exact state, test results, known gaps and next steps.
+two separate locks, optional single-thermostat setups, read-only underlying control, status entities, services and
+diagnostics. See [`docs/HANDOVER.md`](docs/HANDOVER.md) for the exact state, test results, known gaps and next steps.
 
 ## Why a proxy?
 
 Scheduler Component works with a single climate entity. A radiator and an air conditioner are two separate
 climate entities, each with its own VTherm regulation. The proxy gives Scheduler and the user a stable,
-single-entity interface, while keeping the two VTherms independent and fully functional.
+single-entity interface, while keeping the underlying VTherms independent and fully functional. A single
+radiator or a single AC can also be used without the other target.
 
 The proxy is deliberately thin:
 
@@ -74,12 +75,16 @@ user-initiated commands; schedule and automation traffic keeps running. See
 | Capability | Summary |
 |---|---|
 | One climate entity | Scheduler/UI see `climate.climaterouter`; no scheduler changes required. |
+| Single thermostat | Either the radiator or the AC may be omitted; the route is then fixed and all other features keep working. |
+| Read-only targets | `off`/`soft`/`hard` levels for schedule and manual control. `soft` suppresses every underlying write while the proxy keeps showing the command; `hard` mirrors the real underlying state and dismisses commands. |
+| Scheduler pause switch | Optional generic switch/`input_boolean` turned on while manual mode is active and off when it ends (for example Chauffage's pause switch). |
+| Off preset | The proxy always exposes the `off` preset as a scheduler-friendly equivalent of an HVAC off command. |
 | Temperature-based routing | Outdoor sensor plus optional `select` override; hysteresis and minimum dwell time. |
 | Safe handover | Route change is deferred until the old target is idle; old target is turned off before the new one starts. |
 | Manual mode | Moving the temperature/preset or `climaterouter.enter_manual_mode` starts proxy-owned manual mode with an optional timer; additional moves do not reset it. While it is active, scheduler/automation moves are remembered but not applied, and `return_to_schedule` (or timer expiry) returns to the latest schedule state. A direct user move on the VTherm card itself is adopted into manual mode. Survives handover/restart. |
 | Observability | Binary sensors and sensors for active target, pending handover, manual mode, boost, stale inputs, conflicts, and last handover. |
 | Conflict detection | Detects direct changes to either VTherm, both-targets-on, unavailable targets, and stale inputs; `monitor` by default, with `reassert`/`adopt` policies and guarded states excluded. |
-| Boost | `climaterouter.set_boost` runs both targets for a bounded time when `boost_enabled` is on; heat-only, both targets must be available, and ending boost hands back to single-target routing. |
+| Boost | `climaterouter.set_boost` runs the configured targets for a bounded time when `boost_enabled` is on; heat-only, every target must be available, and ending boost hands back to single-target routing. |
 | AC fan proxy | The AC fan mode is mirrored, stored while the AC is inactive, and applied or replayed only when the AC is active. Fan changes do not start manual mode. |
 | AC idle bypass | Optional: while the AC VTherm reports idle in heat mode, write a `frost`/`eco`/`comfort` preset temperature to the device thermostat below it. The VTherm restores its own setpoint when heating resumes. |
 | Velair | Optional: pause Velair for the remaining manual time when manual mode starts and resume automatic control on the ClimateRouter proxy when it ends. |

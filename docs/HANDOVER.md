@@ -1,6 +1,6 @@
 # Handover — ClimateRouter
 
-**Date:** 2026-11-11
+**Date:** 2026-11-12
 **Branch:** `main`
 **Relevant commits:**
 
@@ -113,6 +113,8 @@
 | `fe3168d` | `chore: bump version to 0.8.7` |
 | `e8380bb` | `fix: clarify the config field labels` |
 | `74ef5c6` | `fix: size the Velair pause to the remaining manual time` |
+| `b8430f6` | `feat: add read-only targets, single thermostats, and scheduler pause` |
+| `29fc2bf` | `fix: make release tag handling idempotent` |
 
 Everything through `d0e990d` is on `origin/main`; `v0.8.4` is tagged and released, and the 0.8.5 commits
 (`cf53fc8`, `f0d423c`) add the scheduler/manual fix. The test instance still runs the Marketplace release
@@ -126,8 +128,10 @@ follows it with a release-helper fix that reports an already published version c
 empty commit range. The **0.8.7** release (tag/release `v0.8.7`, commit `0d96b48`) is a maintenance release with
 the release-helper fix and documentation, and no integration behaviour changes. **0.8.8** (tag/release `v0.8.8`,
 commit `9ca79ad`, published 2026-11-10) adds the config field-label review (issue 4). **0.8.9** (code commit
-`74ef5c6`, pending release) sizes the Velair pause to the remaining manual time. None of 0.8.6–0.8.9 has been
-installed or live-verified yet.
+`74ef5c6`, pending release) sizes the Velair pause to the remaining manual time. **0.9.0** (code commit
+`b8430f6`, pending release) adds read-only underlying control, single-thermostat entries, the generic scheduler
+pause switch, and the synthetic `off` preset; `29fc2bf` makes the release script's tag handling idempotent. None
+of 0.8.6–0.9.0 has been installed or live-verified yet.
 
 ---
 
@@ -207,6 +211,26 @@ Version **0.8.9** fixes the Velair pause length (owner issue in `issues.txt`). `
 pause. The same adjustment is re-sent when the manual timer changes; an infinite manual session still pauses
 Velair without a deadline. Because Velair counts the duration from receipt, the value is recomputed from the
 absolute manual deadline on every call, including a session restored after a restart.
+
+Version **0.9.0** adds four owner-requested capabilities:
+
+1. **Read-only underlying targets** — `read_only_mode` (schedule) and `manual_read_only_mode` select `off`, `soft`
+   or `hard`. `soft` suppresses every write to the underlying climates while the proxy keeps displaying the
+   requested state; `hard` additionally dismisses the proxy's own view and mirrors the real underlying state. The
+   effective level follows manual mode: the manual level applies while manual mode is active, otherwise the
+   schedule level. Read-only mode bypasses handovers and conflict reassertion so it cannot create a write loop.
+2. **Single-thermostat entries** — either the radiator or the AC may be omitted (at least one is required). The
+   route is then fixed, `hvac_modes`/presets/fan modes follow the configured target, route override only offers
+   `auto` plus that target, and boost/pause/manual/read-only behaviour still works.
+3. **Scheduler pause switch** — `scheduler_pause_switch_entity_id` accepts a `switch` or `input_boolean`. It is
+   turned on when manual mode starts (including a restored session) and off when manual mode ends. Chauffage's
+   pause switch is the motivating use case, but the option is scheduler-agnostic.
+4. **`off` preset** — the proxy always exposes `off` as a preset. A user command ends manual mode and turns the
+   proxy off; a scheduler command during manual mode is remembered as the return state, like an HVAC `off`
+   command.
+
+`scripts/release.sh` now checks local and remote tags independently, refuses a tag that points at another commit,
+and only creates/pushes a tag when it is missing, so rerunning a release is idempotent.
 
 The next developer should start with section 8 (Next steps).
 
@@ -740,6 +764,7 @@ ACs; later versions use the two VTherm entities described in section 4.
 | 0.8.7 release published | Tag/release `v0.8.7` on `0d96b48` (2026-11-10); release-helper fix and docs only |
 | 0.8.8 release published | Tag/release `v0.8.8` on `9ca79ad` (2026-11-10); pending Marketplace install and live check |
 | 0.8.9 release candidate | `74ef5c6` sizes `velair.pause` to the remaining manual minutes; covered by automated tests, pending release/install and live check |
+| 0.9.0 release candidate | `b8430f6` adds read-only targets, single-thermostat entries, the scheduler pause switch and the `off` preset; `29fc2bf` makes release tags idempotent. Covered by automated tests, pending release/install and live check |
 
 The owner reports live verification through version **0.8.0** for M4 manual mode, M5 conflicts, M6 boost, the native
 lock, the 0.8.0 proxy rework, and the read-only VTherm display pass-through. The live instance currently runs the
@@ -848,20 +873,20 @@ section 8.2 for the full list.
 
 ### 8.2 Automated tests and CI
 
-Status as of 2026-11-10:
+Status as of 2026-11-12:
 
 | Check | Result |
 |---|---|
 | `ruff check .` | clean |
 | `ruff format --check .` | clean |
-| Pure unit tests (no HA) | 59 passed |
-| Integration tests (HA harness) | 105 passed |
-| Full suite (HA harness) | 164 passed, 0 failures |
-| `mypy custom_components/climaterouter` | clean |
+| Pure unit tests (no HA) | 70 passed |
+| Integration tests (HA harness) | 121 passed |
+| Full suite (HA harness) | 191 passed, 0 failures |
+| `mypy custom_components/climaterouter` | clean in CI; a newer local mypy reports the known `ConfigFlow, domain=` false positive |
 | CI installs `requirements_test.txt` | yes (intentionally unpinned, includes `mypy`) |
 | CI matrix | full HA suite on Python 3.13; pure unit tests on Python 3.12 and 3.13 |
 | GitHub CI run confirmed | green through `1972d1e`; the 0.8.5 release run is green after the device-lookup test fix |
-| Measured statement coverage | **91 %** (91.0 %, gate 75 %) |
+| Measured statement coverage | **91 %** (90.96 %, gate 75 %) |
 
 `pytest-homeassistant-custom-component` is wired into `tests/conftest.py`, and the integration suite lives in
 `tests/integration/`. Without the harness, pytest runs the pure tests and skips the integration directory.
@@ -1036,6 +1061,26 @@ filed names") is the only open item and is intentionally skipped for this batch.
 - [x] Integration tests cover the original duration, a restored session with 37 of 45 minutes left, a timer
       change to 25 minutes, and the open-ended pause when the countdown is switched off; full suite 165 passed.
 - [ ] Release 0.8.9 and verify live that a manual session with 37 minutes left pauses Velair for 37 minutes.
+
+### 8.9 0.9.0 read-only, single thermostat, pause switch and off preset
+
+- [x] `read_only_mode` and `manual_read_only_mode` select `off`/`soft`/`hard`; the effective level follows manual
+      mode, and every underlying write is gated in one place (`b8430f6`).
+- [x] `soft` keeps the proxy's optimistic view and skips handovers; `hard` mirrors the actual underlying state and
+      dismisses commands, without conflict reassertion or write loops.
+- [x] Either the radiator or the AC may be omitted (at least one climate required); routing is fixed to the
+      configured target and never falls back to an unconfigured one.
+- [x] Optional `scheduler_pause_switch_entity_id` (`switch`/`input_boolean`) is turned on while manual mode is
+      active and off when it ends, including a restored session and shutdown.
+- [x] `off` is always exposed as a preset; it behaves like the HVAC off command for manual-mode and scheduler
+      handling.
+- [x] `scripts/release.sh` treats local and remote tags independently, refuses a tag on another commit, and only
+      creates/pushes a missing tag (`29fc2bf`).
+- [x] Tests cover the model/config additions, single-target routing, read-only soft/hard behaviour, the pause
+      switch, and the `off` preset; full suite 191 passed.
+- [ ] Owner: release 0.9.0, refresh the Marketplace, install it and live-verify the four features. In particular
+      confirm that `soft`/`hard` suppress writes, a single-thermostat entry routes correctly, the Chauffage pause
+      switch follows manual mode, and Chauffage's `off` preset turns the proxy off.
 
 ---
 
