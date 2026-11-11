@@ -115,6 +115,8 @@
 | `74ef5c6` | `fix: size the Velair pause to the remaining manual time` |
 | `b8430f6` | `feat: add read-only targets, single thermostats, and scheduler pause` |
 | `29fc2bf` | `fix: make release tag handling idempotent` |
+| `b66bbea` | `docs: record the 0.9.0 features and bump the version` |
+| `41733d8` | `fix: only print release commands before confirmation` |
 
 Everything through `d0e990d` is on `origin/main`; `v0.8.4` is tagged and released, and the 0.8.5 commits
 (`cf53fc8`, `f0d423c`) add the scheduler/manual fix. The test instance still runs the Marketplace release
@@ -127,11 +129,12 @@ and the AC idle bypass. It was published on 2026-11-10 but has not been installe
 follows it with a release-helper fix that reports an already published version cleanly instead of failing on an
 empty commit range. The **0.8.7** release (tag/release `v0.8.7`, commit `0d96b48`) is a maintenance release with
 the release-helper fix and documentation, and no integration behaviour changes. **0.8.8** (tag/release `v0.8.8`,
-commit `9ca79ad`, published 2026-11-10) adds the config field-label review (issue 4). **0.8.9** (code commit
-`74ef5c6`, pending release) sizes the Velair pause to the remaining manual time. **0.9.0** (code commit
-`b8430f6`, pending release) adds read-only underlying control, single-thermostat entries, the generic scheduler
-pause switch, and the synthetic `off` preset; `29fc2bf` makes the release script's tag handling idempotent. None
-of 0.8.6–0.9.0 has been installed or live-verified yet.
+commit `9ca79ad`, published 2026-11-10) adds the config field-label review (issue 4). **0.8.9** (tag/release
+`v0.8.9`, commit `9871e07`) sizes the Velair pause to the remaining manual time. **0.9.0** (tag/release `v0.9.0`,
+commit `b66bbea`) adds read-only underlying control, single-thermostat entries, the generic scheduler pause switch,
+and the synthetic `off` preset; `29fc2bf` makes the release script's tag handling idempotent. **0.9.1** (code commit
+`41733d8`) fixes the release-script preview, which executed the publish commands before asking for confirmation and
+then failed by trying to recreate the tag. None of 0.8.6–0.9.1 has been installed or live-verified yet.
 
 ---
 
@@ -230,7 +233,9 @@ Version **0.9.0** adds four owner-requested capabilities:
    command.
 
 `scripts/release.sh` now checks local and remote tags independently, refuses a tag that points at another commit,
-and only creates/pushes a tag when it is missing, so rerunning a release is idempotent.
+and only creates/pushes a tag when it is missing, so rerunning a release is idempotent. Version **0.9.1** fixes a
+follow-up bug in the same script: the `--push` preview executed the publish commands before the confirmation
+prompt, so by the time the real publish step ran, the tag already existed and `git tag` failed.
 
 The next developer should start with section 8 (Next steps).
 
@@ -763,8 +768,9 @@ ACs; later versions use the two VTherm entities described in section 4.
 | 0.8.6 release published | Tag/release `v0.8.6` on `c002372` (2026-11-10); not installed in the test instance yet |
 | 0.8.7 release published | Tag/release `v0.8.7` on `0d96b48` (2026-11-10); release-helper fix and docs only |
 | 0.8.8 release published | Tag/release `v0.8.8` on `9ca79ad` (2026-11-10); pending Marketplace install and live check |
-| 0.8.9 release candidate | `74ef5c6` sizes `velair.pause` to the remaining manual minutes; covered by automated tests, pending release/install and live check |
-| 0.9.0 release candidate | `b8430f6` adds read-only targets, single-thermostat entries, the scheduler pause switch and the `off` preset; `29fc2bf` makes release tags idempotent. Covered by automated tests, pending release/install and live check |
+| 0.8.9 release published | Tag/release `v0.8.9` on `9871e07`; pending Marketplace install and live check |
+| 0.9.0 release published | Tag/release `v0.9.0` on `b66bbea`; read-only targets, single-thermostat entries, scheduler pause and `off` preset, pending Marketplace install and live check |
+| 0.9.1 release candidate | `41733d8` makes the `--push` preview print-only until the confirmation, so the release commands run exactly once; verified manually in a throwaway clone with a bare remote |
 
 The owner reports live verification through version **0.8.0** for M4 manual mode, M5 conflicts, M6 boost, the native
 lock, the 0.8.0 proxy rework, and the read-only VTherm display pass-through. The live instance currently runs the
@@ -887,6 +893,10 @@ Status as of 2026-11-12:
 | CI matrix | full HA suite on Python 3.13; pure unit tests on Python 3.12 and 3.13 |
 | GitHub CI run confirmed | green through `1972d1e`; the 0.8.5 release run is green after the device-lookup test fix |
 | Measured statement coverage | **91 %** (90.96 %, gate 75 %) |
+
+The 0.9.1 release-script fix was verified manually in a throwaway clone with a bare remote; the repository has no
+shell-test harness. Answering `n` at the prompt leaves no local tag and no remote change, while `-y` pushes the
+commit and tag once and exits 0.
 
 `pytest-homeassistant-custom-component` is wired into `tests/conftest.py`, and the integration suite lives in
 `tests/integration/`. Without the harness, pytest runs the pure tests and skips the integration directory.
@@ -1060,7 +1070,9 @@ filed names") is the only open item and is intentionally skipped for this batch.
       absolute deadline on manual start, timer change and restore (`74ef5c6`).
 - [x] Integration tests cover the original duration, a restored session with 37 of 45 minutes left, a timer
       change to 25 minutes, and the open-ended pause when the countdown is switched off; full suite 165 passed.
-- [ ] Release 0.8.9 and verify live that a manual session with 37 minutes left pauses Velair for 37 minutes.
+- [x] Tag/release published as `v0.8.9` on `9871e07`.
+- [ ] Owner: install 0.8.9 or later and verify live that a manual session with 37 minutes left pauses Velair for
+      37 minutes.
 
 ### 8.9 0.9.0 read-only, single thermostat, pause switch and off preset
 
@@ -1078,9 +1090,20 @@ filed names") is the only open item and is intentionally skipped for this batch.
       creates/pushes a missing tag (`29fc2bf`).
 - [x] Tests cover the model/config additions, single-target routing, read-only soft/hard behaviour, the pause
       switch, and the `off` preset; full suite 191 passed.
-- [ ] Owner: release 0.9.0, refresh the Marketplace, install it and live-verify the four features. In particular
+- [x] Tag/release published as `v0.9.0` on `b66bbea`.
+- [ ] Owner: install 0.9.0 or later, refresh the Marketplace and live-verify the four features. In particular
       confirm that `soft`/`hard` suppress writes, a single-thermostat entry routes correctly, the Chauffage pause
       switch follows manual mode, and Chauffage's `off` preset turns the proxy off.
+
+### 8.10 0.9.1 release-script command preview
+
+- [x] The `--push` path executed the commands under `--- Commands ---` before the confirmation prompt, then ran
+      them again after confirmation; the second `git tag -a v0.9.0` failed with `fatal: tag 'v0.9.0' already
+      exists` even though the push and release had succeeded (`41733d8`).
+- [x] The preview now only prints, and the listed commands match what actually runs: local `git tag` when needed,
+      then `git push --atomic origin main refs/tags/$TAG`, or `git push origin main` when the remote tag exists.
+- [x] Verified manually in a throwaway clone with a bare remote: answering `n` leaves no tag or push, `-y` publishes
+      once and exits 0, and a rerun reports the version as already released.
 
 ---
 

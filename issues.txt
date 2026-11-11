@@ -22,8 +22,11 @@
 - [x] The release script fails when the tag it creates already exists.
   Resolved in `29fc2bf`. Local and remote tags are checked independently, a tag pointing at another commit is
   refused, and only missing tags are created/pushed, so reruns are idempotent.
+- [x] With `--push`, the release script still ended with `fatal: tag 'v0.9.0' already exists` after publishing.
+  Resolved in `41733d8` (0.9.1). The command preview executed the publish commands before the confirmation
+  prompt and then ran them again; it now only prints, and the real commands run once after confirmation.
 
 ## Open
 
-- [ ] Release 0.9.0, install it in the test HA through the Marketplace, and live-verify read-only soft/hard,
+- [ ] Release 0.9.1, install it in the test HA through the Marketplace, and live-verify read-only soft/hard,
       a single-thermostat entry, the Chauffage pause switch and the `off` preset.
