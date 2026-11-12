@@ -50,6 +50,7 @@ CONF_AC_IDLE_BYPASS_ENABLED: Final = "ac_idle_bypass_enabled"
 CONF_AC_IDLE_BYPASS_ENTITY_ID: Final = "ac_idle_bypass_entity_id"
 CONF_AC_IDLE_BYPASS_PRESET: Final = "ac_idle_bypass_preset"
 CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID: Final = "scheduler_pause_switch_entity_id"
+CONF_SCHEDULER_PAUSE_SWITCH_INVERT: Final = "scheduler_pause_switch_invert"
 
 CONFLICT_POLICIES: Final = ["monitor", "reassert", "adopt"]
 

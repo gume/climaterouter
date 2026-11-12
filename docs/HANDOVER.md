@@ -117,11 +117,14 @@
 | `29fc2bf` | `fix: make release tag handling idempotent` |
 | `b66bbea` | `docs: record the 0.9.0 features and bump the version` |
 | `41733d8` | `fix: only print release commands before confirmation` |
+| `ecb76d4` | `fix: explain and reposition the read-only level fields` |
+| `dea47ab` | `feat: make read-only mode a runtime select and always defer manual schedules` |
+| `a04a74e` | `chore: bump version to 0.10.0` |
 
-Everything through `d0e990d` is on `origin/main`; `v0.8.4` is tagged and released, and the 0.8.5 commits
-(`cf53fc8`, `f0d423c`) add the scheduler/manual fix. The test instance still runs the Marketplace release
-**v0.8.3** (tag `v0.8.3`, commit `723c5c0`): `update.climaterouter` reported `installed_version` =
-`latest_version` = `v0.8.3` at the last live check. The 0.8.4 release was published on 2026-11-09 but has not yet
+Everything through `ecb76d4` is on `origin/main`; `v0.9.1` is tagged and released from it. The 0.10.0 commits
+(`dea47ab`, `a04a74e`, and the pause-switch polarity change) are local until the owner pushes them. The test
+instance still runs the Marketplace release **v0.8.3** (tag `v0.8.3`, commit `723c5c0`): `update.climaterouter`
+reported `installed_version` = `latest_version` = `v0.8.3` at the last live check. The 0.8.4 release was published on 2026-11-09 but has not yet
 been installed in the test instance. The 0.8.5 release is cut from the commit that adds this handover update; after
 the Marketplace refresh/restart, install it and record the live result. The **0.8.6** release (tag/release
 `v0.8.6`, commit `c002372`) adds the fan proxy, inactive-timer reporting, diagnostic grouping, opt-in Velair pause,
@@ -230,14 +233,16 @@ Version **0.9.0** adds four owner-requested capabilities:
    `auto` plus that target, and boost/pause/manual/read-only behaviour still works.
 3. **Scheduler pause switch** — `scheduler_pause_switch_entity_id` accepts a `switch` or `input_boolean`. It is
    turned on when manual mode starts (including a restored session) and off when manual mode ends. Chauffage's
-   pause switch is the motivating use case, but the option is scheduler-agnostic.
+   pause switch is the motivating use case, but the option is scheduler-agnostic. `scheduler_pause_switch_invert`
+   flips the polarity so the entity signals "free" (on) instead of "busy" (off in manual mode).
 4. **`off` preset** — the proxy always exposes `off` as a preset. A user command ends manual mode and turns the
    proxy off; a scheduler command during manual mode is remembered as the return state, like an HVAC `off`
    command.
 
 Version **0.10.0** supersedes the read-only part of 0.9.0: the schedule level is now the runtime
 `select.<name>_read_only_mode` entity (persisted across restarts), the manual level is removed, and manual mode
-always defers scheduler/automation commands while still accepting user writes.
+always defers scheduler/automation commands while still accepting user writes. It also adds
+`scheduler_pause_switch_invert` so the optional pause switch can signal free instead of busy.
 
 `scripts/release.sh` now checks local and remote tags independently, refuses a tag that points at another commit,
 and only creates/pushes a tag when it is missing, so rerunning a release is idempotent. Version **0.9.1** fixes a
@@ -441,6 +446,11 @@ Events fired on the HA bus:
 - The climate entity exposes `manual_mode`, `manual_active`, `manual_until`, `manual_timer_minutes`, and
   `manual_remaining_minutes`; the legacy `override` attribute is still present for older cards. A timer that is off
   or expired reports `0` minutes (and the manual-timer select stays `off`) rather than a fake countdown.
+- **Optional scheduler pause switch** (`scheduler_pause_switch_entity_id`): any `switch` or `input_boolean` is
+  turned on while manual mode is active and off when it ends (including a restored session and shutdown).
+  Chauffage's pause switch is the motivating use case. With `scheduler_pause_switch_invert` the polarity flips:
+  the entity is on while the schedule is free and off while manual mode is active, so other components can act on
+  either the busy or the free signal.
 - **Optional Velair integration** (`velair_enabled`, default off): when manual mode starts, including a session
   restored after a restart, the coordinator calls the global `velair.pause` with `duration_minutes` set to the
   remaining manual time (Velair counts from receipt, so this is recomputed from the absolute deadline). Changing
@@ -584,7 +594,7 @@ All three flows share the same sectioned schema (`config_flow.py`):
 |---|---|
 | Thermostats | name, radiator, AC, outdoor sensor, AC idle-bypass entity/flag/preset |
 | Routing | thresholds, dwell, handover/off/startup/settle timings, fallback |
-| Manual mode | `default_manual_minutes`, `max_manual_minutes`, `velair_enabled`, `scheduler_pause_switch_entity_id` |
+| Manual mode | `default_manual_minutes`, `max_manual_minutes`, `velair_enabled`, `scheduler_pause_switch_entity_id`, `scheduler_pause_switch_invert` |
 | Conflicts | policy, auto-resolve flags, outdoor staleness, setpoint tolerance |
 | Boost | `boost_enabled` |
 | UI lock | `lock_enabled`, `lock_code`, `auto_relock_sec` |
@@ -784,7 +794,7 @@ ACs; later versions use the two VTherm entities described in section 4.
 | 0.8.9 release published | Tag/release `v0.8.9` on `9871e07`; pending Marketplace install and live check |
 | 0.9.0 release published | Tag/release `v0.9.0` on `b66bbea`; read-only targets, single-thermostat entries, scheduler pause and `off` preset, pending Marketplace install and live check |
 | 0.9.1 release published | Tag/release `v0.9.1` on `ecb76d4`; print-only release preview and read-only form hints; pending Marketplace install and live check |
-| 0.10.0 release candidate | Runtime `select.<name>_read_only_mode`, manual read-only setting removed, manual mode always defers scheduler/automation commands; full suite 190 passed |
+| 0.10.0 release candidate | Runtime `select.<name>_read_only_mode`, manual read-only setting removed, manual mode always defers scheduler/automation commands, inverted scheduler pause switch polarity; full suite 191 passed |
 
 The owner reports live verification through version **0.8.0** for M4 manual mode, M5 conflicts, M6 boost, the native
 lock, the 0.8.0 proxy rework, and the read-only VTherm display pass-through. The live instance currently runs the
@@ -900,13 +910,13 @@ Status as of 2026-11-12:
 | `ruff check .` | clean |
 | `ruff format --check .` | clean |
 | Pure unit tests (no HA) | 69 passed |
-| Integration tests (HA harness) | 121 passed |
-| Full suite (HA harness) | 190 passed, 0 failures |
+| Integration tests (HA harness) | 122 passed |
+| Full suite (HA harness) | 191 passed, 0 failures |
 | `mypy custom_components/climaterouter` | clean in CI; a newer local mypy reports the known `ConfigFlow, domain=` false positive |
 | CI installs `requirements_test.txt` | yes (intentionally unpinned, includes `mypy`) |
 | CI matrix | full HA suite on Python 3.13; pure unit tests on Python 3.12 and 3.13 |
 | GitHub CI run confirmed | green through `1972d1e`; the 0.8.5 release run is green after the device-lookup test fix |
-| Measured statement coverage | **91 %** (90.91 %, gate 75 %) |
+| Measured statement coverage | **91 %** (90.92 %, gate 75 %) |
 
 The 0.9.1 release-script fix was verified manually in a throwaway clone with a bare remote; the repository has no
 shell-test harness. Answering `n` at the prompt leaves no local tag and no remote change, while `-y` pushes the
@@ -1131,7 +1141,9 @@ filed names") is the only open item and is intentionally skipped for this batch.
       scheduler/automation commands, so the old `manual_blocks_schedule` toggle is gone too.
 - [x] Legacy `read_only_mode` entry data seeds the runtime value on first start; legacy `manual_read_only_mode` and
       `manual_blocks_schedule` data are ignored.
-- [x] Config-flow, translation, entity, persistence, and manual-write tests pass; full suite 190 passed.
+- [x] `scheduler_pause_switch_invert` flips the optional pause-switch polarity, so it can signal either busy (on
+      while manual mode is active, the default) or free (on while the schedule is in control).
+- [x] Config-flow, translation, entity, persistence, and manual-write tests pass; full suite 191 passed.
 
 ---
 

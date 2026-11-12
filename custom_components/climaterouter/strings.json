@@ -58,13 +58,15 @@
               "default_manual_minutes": "Default manual timer (0 = no timer)",
               "max_manual_minutes": "Maximum manual timer",
               "velair_enabled": "Pause Velair in manual mode",
-              "scheduler_pause_switch_entity_id": "Scheduler pause switch (optional)"
+              "scheduler_pause_switch_entity_id": "Scheduler pause switch (optional)",
+              "scheduler_pause_switch_invert": "Invert pause switch polarity (on = free)"
             },
             "data_description": {
               "default_manual_minutes": "Timer for a new manual session. 0 keeps manual mode active until ended.",
               "max_manual_minutes": "Upper limit for the manual timer.",
               "velair_enabled": "Pause Velair for the remaining manual time when manual mode starts, and resume automatic control on the ClimateRouter proxy when it ends.",
-              "scheduler_pause_switch_entity_id": "Switch or input_boolean turned on while manual mode is active and off when it ends. Chauffage's pause switch can be used here."
+              "scheduler_pause_switch_entity_id": "Switch or input_boolean turned on while manual mode is active and off when it ends. Chauffage's pause switch can be used here.",
+              "scheduler_pause_switch_invert": "Leave off to turn the switch on while manual mode is active (busy). Turn on to invert it: the switch stays on while the schedule is free and turns off in manual mode."
             }
           },
           "conflicts": {
@@ -178,13 +180,15 @@
               "default_manual_minutes": "Default manual timer (0 = no timer)",
               "max_manual_minutes": "Maximum manual timer",
               "velair_enabled": "Pause Velair in manual mode",
-              "scheduler_pause_switch_entity_id": "Scheduler pause switch (optional)"
+              "scheduler_pause_switch_entity_id": "Scheduler pause switch (optional)",
+              "scheduler_pause_switch_invert": "Invert pause switch polarity (on = free)"
             },
             "data_description": {
               "default_manual_minutes": "Timer for a new manual session. 0 keeps manual mode active until ended.",
               "max_manual_minutes": "Upper limit for the manual timer.",
               "velair_enabled": "Pause Velair for the remaining manual time when manual mode starts, and resume automatic control on the ClimateRouter proxy when it ends.",
-              "scheduler_pause_switch_entity_id": "Switch or input_boolean turned on while manual mode is active and off when it ends. Chauffage's pause switch can be used here."
+              "scheduler_pause_switch_entity_id": "Switch or input_boolean turned on while manual mode is active and off when it ends. Chauffage's pause switch can be used here.",
+              "scheduler_pause_switch_invert": "Leave off to turn the switch on while manual mode is active (busy). Turn on to invert it: the switch stays on while the schedule is free and turns off in manual mode."
             }
           },
           "conflicts": {
@@ -328,13 +332,15 @@
           "default_manual_minutes": "Default manual timer (0 = no timer)",
           "max_manual_minutes": "Maximum manual timer",
           "velair_enabled": "Pause Velair in manual mode",
-          "scheduler_pause_switch_entity_id": "Scheduler pause switch (optional)"
+          "scheduler_pause_switch_entity_id": "Scheduler pause switch (optional)",
+          "scheduler_pause_switch_invert": "Invert pause switch polarity (on = free)"
         },
         "data_description": {
           "default_manual_minutes": "Timer for a new manual session. 0 keeps manual mode active until ended.",
           "max_manual_minutes": "Upper limit for the manual timer.",
           "velair_enabled": "Pause Velair for the remaining manual time when manual mode starts, and resume automatic control on the ClimateRouter proxy when it ends.",
-          "scheduler_pause_switch_entity_id": "Switch or input_boolean turned on while manual mode is active and off when it ends. Chauffage's pause switch can be used here."
+          "scheduler_pause_switch_entity_id": "Switch or input_boolean turned on while manual mode is active and off when it ends. Chauffage's pause switch can be used here.",
+          "scheduler_pause_switch_invert": "Leave off to turn the switch on while manual mode is active (busy). Turn on to invert it: the switch stays on while the schedule is free and turns off in manual mode."
         }
       },
       "conflicts": {

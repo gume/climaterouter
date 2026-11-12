@@ -44,6 +44,7 @@ from custom_components.climaterouter.const import (
     CONF_OUTDOOR_STALE_AFTER,
     CONF_RADIATOR_ENTITY_ID,
     CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID,
+    CONF_SCHEDULER_PAUSE_SWITCH_INVERT,
     CONF_TEMPERATURE_TOLERANCE,
     CONF_VELAIR_ENABLED,
     DOMAIN,
@@ -666,7 +667,7 @@ async def test_validate_input_rejects_unknown_pause_switch(hass) -> None:
 
 
 async def test_options_manual_section_saves_pause_switch(hass) -> None:
-    """The manual section persists the scheduler pause switch."""
+    """The manual section persists the scheduler pause switch and its polarity."""
     _set_entities(hass)
     hass.states.async_set("switch.chauffage_pause", STATE_OFF)
     entry = MockConfigEntry(
@@ -687,8 +688,10 @@ async def test_options_manual_section_saves_pause_switch(hass) -> None:
         result["flow_id"],
         {
             CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID: "switch.chauffage_pause",
+            CONF_SCHEDULER_PAUSE_SWITCH_INVERT: True,
         },
     )
 
     assert result["type"] is data_entry_flow.FlowResultType.MENU
     assert entry.data[CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID] == "switch.chauffage_pause"
+    assert entry.data[CONF_SCHEDULER_PAUSE_SWITCH_INVERT] is True

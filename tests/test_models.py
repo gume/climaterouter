@@ -251,15 +251,18 @@ def test_router_config_parses_read_only_and_pause_settings() -> None:
         {
             "read_only_mode": "soft",
             "scheduler_pause_switch_entity_id": "switch.chauffage_pause",
+            "scheduler_pause_switch_invert": "on",
         }
     )
     assert config.read_only_mode == READ_ONLY_SOFT
     assert config.scheduler_pause_switch_entity_id == "switch.chauffage_pause"
+    assert config.scheduler_pause_switch_invert is True
 
 
 def test_router_config_read_only_defaults_and_invalid_values() -> None:
     config = RouterConfig.from_mapping({})
     assert config.read_only_mode == READ_ONLY_OFF
+    assert config.scheduler_pause_switch_invert is False
 
     invalid = RouterConfig.from_mapping({"read_only_mode": "frozen"})
     assert invalid.read_only_mode == READ_ONLY_OFF

@@ -77,7 +77,7 @@ user-initiated commands; schedule and automation traffic keeps running. See
 | One climate entity | Scheduler/UI see `climate.climaterouter`; no scheduler changes required. |
 | Single thermostat | Either the radiator or the AC may be omitted; the route is then fixed and all other features keep working. |
 | Read-only schedule control | Runtime select `select.<name>_read_only_mode` with `off`/`soft`/`hard`, changeable while the entry is configured. `soft` suppresses every underlying write while the proxy keeps showing the command; `hard` mirrors the real underlying state and dismisses commands. Manual mode is never read-only: user moves still write, while scheduler/automation moves are always deferred. |
-| Scheduler pause switch | Optional generic switch/`input_boolean` turned on while manual mode is active and off when it ends (for example Chauffage's pause switch). |
+| Scheduler pause switch | Optional generic switch/`input_boolean` turned on while manual mode is active and off when it ends (for example Chauffage's pause switch). Enable `scheduler_pause_switch_invert` to signal the opposite: on while the schedule is free, off in manual mode. |
 | Off preset | The proxy always exposes the `off` preset as a scheduler-friendly equivalent of an HVAC off command. |
 | Temperature-based routing | Outdoor sensor plus optional `select` override; hysteresis and minimum dwell time. |
 | Safe handover | Route change is deferred until the old target is idle; old target is turned off before the new one starts. |

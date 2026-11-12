@@ -160,6 +160,9 @@ script:
 - The timer is stored as an absolute deadline, so manual mode survives a restart until the deadline.
 - `default_manual_minutes` sets the default timer for new sessions (`0` = no timer). While manual mode is active,
   Scheduler/automation commands are always deferred; user moves are always accepted.
+- The optional scheduler pause switch (`scheduler_pause_switch_entity_id`) is on while manual mode is active by
+  default. Enable `scheduler_pause_switch_invert` to signal the opposite: on while the schedule is free, off in
+  manual mode.
 - Manual mode is **not** VTherm's own manual preset. Set VTherm `manual_override_duration_min` to `0` and let the
   proxy own the timer.
 

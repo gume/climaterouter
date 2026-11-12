@@ -52,6 +52,7 @@ from .const import (
     CONF_OUTDOOR_STALE_AFTER,
     CONF_RADIATOR_ENTITY_ID,
     CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID,
+    CONF_SCHEDULER_PAUSE_SWITCH_INVERT,
     CONF_SETTLE_TIME,
     CONF_STARTUP_GRACE,
     CONF_TEMPERATURE_TOLERANCE,
@@ -133,6 +134,7 @@ def _defaults(current: Mapping[str, Any] | None = None) -> dict[str, Any]:
         CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID: current.get(
             CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID, ""
         ),
+        CONF_SCHEDULER_PAUSE_SWITCH_INVERT: current.get(CONF_SCHEDULER_PAUSE_SWITCH_INVERT, False),
         CONF_TEMPERATURE_TOLERANCE: current.get(
             CONF_TEMPERATURE_TOLERANCE, DEFAULT_TEMPERATURE_TOLERANCE
         ),
@@ -262,6 +264,10 @@ def _manual_schema(defaults: Mapping[str, Any]) -> vol.Schema:
                 CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID,
                 defaults[CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID],
             ): EntitySelector(EntitySelectorConfig(domain=["switch", "input_boolean"])),
+            vol.Required(
+                CONF_SCHEDULER_PAUSE_SWITCH_INVERT,
+                default=defaults[CONF_SCHEDULER_PAUSE_SWITCH_INVERT],
+            ): BooleanSelector(),
         }
     )
 

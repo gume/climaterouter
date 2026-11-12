@@ -144,7 +144,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._locked = False
         self._auto_relock_unsub: Any | None = None
         self._auto_relock_at: datetime | None = None
-        self._pause_switch_on: bool | None = None
+        self._pause_switch_active: bool | None = None
         self._read_only_mode_value = config.read_only_mode
 
         self._ready = False
@@ -244,7 +244,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._cancel_auto_relock()
         if self._manual is not None:
             await self._async_velair_resume()
-        if self._pause_switch_on:
+        if self._pause_switch_active:
             await self._async_set_pause_switch(False)
         await self._store.async_save(self._data_to_save())
 
@@ -886,19 +886,22 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         except HomeAssistantError as err:
             _LOGGER.warning("Failed to resume Velair: %s", err)
 
-    async def _async_set_pause_switch(self, on: bool) -> None:
+    async def _async_set_pause_switch(self, manual_active: bool) -> None:
         """Drive an external scheduler pause switch for manual mode.
 
         The entity is deliberately generic: Chauffage's pause switch is the
         motivating use case, but any ``switch`` or ``input_boolean`` can be
-        wired here.
+        wired here. By default the entity is on while manual mode is active;
+        ``scheduler_pause_switch_invert`` flips the polarity so on signals
+        "free" instead of "busy".
         """
         entity_id = self.config.scheduler_pause_switch_entity_id
         if not entity_id:
             return
-        if self._pause_switch_on is on:
+        if self._pause_switch_active is manual_active:
             return
-        service = "turn_on" if on else "turn_off"
+        turn_on = manual_active != self.config.scheduler_pause_switch_invert
+        service = "turn_on" if turn_on else "turn_off"
         try:
             await self.hass.services.async_call(
                 "homeassistant",
@@ -909,7 +912,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         except HomeAssistantError as err:
             _LOGGER.warning("Failed to %s %s: %s", service, entity_id, err)
             return
-        self._pause_switch_on = on
+        self._pause_switch_active = manual_active
 
     async def async_return_to_schedule(self, cause: str = "return_to_schedule") -> None:
         """End manual mode and restore the latest schedule command."""

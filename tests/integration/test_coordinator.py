@@ -6,7 +6,7 @@ from datetime import timedelta
 from typing import Any
 
 import pytest
-from homeassistant.const import STATE_OFF
+from homeassistant.const import STATE_OFF, STATE_ON
 from homeassistant.core import Context
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.util import dt as dt_util
@@ -1816,6 +1816,32 @@ async def test_manual_mode_drives_the_scheduler_pause_switch(hass) -> None:
 
     assert len(turn_off) == 1
     assert turn_off[0].data["entity_id"] == "switch.chauffage_pause"
+
+
+async def test_inverted_pause_switch_signals_free_instead_of_busy(hass) -> None:
+    """The invert option turns the switch off in manual mode and on when free."""
+    hass.states.async_set("switch.chauffage_pause", STATE_ON)
+    _entry, coordinator = await _setup(
+        hass,
+        scheduler_pause_switch_entity_id="switch.chauffage_pause",
+        scheduler_pause_switch_invert=True,
+    )
+    turn_on = async_mock_service(hass, "homeassistant", "turn_on")
+    turn_off = async_mock_service(hass, "homeassistant", "turn_off")
+
+    await coordinator.async_enter_manual_mode(temperature=22, duration_minutes=30, context=USER)
+    await hass.async_block_till_done()
+
+    assert len(turn_off) == 1
+    assert turn_off[0].data["entity_id"] == "switch.chauffage_pause"
+    assert turn_on == []
+
+    await coordinator.async_return_to_schedule()
+    await hass.async_block_till_done()
+
+    assert len(turn_on) == 1
+    assert turn_on[0].data["entity_id"] == "switch.chauffage_pause"
+    assert len(turn_off) == 1
 
 
 async def test_off_preset_ends_manual_mode_for_a_user(hass) -> None:

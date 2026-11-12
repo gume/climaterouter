@@ -582,6 +582,7 @@ class RouterConfig:
     ac_idle_bypass_preset: str = DEFAULT_AC_IDLE_BYPASS_PRESET
     read_only_mode: str = READ_ONLY_OFF
     scheduler_pause_switch_entity_id: str = ""
+    scheduler_pause_switch_invert: bool = False
 
     @property
     def configured_targets(self) -> frozenset[Target]:
@@ -670,6 +671,7 @@ class RouterConfig:
             scheduler_pause_switch_entity_id=str(
                 data.get("scheduler_pause_switch_entity_id") or ""
             ),
+            scheduler_pause_switch_invert=_bool("scheduler_pause_switch_invert", False),
         )
 
 
