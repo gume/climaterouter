@@ -132,9 +132,10 @@ the release-helper fix and documentation, and no integration behaviour changes. 
 commit `9ca79ad`, published 2026-11-10) adds the config field-label review (issue 4). **0.8.9** (tag/release
 `v0.8.9`, commit `9871e07`) sizes the Velair pause to the remaining manual time. **0.9.0** (tag/release `v0.9.0`,
 commit `b66bbea`) adds read-only underlying control, single-thermostat entries, the generic scheduler pause switch,
-and the synthetic `off` preset; `29fc2bf` makes the release script's tag handling idempotent. **0.9.1** (code commit
-`41733d8`) fixes the release-script preview, which executed the publish commands before asking for confirmation and
-then failed by trying to recreate the tag. None of 0.8.6–0.9.1 has been installed or live-verified yet.
+and the synthetic `off` preset; `29fc2bf` makes the release script's tag handling idempotent. **0.9.1** (code commits
+`41733d8` and the config-hint fix) repairs the release-script preview, which executed the publish commands before
+asking for confirmation and then failed by trying to recreate the tag, and clarifies/repositions the read-only
+selectors in the setup and options forms. None of 0.8.6–0.9.1 has been installed or live-verified yet.
 
 ---
 
@@ -1095,7 +1096,7 @@ filed names") is the only open item and is intentionally skipped for this batch.
       confirm that `soft`/`hard` suppress writes, a single-thermostat entry routes correctly, the Chauffage pause
       switch follows manual mode, and Chauffage's `off` preset turns the proxy off.
 
-### 8.10 0.9.1 release-script command preview
+### 8.10 0.9.1 release-script and config-hint fixes
 
 - [x] The `--push` path executed the commands under `--- Commands ---` before the confirmation prompt, then ran
       them again after confirmation; the second `git tag -a v0.9.0` failed with `fatal: tag 'v0.9.0' already
@@ -1104,6 +1105,9 @@ filed names") is the only open item and is intentionally skipped for this batch.
       then `git push --atomic origin main refs/tags/$TAG`, or `git push origin main` when the remote tag exists.
 - [x] Verified manually in a throwaway clone with a bare remote: answering `n` leaves no tag or push, `-y` publishes
       once and exits 0, and a rerun reports the version as already released.
+- [x] The read-only hints now explain `off`/`soft`/`hard`, and the schedule and manual selectors each moved one
+      position up in their form (`off`/`soft`/`hard` texts live in `strings.json` and `translations/en.json`).
+- [x] Config-flow and translation tests pass; full suite 191 passed.
 
 ---
 

@@ -25,6 +25,9 @@
 - [x] With `--push`, the release script still ended with `fatal: tag 'v0.9.0' already exists` after publishing.
   Resolved in `41733d8` (0.9.1). The command preview executed the publish commands before the confirmation
   prompt and then ran them again; it now only prints, and the real commands run once after confirmation.
+- [x] The config forms should explain soft/hard and show the read-only selectors in a better position.
+  Resolved in 0.9.1. Both hints now describe `off`, `soft` and `hard`, and each read-only selector moved one
+  position up in its section.
 
 ## Open
 

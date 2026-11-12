@@ -216,6 +216,9 @@ def _basic_schema(defaults: Mapping[str, Any]) -> vol.Schema:
                 default=defaults[CONF_AC_IDLE_BYPASS_ENABLED],
             ): BooleanSelector(),
             vol.Required(
+                CONF_READ_ONLY_MODE, default=defaults[CONF_READ_ONLY_MODE]
+            ): _read_only_selector(),
+            vol.Required(
                 CONF_AC_IDLE_BYPASS_PRESET,
                 default=defaults[CONF_AC_IDLE_BYPASS_PRESET],
             ): SelectSelector(
@@ -224,9 +227,6 @@ def _basic_schema(defaults: Mapping[str, Any]) -> vol.Schema:
                     mode=SelectSelectorMode.DROPDOWN,
                 )
             ),
-            vol.Required(
-                CONF_READ_ONLY_MODE, default=defaults[CONF_READ_ONLY_MODE]
-            ): _read_only_selector(),
         }
     )
 
@@ -280,13 +280,13 @@ def _manual_schema(defaults: Mapping[str, Any]) -> vol.Schema:
                 default=defaults[CONF_MANUAL_BLOCKS_SCHEDULE],
             ): BooleanSelector(),
             vol.Required(
-                CONF_VELAIR_ENABLED,
-                default=defaults[CONF_VELAIR_ENABLED],
-            ): BooleanSelector(),
-            vol.Required(
                 CONF_MANUAL_READ_ONLY_MODE,
                 default=defaults[CONF_MANUAL_READ_ONLY_MODE],
             ): _read_only_selector(),
+            vol.Required(
+                CONF_VELAIR_ENABLED,
+                default=defaults[CONF_VELAIR_ENABLED],
+            ): BooleanSelector(),
             _entity_field(
                 CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID,
                 defaults[CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID],
