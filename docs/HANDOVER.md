@@ -122,8 +122,9 @@
 | `a04a74e` | `chore: bump version to 0.10.0` |
 | `fd706b8` | `feat: allow inverting the scheduler pause switch polarity` |
 
-Everything through `ecb76d4` is on `origin/main`; `v0.9.1` is tagged and released from it. The 0.10.0 commits
-(`dea47ab`, `a04a74e`, `fd706b8`) are local until the owner pushes them. The test
+Everything through `a04a74e` is on `origin/main`; `v0.9.1` and `v0.10.0` are tagged and released from `ecb76d4`
+and `a04a74e`. The 0.10.1 commits (`fd706b8`, `9293b64`, and the version bump) are local until the owner pushes
+them. The test
 instance still runs the Marketplace release **v0.8.3** (tag `v0.8.3`, commit `723c5c0`): `update.climaterouter`
 reported `installed_version` = `latest_version` = `v0.8.3` at the last live check. The 0.8.4 release was published on 2026-11-09 but has not yet
 been installed in the test instance. The 0.8.5 release is cut from the commit that adds this handover update; after
@@ -139,9 +140,10 @@ commit `b66bbea`) adds read-only underlying control, single-thermostat entries, 
 and the synthetic `off` preset; `29fc2bf` makes the release script's tag handling idempotent. **0.9.1** (tag/release
 `v0.9.1`, commit `ecb76d4`) repairs the release-script preview, which executed the publish commands before asking
 for confirmation and then failed by trying to recreate the tag, and repositions the read-only form fields with
-fuller hints. **0.10.0** moves the schedule read-only level out of the setup forms into a runtime `select` entity,
-removes the manual soft/hard setting, and makes manual mode always defer scheduler/automation commands. None of
-0.8.6–0.10.0 has been installed or live-verified yet.
+fuller hints. **0.10.0** (tag/release `v0.10.0`, commit `a04a74e`) moves the schedule read-only level out of the
+setup forms into a runtime `select` entity, removes the manual soft/hard setting, and makes manual mode always
+defer scheduler/automation commands. **0.10.1** (`fd706b8`) adds `scheduler_pause_switch_invert` so the optional
+pause switch can signal free instead of busy. None of 0.8.6–0.10.1 has been installed or live-verified yet.
 
 ---
 
@@ -242,7 +244,7 @@ Version **0.9.0** adds four owner-requested capabilities:
 
 Version **0.10.0** supersedes the read-only part of 0.9.0: the schedule level is now the runtime
 `select.<name>_read_only_mode` entity (persisted across restarts), the manual level is removed, and manual mode
-always defers scheduler/automation commands while still accepting user writes. It also adds
+always defers scheduler/automation commands while still accepting user writes. Version **0.10.1** adds
 `scheduler_pause_switch_invert` so the optional pause switch can signal free instead of busy.
 
 `scripts/release.sh` now checks local and remote tags independently, refuses a tag that points at another commit,
@@ -795,7 +797,8 @@ ACs; later versions use the two VTherm entities described in section 4.
 | 0.8.9 release published | Tag/release `v0.8.9` on `9871e07`; pending Marketplace install and live check |
 | 0.9.0 release published | Tag/release `v0.9.0` on `b66bbea`; read-only targets, single-thermostat entries, scheduler pause and `off` preset, pending Marketplace install and live check |
 | 0.9.1 release published | Tag/release `v0.9.1` on `ecb76d4`; print-only release preview and read-only form hints; pending Marketplace install and live check |
-| 0.10.0 release candidate | Runtime `select.<name>_read_only_mode`, manual read-only setting removed, manual mode always defers scheduler/automation commands, inverted scheduler pause switch polarity; full suite 191 passed |
+| 0.10.0 release published | Tag/release `v0.10.0` on `a04a74e`; runtime `select.<name>_read_only_mode`, manual read-only setting removed, manual mode always defers scheduler/automation commands; pending Marketplace install and live check |
+| 0.10.1 release candidate | `scheduler_pause_switch_invert` can signal free instead of busy; full suite 191 passed |
 
 The owner reports live verification through version **0.8.0** for M4 manual mode, M5 conflicts, M6 boost, the native
 lock, the 0.8.0 proxy rework, and the read-only VTherm display pass-through. The live instance currently runs the
@@ -1142,9 +1145,14 @@ filed names") is the only open item and is intentionally skipped for this batch.
       scheduler/automation commands, so the old `manual_blocks_schedule` toggle is gone too.
 - [x] Legacy `read_only_mode` entry data seeds the runtime value on first start; legacy `manual_read_only_mode` and
       `manual_blocks_schedule` data are ignored.
+- [x] Config-flow, translation, entity, persistence, and manual-write tests pass; full suite 190 passed.
+- [x] Tag/release published as `v0.10.0` on `a04a74e`.
+
+### 8.12 0.10.1 inverted pause-switch polarity
+
 - [x] `scheduler_pause_switch_invert` flips the optional pause-switch polarity, so it can signal either busy (on
       while manual mode is active, the default) or free (on while the schedule is in control) (`fd706b8`).
-- [x] Config-flow, translation, entity, persistence, and manual-write tests pass; full suite 191 passed.
+- [x] Model, config-flow, and coordinator tests cover the option and both polarities; full suite 191 passed.
 
 ---
 

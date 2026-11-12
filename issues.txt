@@ -31,10 +31,11 @@
   Controls, so it can be changed after setup. The manual read-only setting, including soft/hard, is removed
   entirely; manual mode always accepts user writes and always defers scheduler/automation commands.
 - [x] The scheduler pause switch should be invertible, so it can signal either free or busy.
-  Resolved in 0.10.0. `scheduler_pause_switch_invert` flips the polarity: off (default) signals busy with on while
+  Resolved in 0.10.1. `scheduler_pause_switch_invert` flips the polarity: off (default) signals busy with on while
   manual mode is active; on signals free with the entity on while the schedule is in control.
 
 ## Open
 
-- [ ] Release 0.10.0, install it in the test HA through the Marketplace, and live-verify the runtime read-only
-      select, a single-thermostat entry, the Chauffage pause switch and the `off` preset.
+- [ ] Release 0.10.1, install it in the test HA through the Marketplace, and live-verify the runtime read-only
+      select, a single-thermostat entry, the Chauffage pause switch (including its inverted polarity) and the
+      `off` preset.
