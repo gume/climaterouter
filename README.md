@@ -31,7 +31,7 @@ Scheduler / User UI / Automations
 
 ## Status
 
-**M1–M6 implemented, plus the 0.8.x proxy rework and the 0.9.x single/read-only batch (current version 0.9.1).** The integration package provides the config flow, proxy climate
+**M1–M6 implemented, plus the 0.8.x proxy rework and the 0.9.x/0.10.x single/read-only batch (current version 0.10.0).** The integration package provides the config flow, proxy climate
 entity, outdoor routing, safe handover, proxy-owned manual mode/timer, conflict detection, feature-flagged boost,
 two separate locks, optional single-thermostat setups, read-only underlying control, status entities, services and
 diagnostics. See [`docs/HANDOVER.md`](docs/HANDOVER.md) for the exact state, test results, known gaps and next steps.

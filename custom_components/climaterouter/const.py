@@ -8,7 +8,7 @@ from homeassistant.const import Platform
 
 DOMAIN: Final = "climaterouter"
 NAME: Final = "ClimateRouter"
-VERSION: Final = "0.9.1"
+VERSION: Final = "0.10.0"
 
 PLATFORMS: Final = [
     Platform.CLIMATE,
