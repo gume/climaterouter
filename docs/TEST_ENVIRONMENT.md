@@ -475,8 +475,8 @@ changes but the deadline does not reset. Switch the timer off through
 `select.climaterouter_manual_timer` (`off`) and verify the remaining sensor becomes unknown. Return with
 `button.climaterouter_return_to_schedule` or `climaterouter.return_to_schedule`.
 
-With `manual_blocks_schedule` on, send `climate.set_temperature` from an automation (no `user_id`) and verify it is
-rejected while manual mode is active. User moves must still work.
+While manual mode is active, send `climate.set_temperature` from an automation (no `user_id`) and verify it is
+deferred. User moves must still work.
 
 ### 8.5 Direct VTherm change (conflict)
 

@@ -36,7 +36,6 @@ from custom_components.climaterouter.const import (
     CONF_EXPOSE_VTHERM_IDENTITY,
     CONF_LOCK_CODE,
     CONF_LOCK_ENABLED,
-    CONF_MANUAL_READ_ONLY_MODE,
     CONF_MAX_MANUAL_MINUTES,
     CONF_MILD_THRESHOLD,
     CONF_MIN_ROUTE_DWELL,
@@ -44,7 +43,6 @@ from custom_components.climaterouter.const import (
     CONF_OUTDOOR_SENSOR_ENTITY_ID,
     CONF_OUTDOOR_STALE_AFTER,
     CONF_RADIATOR_ENTITY_ID,
-    CONF_READ_ONLY_MODE,
     CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID,
     CONF_TEMPERATURE_TOLERANCE,
     CONF_VELAIR_ENABLED,
@@ -667,8 +665,8 @@ async def test_validate_input_rejects_unknown_pause_switch(hass) -> None:
     assert errors == {CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID: "invalid_entity"}
 
 
-async def test_options_manual_section_saves_read_only_and_pause_switch(hass) -> None:
-    """The manual section persists the read-only level and pause switch."""
+async def test_options_manual_section_saves_pause_switch(hass) -> None:
+    """The manual section persists the scheduler pause switch."""
     _set_entities(hass)
     hass.states.async_set("switch.chauffage_pause", STATE_OFF)
     entry = MockConfigEntry(
@@ -688,36 +686,9 @@ async def test_options_manual_section_saves_read_only_and_pause_switch(hass) -> 
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
-            CONF_MANUAL_READ_ONLY_MODE: "soft",
             CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID: "switch.chauffage_pause",
         },
     )
 
     assert result["type"] is data_entry_flow.FlowResultType.MENU
-    assert entry.data[CONF_MANUAL_READ_ONLY_MODE] == "soft"
     assert entry.data[CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID] == "switch.chauffage_pause"
-
-
-async def test_options_basic_section_saves_read_only_mode(hass) -> None:
-    """The basic section persists the schedule read-only level."""
-    _set_entities(hass)
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="Test Router",
-        data=_form_input()["basic"],
-        unique_id=f"{RADIATOR}|{AC}",
-    )
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
-
-    result = await hass.config_entries.options.async_init(entry.entry_id)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": SECTION_BASIC}
-    )
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {CONF_READ_ONLY_MODE: "hard"}
-    )
-
-    assert result["type"] is data_entry_flow.FlowResultType.MENU
-    assert entry.data[CONF_READ_ONLY_MODE] == "hard"

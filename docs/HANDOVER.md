@@ -133,9 +133,10 @@ commit `9ca79ad`, published 2026-11-10) adds the config field-label review (issu
 `v0.8.9`, commit `9871e07`) sizes the Velair pause to the remaining manual time. **0.9.0** (tag/release `v0.9.0`,
 commit `b66bbea`) adds read-only underlying control, single-thermostat entries, the generic scheduler pause switch,
 and the synthetic `off` preset; `29fc2bf` makes the release script's tag handling idempotent. **0.9.1** (code commits
-`41733d8` and the config-hint fix) repairs the release-script preview, which executed the publish commands before
-asking for confirmation and then failed by trying to recreate the tag, and clarifies/repositions the read-only
-selectors in the setup and options forms. None of 0.8.6–0.9.1 has been installed or live-verified yet.
+`41733d8` and the runtime read-only fix) repairs the release-script preview, which executed the publish commands
+before asking for confirmation and then failed by trying to recreate the tag. It also moves the schedule read-only
+level out of the setup forms into a runtime `select` entity, removes the manual soft/hard setting, and makes manual
+mode always defer scheduler/automation commands. None of 0.8.6–0.9.1 has been installed or live-verified yet.
 
 ---
 
@@ -233,6 +234,10 @@ Version **0.9.0** adds four owner-requested capabilities:
    proxy off; a scheduler command during manual mode is remembered as the return state, like an HVAC `off`
    command.
 
+Version **0.9.1** supersedes the read-only part of 0.9.0: the schedule level is now the runtime
+`select.<name>_read_only_mode` entity (persisted across restarts), the manual level is removed, and manual mode
+always defers scheduler/automation commands while still accepting user writes.
+
 `scripts/release.sh` now checks local and remote tags independently, refuses a tag that points at another commit,
 and only creates/pushes a tag when it is missing, so rerunning a release is idempotent. Version **0.9.1** fixes a
 follow-up bug in the same script: the `--push` preview executed the publish commands before the confirmation
@@ -321,6 +326,11 @@ The proxy entity (`climate.py`) delegates to coordinator methods. Important edge
 - A command received while a handover is `PENDING` is forwarded to the currently active target **and** kept in the
   desired state for the pending target. It is not silently ignored while the old target keeps running on its old
   setpoint.
+- **Schedule read-only select.** `select.<name>_read_only_mode` is a runtime control in the Controls section, not
+  a setup option. `off` writes normally, `soft` suppresses every underlying write while the proxy keeps showing
+  the command, and `hard` mirrors the real underlying state and dismisses commands. The value is persisted in the
+  coordinator store and survives a restart. Manual mode always ignores it: user moves write normally, while
+  scheduler/automation moves are always deferred.
 
 ### 3.3 Handover state machine
 
@@ -396,8 +406,8 @@ Events fired on the HA bus:
 - Additional user moves while manual mode is active update the manual value but **never reset the timer**.
 - While manual mode is active, schedule/automation commands (including an `off`) are **deferred**: the latest
   command is stored as the schedule baseline but is not applied to the targets. This protects the manual setting
-  and makes the timer expiry (or `return_to_schedule`) return to the scheduler's latest move. Automations still
-  cannot change manual mode itself (enter/timer) while `manual_blocks_schedule` is on.
+  and makes the timer expiry (or `return_to_schedule`) return to the scheduler's latest move. Automations can
+  never change manual mode itself (enter/timer) while manual mode is active.
 - `duration_minutes` defaults to `default_manual_minutes`; `0` means no countdown. The timer can be changed or
   switched off later with `climaterouter.set_manual_timer` (minutes `0` or omitted = infinite).
 - The coordinator keeps a **baseline** desired state (the latest schedule command) and a separate `ManualMode`
@@ -544,8 +554,8 @@ optionally set a 4–8 digit `lock_code`, and set `auto_relock_sec` (0 disables 
 - Blocked: `set_temperature`, `set_hvac_mode`, `set_preset_mode`, `turn_on`, `turn_off`, manual-mode entry/timer,
   and boost.
 
-**Lock B — manual/schedule lock.** Controlled by `manual_blocks_schedule` (default on) and the manual-mode state
-itself; it is not mirrored to either VTherm.
+**Lock B — manual/schedule lock.** Controlled by the manual-mode state itself and always active while manual mode
+is on; it is not mirrored to either VTherm.
 
 - While manual mode is active, climate commands without a `user_id` (Scheduler, Velair, automations, scripts) are
   **deferred**: they update the schedule baseline but do not change the active target. An `off` from a scheduler is
@@ -573,7 +583,7 @@ All three flows share the same sectioned schema (`config_flow.py`):
 |---|---|
 | Thermostats | name, radiator, AC, outdoor sensor, AC idle-bypass entity/flag/preset |
 | Routing | thresholds, dwell, handover/off/startup/settle timings, fallback |
-| Manual mode | `default_manual_minutes`, `max_manual_minutes`, `manual_blocks_schedule`, `velair_enabled` |
+| Manual mode | `default_manual_minutes`, `max_manual_minutes`, `velair_enabled`, `scheduler_pause_switch_entity_id` |
 | Conflicts | policy, auto-resolve flags, outdoor staleness, setpoint tolerance |
 | Boost | `boost_enabled` |
 | UI lock | `lock_enabled`, `lock_code`, `auto_relock_sec` |
@@ -675,8 +685,9 @@ Defined in `test_environment/`; full instructions in [`TEST_ENVIRONMENT.md`](TES
     `off_confirm_timeout=30`, `startup_grace=10`, `settle_time=10`, `outdoor_stale_after=3600`;
   - `conflict_policy=monitor`, `auto_resolve_idle_targets=true`, `auto_resolve_simultaneous=true`,
     `fallback_on_unavailable=true`;
-  - `default_manual_minutes=60`, `max_manual_minutes=1440`, `manual_blocks_schedule=true`,
-    `expose_vtherm_identity=true`, `temperature_tolerance=0.2`, `boost_enabled=false`;
+  - `default_manual_minutes=60`, `max_manual_minutes=1440`, `manual_blocks_schedule=true` (legacy key, ignored;
+    manual blocking is always on), `expose_vtherm_identity=true`, `temperature_tolerance=0.2`,
+    `boost_enabled=false`;
   - `lock_enabled=false`, a lock code is stored, `auto_relock_sec=30`. The stale
     `lock.living_room_climaterouter_ui_lock` entity restores as `unavailable` while the lock is disabled.
   The entry was created before 0.8.0 and may still store the removed external manual-switch key. That key is ignored;
@@ -801,8 +812,8 @@ section 8.2 for the full list.
    expiry, boost start/cancel, conflict policies, lock, services, diagnostics and entity behaviour are covered. See
    section 8.2 for the remaining gaps; `coordinator.py` (85 %) is the largest untested area.
 3. **Manual mode is live-verified through 0.8.0 and well covered.** Start/return, `off`, conflicting-argument
-   rejection, deadline persistence, watchdog expiry, handover carry-over and Lock B (`manual_blocks_schedule`)
-   automation rejection are automated. A user temperature/preset move
+   rejection, deadline persistence, watchdog expiry, handover carry-over and Lock B automation rejection are
+   automated. A user temperature/preset move
    started while the proxy has no mode/active target updates the baseline but does not by itself start heating; start
    the proxy (`heat`/`cool`) first.
 4. **M5 is live-verified through 0.8.0 and well covered.** Monitor, `reassert`, `adopt`, `both_targets_on`, startup
@@ -886,14 +897,14 @@ Status as of 2026-11-12:
 |---|---|
 | `ruff check .` | clean |
 | `ruff format --check .` | clean |
-| Pure unit tests (no HA) | 70 passed |
+| Pure unit tests (no HA) | 69 passed |
 | Integration tests (HA harness) | 121 passed |
-| Full suite (HA harness) | 191 passed, 0 failures |
+| Full suite (HA harness) | 190 passed, 0 failures |
 | `mypy custom_components/climaterouter` | clean in CI; a newer local mypy reports the known `ConfigFlow, domain=` false positive |
 | CI installs `requirements_test.txt` | yes (intentionally unpinned, includes `mypy`) |
 | CI matrix | full HA suite on Python 3.13; pure unit tests on Python 3.12 and 3.13 |
 | GitHub CI run confirmed | green through `1972d1e`; the 0.8.5 release run is green after the device-lookup test fix |
-| Measured statement coverage | **91 %** (90.96 %, gate 75 %) |
+| Measured statement coverage | **91 %** (90.91 %, gate 75 %) |
 
 The 0.9.1 release-script fix was verified manually in a throwaway clone with a bare remote; the repository has no
 shell-test harness. Answering `n` at the prompt leaves no local tag and no remote change, while `-y` pushes the
@@ -1095,8 +1106,10 @@ filed names") is the only open item and is intentionally skipped for this batch.
 - [ ] Owner: install 0.9.0 or later, refresh the Marketplace and live-verify the four features. In particular
       confirm that `soft`/`hard` suppress writes, a single-thermostat entry routes correctly, the Chauffage pause
       switch follows manual mode, and Chauffage's `off` preset turns the proxy off.
+- [x] Superseded in 0.9.1: the manual level is removed, the schedule level is a runtime select, and manual mode
+      always defers scheduler/automation commands.
 
-### 8.10 0.9.1 release-script and config-hint fixes
+### 8.10 0.9.1 release-script and read-only controls
 
 - [x] The `--push` path executed the commands under `--- Commands ---` before the confirmation prompt, then ran
       them again after confirmation; the second `git tag -a v0.9.0` failed with `fatal: tag 'v0.9.0' already
@@ -1105,9 +1118,11 @@ filed names") is the only open item and is intentionally skipped for this batch.
       then `git push --atomic origin main refs/tags/$TAG`, or `git push origin main` when the remote tag exists.
 - [x] Verified manually in a throwaway clone with a bare remote: answering `n` leaves no tag or push, `-y` publishes
       once and exits 0, and a rerun reports the version as already released.
-- [x] The read-only hints now explain `off`/`soft`/`hard`, and the schedule and manual selectors each moved one
-      position up in their form (`off`/`soft`/`hard` texts live in `strings.json` and `translations/en.json`).
-- [x] Config-flow and translation tests pass; full suite 191 passed.
+- [x] Removed the schedule read-only level from the setup/options/reconfigure forms; it is now the runtime
+      `select.<name>_read_only_mode` entity in Controls with `off`/`soft`/`hard`, persisted across restarts.
+- [x] Removed the manual read-only level entirely. Manual mode always allows user writes and always defers
+      scheduler/automation commands, so the old `manual_blocks_schedule` toggle is gone too.
+- [x] Config-flow, translation, entity, persistence, and manual-write tests pass; full suite 190 passed.
 
 ---
 

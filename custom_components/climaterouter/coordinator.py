@@ -78,6 +78,7 @@ from .models import (
     MODES,
     PRESET_OFF,
     READ_ONLY_HARD,
+    READ_ONLY_MODES,
     READ_ONLY_OFF,
     ROUTE_AUTO,
     BoostState,
@@ -93,7 +94,6 @@ from .models import (
     Target,
     UnderlyingState,
     lock_blocks_context,
-    manual_lock_blocks_context,
 )
 from .router import choose_route, target_conflict
 
@@ -145,6 +145,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._auto_relock_unsub: Any | None = None
         self._auto_relock_at: datetime | None = None
         self._pause_switch_on: bool | None = None
+        self._read_only_mode_value = config.read_only_mode
 
         self._ready = False
         self._idle_since: datetime | None = None
@@ -256,10 +257,30 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         return context is not None and context.user_id is not None
 
     def _read_only_mode(self) -> str:
-        """Return the read-only level that applies to the current mode."""
+        """Return the read-only level that applies to the current mode.
+
+        Manual mode always allows the user to write, while schedule and
+        automation commands are deferred. The runtime selector therefore only
+        applies outside manual mode.
+        """
         if self._manual is not None:
-            return self.config.manual_read_only_mode
-        return self.config.read_only_mode
+            return READ_ONLY_OFF
+        return self._read_only_mode_value
+
+    @property
+    def read_only_mode(self) -> str:
+        """Return the runtime read-only level for schedule control."""
+        return self._read_only_mode_value
+
+    async def async_set_read_only_mode(self, value: str) -> None:
+        """Set the runtime read-only level used outside manual mode."""
+        if value not in READ_ONLY_MODES:
+            raise HomeAssistantError(f"Unsupported read-only mode: {value}")
+        if value == self._read_only_mode_value:
+            return
+        self._read_only_mode_value = value
+        self._store.async_delay_save(self._data_to_save, 1)
+        await self.async_evaluate(explicit=True)
 
     def _configured_targets(self) -> frozenset[Target]:
         """Return the underlying targets that are configured."""
@@ -1110,16 +1131,13 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
     def _defers_schedule_command(self, context: Context | None) -> bool:
         """Return whether manual mode should defer this schedule/automation command.
 
-        While manual mode is active, schedule commands are not applied. They are
-        stored as the baseline instead, so the latest schedule is what manual
-        mode returns to when its timer expires (or the user returns manually).
+        While manual mode is active, schedule commands are never applied. They
+        are stored as the baseline instead, so the latest schedule is what
+        manual mode returns to when its timer expires (or the user returns
+        manually). User commands always pass through.
         """
         user_id = context.user_id if context is not None else None
-        return manual_lock_blocks_context(
-            enabled=self.config.manual_blocks_schedule,
-            manual_active=self._manual is not None,
-            user_id=user_id,
-        )
+        return self._manual is not None and user_id is None
 
     def _ensure_manual_control_allowed(self, context: Context | None) -> None:
         """Reject automation changes to manual mode itself while it is active."""
@@ -2365,9 +2383,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             locked=self._locked,
             lock_has_code=bool(self.config.lock_code),
             auto_relock_sec=self.config.auto_relock_sec,
-            manual_blocks_schedule=self.config.manual_blocks_schedule,
-            read_only_mode=self.config.read_only_mode,
-            manual_read_only_mode=self.config.manual_read_only_mode,
+            read_only_mode=self._read_only_mode_value,
             configured_targets=configured,
             targets=dict(self._states),
             hvac_modes=tuple(hvac_modes),
@@ -2482,6 +2498,8 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             parsed = dt_util.parse_datetime(last_handover)
             if parsed is not None:
                 self._last_handover = parsed
+        if data.get("read_only_mode") in READ_ONLY_MODES:
+            self._read_only_mode_value = data["read_only_mode"]
         if not self.config.lock_enabled:
             self._locked = False
             self._auto_relock_at = None
@@ -2496,6 +2514,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             "last_handover": (self._last_handover.isoformat() if self._last_handover else None),
             "locked": self._locked,
             "auto_relock_at": (self._auto_relock_at.isoformat() if self._auto_relock_at else None),
+            "read_only_mode": self._read_only_mode_value,
         }
 
 

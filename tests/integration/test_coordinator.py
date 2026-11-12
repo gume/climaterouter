@@ -893,7 +893,6 @@ async def test_watchdog_expires_manual_and_boost(hass, monkeypatch) -> None:
         hass,
         outdoor=5.0,
         boost_enabled=True,
-        manual_blocks_schedule=False,
     )
     await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
     await coordinator.async_enter_manual_mode(temperature=23, duration_minutes=30)
@@ -1184,10 +1183,11 @@ async def test_auto_relock_deadline_expires_on_startup(hass, monkeypatch) -> Non
 
 
 async def test_lock_b_defers_automation_commands(hass) -> None:
-    """With ``manual_blocks_schedule`` on, schedule moves are deferred, not applied."""
+    """Manual mode always defers schedule moves, not applies them."""
     from homeassistant.core import Context
 
-    _entry, coordinator = await _setup(hass, outdoor=5.0, manual_blocks_schedule=True)
+    # A legacy manual_blocks_schedule=False must not re-enable scheduler writes.
+    _entry, coordinator = await _setup(hass, outdoor=5.0, manual_blocks_schedule=False)
     await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
     await coordinator.async_enter_manual_mode(temperature=23, context=USER)
 
@@ -1222,7 +1222,7 @@ async def test_deferred_scheduler_off_is_applied_when_manual_expires(hass, monke
 
     from custom_components.climaterouter import coordinator as coordinator_module
 
-    _entry, coordinator = await _setup(hass, outdoor=5.0, manual_blocks_schedule=True)
+    _entry, coordinator = await _setup(hass, outdoor=5.0)
     await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
     await coordinator.async_enter_manual_mode(temperature=23, duration_minutes=30, context=USER)
     await coordinator.async_set_hvac_mode(HVAC_OFF, context=Context())
@@ -1247,7 +1247,7 @@ async def test_deferred_scheduler_off_is_applied_when_manual_expires(hass, monke
 
 async def test_manual_mode_reasserts_direct_target_changes(hass) -> None:
     """An external write to the active target does not beat manual mode."""
-    _entry, coordinator = await _setup(hass, outdoor=5.0, manual_blocks_schedule=True)
+    _entry, coordinator = await _setup(hass, outdoor=5.0)
     calls_temp = async_mock_service(hass, "climate", "set_temperature")
     calls_mode = async_mock_service(hass, "climate", "set_hvac_mode")
     await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
@@ -1294,7 +1294,7 @@ async def test_manual_mode_reasserts_direct_target_changes(hass) -> None:
 
 async def test_user_direct_target_change_updates_manual_value(hass) -> None:
     """A user move on the VTherm card updates manual mode instead of being undone."""
-    _entry, coordinator = await _setup(hass, outdoor=5.0, manual_blocks_schedule=True)
+    _entry, coordinator = await _setup(hass, outdoor=5.0)
     calls_temp = async_mock_service(hass, "climate", "set_temperature")
     await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
     await coordinator.async_enter_manual_mode(temperature=23, duration_minutes=30, context=USER)
@@ -1357,7 +1357,7 @@ async def test_user_direct_target_change_updates_manual_value(hass) -> None:
 
 async def test_user_direct_target_change_starts_manual_mode(hass) -> None:
     """A user move on the active VTherm card starts manual mode on its own."""
-    _entry, coordinator = await _setup(hass, outdoor=5.0, manual_blocks_schedule=True)
+    _entry, coordinator = await _setup(hass, outdoor=5.0)
     await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
     await hass.async_block_till_done()
     hass.states.async_set(
@@ -1761,20 +1761,38 @@ async def test_hard_read_only_mirrors_the_target_and_dismisses_commands(hass) ->
     assert state.attributes["effective_read_only"] == READ_ONLY_HARD
 
 
-async def test_manual_read_only_mode_applies_while_manual_is_active(hass) -> None:
-    """The manual read-only level overrides the schedule level in manual mode."""
-    _entry, coordinator = await _setup(hass, manual_read_only_mode=READ_ONLY_SOFT)
+async def test_manual_mode_allows_user_writes_even_with_runtime_read_only(hass) -> None:
+    """Manual mode is not read-only: a user command still writes to the target."""
+    _entry, coordinator = await _setup(hass)
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT, context=USER)
+    await coordinator.async_set_read_only_mode(READ_ONLY_HARD)
     calls = async_mock_service(hass, "climate", "set_temperature")
 
     await coordinator.async_enter_manual_mode(temperature=22, duration_minutes=30, context=USER)
     await hass.async_block_till_done()
 
-    assert calls == []
+    assert calls
     assert coordinator.data.manual_mode is not None
-    assert coordinator.data.effective_read_only == READ_ONLY_SOFT
-    state = hass.states.get(coordinator.climate_entity_id)
-    assert state is not None
-    assert state.attributes["temperature"] == 22
+    assert coordinator.data.effective_read_only == READ_ONLY_OFF
+    assert coordinator.data.desired.target_temperature == 22
+
+
+async def test_runtime_read_only_mode_survives_reload(hass) -> None:
+    """The read-only select is runtime state and persists across a reload."""
+    entry, coordinator = await _setup(hass)
+    await coordinator.async_set_read_only_mode(READ_ONLY_HARD)
+    await hass.async_block_till_done()
+
+    assert coordinator.read_only_mode == READ_ONLY_HARD
+    assert coordinator.data.read_only_mode == READ_ONLY_HARD
+
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    reloaded = entry.runtime_data
+    assert reloaded is not coordinator
+    assert reloaded.read_only_mode == READ_ONLY_HARD
+    assert reloaded.data.effective_read_only == READ_ONLY_HARD
 
 
 async def test_manual_mode_drives_the_scheduler_pause_switch(hass) -> None:

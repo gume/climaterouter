@@ -94,6 +94,17 @@ to the new target when it is safe.
 
 In shoulder seasons, the outdoor temperature may route the same schedule to the AC instead of the radiator.
 
+### Read-only control
+
+`select.climaterouter_read_only_mode` guards writes to the underlying thermostats while a schedule is in control:
+
+- `off` — write normally (default);
+- `soft` — suppress every underlying write, but keep showing the requested state on the proxy;
+- `hard` — suppress writes and mirror the real underlying state, dismissing the command.
+
+The select is a runtime control in the Controls section, so it can be changed after setup, and its value survives a
+restart. Manual mode ignores it: user moves always write, while scheduler/automation moves are always deferred.
+
 ## 5. Route override
 
 `select.climaterouter_route_override` forces routing without an external helper:
@@ -147,8 +158,8 @@ script:
 - Return with `button.climaterouter_return_to_schedule` or `climaterouter.return_to_schedule`. The latest schedule
   command is restored, including across a handover.
 - The timer is stored as an absolute deadline, so manual mode survives a restart until the deadline.
-- `default_manual_minutes` sets the default timer for new sessions (`0` = no timer). `manual_blocks_schedule`
-  (default on) rejects Scheduler/automation commands while manual mode is active; user moves are always accepted.
+- `default_manual_minutes` sets the default timer for new sessions (`0` = no timer). While manual mode is active,
+  Scheduler/automation commands are always deferred; user moves are always accepted.
 - Manual mode is **not** VTherm's own manual preset. Set VTherm `manual_override_duration_min` to `0` and let the
   proxy own the timer.
 
@@ -247,7 +258,7 @@ automation:
 | Scheduler does not see the proxy | Entity is created and available; Scheduler Card `include` has `climate.climaterouter`. |
 | Commands go to the wrong VTherm | `sensor.active_target`, `sensor.route_reason`, outdoor sensor value, route override. |
 | Handover does not happen | `binary_sensor.handover_pending`; old target may still be heating. Wait for its cycle to end. |
-| Manual mode does not return to schedule | `sensor.manual_remaining`, `sensor.manual_until`, `manual_blocks_schedule`, Scheduler command during manual mode. |
+| Manual mode does not return to schedule | `sensor.manual_remaining`, `sensor.manual_until`, Scheduler command during manual mode (always deferred). |
 | Conflict sensor on | `climate.climaterouter` attributes `conflicts`; check direct VTherm changes or guards. |
 | Both VTherms on | Conflict; check `auto_resolve_idle_targets`; do not force off while heating. |
 | Outdoor route flapping | Increase the gap between `cold_threshold` and `mild_threshold`; increase `min_route_dwell`. |

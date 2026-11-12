@@ -6,7 +6,6 @@ from datetime import datetime, timedelta, timezone
 
 from climaterouter.models import (
     PRESET_OFF,
-    READ_ONLY_HARD,
     READ_ONLY_OFF,
     READ_ONLY_SOFT,
     BoostState,
@@ -19,7 +18,6 @@ from climaterouter.models import (
     Target,
     UnderlyingState,
     lock_blocks_context,
-    manual_lock_blocks_context,
 )
 
 
@@ -252,23 +250,19 @@ def test_router_config_parses_read_only_and_pause_settings() -> None:
     config = RouterConfig.from_mapping(
         {
             "read_only_mode": "soft",
-            "manual_read_only_mode": READ_ONLY_HARD,
             "scheduler_pause_switch_entity_id": "switch.chauffage_pause",
         }
     )
     assert config.read_only_mode == READ_ONLY_SOFT
-    assert config.manual_read_only_mode == READ_ONLY_HARD
     assert config.scheduler_pause_switch_entity_id == "switch.chauffage_pause"
 
 
 def test_router_config_read_only_defaults_and_invalid_values() -> None:
     config = RouterConfig.from_mapping({})
     assert config.read_only_mode == READ_ONLY_OFF
-    assert config.manual_read_only_mode == READ_ONLY_OFF
 
-    invalid = RouterConfig.from_mapping({"read_only_mode": "frozen", "manual_read_only_mode": 1})
+    invalid = RouterConfig.from_mapping({"read_only_mode": "frozen"})
     assert invalid.read_only_mode == READ_ONLY_OFF
-    assert invalid.manual_read_only_mode == READ_ONLY_OFF
 
 
 def test_router_config_configured_targets_and_single_target() -> None:
@@ -289,11 +283,8 @@ def test_router_config_configured_targets_and_single_target() -> None:
     assert RouterConfig.from_mapping({}).single_target is None
 
 
-def test_snapshot_effective_read_only_follows_manual_mode() -> None:
-    snapshot = RouterSnapshot(
-        read_only_mode=READ_ONLY_SOFT,
-        manual_read_only_mode=READ_ONLY_HARD,
-    )
+def test_snapshot_effective_read_only_ignores_manual_mode() -> None:
+    snapshot = RouterSnapshot(read_only_mode=READ_ONLY_SOFT)
     assert snapshot.effective_read_only == READ_ONLY_SOFT
     assert snapshot.soft_read_only is True
     assert snapshot.hard_read_only is False
@@ -301,15 +292,15 @@ def test_snapshot_effective_read_only_follows_manual_mode() -> None:
     now = datetime.now(timezone.utc)  # noqa: UP017
     snapshot = RouterSnapshot(
         read_only_mode=READ_ONLY_SOFT,
-        manual_read_only_mode=READ_ONLY_HARD,
         manual_mode=ManualMode(
             desired=DesiredState(hvac_mode="heat"),
             started_at=now,
         ),
     )
-    assert snapshot.effective_read_only == READ_ONLY_HARD
+    assert snapshot.effective_read_only == READ_ONLY_OFF
     assert snapshot.soft_read_only is False
-    assert snapshot.hard_read_only is True
+    assert snapshot.hard_read_only is False
+    assert snapshot.schedule_locked is True
 
 
 def test_snapshot_preset_modes_include_off() -> None:
@@ -344,13 +335,11 @@ def test_router_config_parses_lock_settings() -> None:
             "lock_enabled": "on",
             "lock_code": 1234,
             "auto_relock_sec": "60",
-            "manual_blocks_schedule": "false",
         }
     )
     assert config.lock_enabled is True
     assert config.lock_code == "1234"
     assert config.auto_relock_sec == 60
-    assert config.manual_blocks_schedule is False
 
 
 def test_router_config_lock_defaults() -> None:
@@ -358,7 +347,6 @@ def test_router_config_lock_defaults() -> None:
     assert config.lock_enabled is False
     assert config.lock_code == ""
     assert config.auto_relock_sec == 30
-    assert config.manual_blocks_schedule is True
 
 
 def test_ui_lock_blocks_only_user_commands() -> None:
@@ -371,18 +359,6 @@ def test_ui_lock_blocks_only_user_commands() -> None:
     assert lock_blocks_context(**base, user_id=None) is False
     assert lock_blocks_context(**{**base, "locked": False}, user_id="user-1") is False
     assert lock_blocks_context(**{**base, "enabled": False}, user_id="user-1") is False
-
-
-def test_manual_lock_defers_only_automation_commands() -> None:
-    base = {
-        "enabled": True,
-        "manual_active": True,
-    }
-    assert manual_lock_blocks_context(**base, user_id=None) is True
-    # The user must still be able to adjust the manual setpoint.
-    assert manual_lock_blocks_context(**base, user_id="user-1") is False
-    assert manual_lock_blocks_context(**{**base, "manual_active": False}, user_id=None) is False
-    assert manual_lock_blocks_context(**{**base, "enabled": False}, user_id=None) is False
 
 
 def test_target_mismatch_reasons_describe_setpoint_and_preset_differences() -> None:

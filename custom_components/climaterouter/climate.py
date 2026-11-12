@@ -266,8 +266,6 @@ class RouterClimate(RouterEntity, ClimateEntity):
             "override": snapshot.manual_mode.to_dict() if snapshot.manual_mode else None,
             "manual_mode": snapshot.manual_mode.to_dict() if snapshot.manual_mode else None,
             "manual_active": snapshot.manual_active,
-            "manual_blocks_schedule": snapshot.manual_blocks_schedule,
-            "manual_read_only_mode": snapshot.manual_read_only_mode,
             "read_only_mode": snapshot.read_only_mode,
             "effective_read_only": snapshot.effective_read_only,
             "soft_read_only": snapshot.soft_read_only,

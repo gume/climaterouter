@@ -43,8 +43,6 @@ from .const import (
     CONF_HANDOVER_IDLE_CONFIRM,
     CONF_LOCK_CODE,
     CONF_LOCK_ENABLED,
-    CONF_MANUAL_BLOCKS_SCHEDULE,
-    CONF_MANUAL_READ_ONLY_MODE,
     CONF_MAX_MANUAL_MINUTES,
     CONF_MILD_THRESHOLD,
     CONF_MIN_ROUTE_DWELL,
@@ -53,7 +51,6 @@ from .const import (
     CONF_OUTDOOR_SENSOR_ENTITY_ID,
     CONF_OUTDOOR_STALE_AFTER,
     CONF_RADIATOR_ENTITY_ID,
-    CONF_READ_ONLY_MODE,
     CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID,
     CONF_SETTLE_TIME,
     CONF_STARTUP_GRACE,
@@ -78,8 +75,6 @@ from .models import (
     DEFAULT_SETTLE_TIME,
     DEFAULT_STARTUP_GRACE,
     DEFAULT_TEMPERATURE_TOLERANCE,
-    READ_ONLY_MODES,
-    READ_ONLY_OFF,
 )
 
 SECTION_BASIC = "basic"
@@ -135,9 +130,6 @@ def _defaults(current: Mapping[str, Any] | None = None) -> dict[str, Any]:
             CONF_MAX_MANUAL_MINUTES,
             current.get("max_override_minutes", DEFAULT_MAX_MANUAL_MINUTES),
         ),
-        CONF_MANUAL_BLOCKS_SCHEDULE: current.get(CONF_MANUAL_BLOCKS_SCHEDULE, True),
-        CONF_MANUAL_READ_ONLY_MODE: current.get(CONF_MANUAL_READ_ONLY_MODE, READ_ONLY_OFF),
-        CONF_READ_ONLY_MODE: current.get(CONF_READ_ONLY_MODE, READ_ONLY_OFF),
         CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID: current.get(
             CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID, ""
         ),
@@ -180,16 +172,6 @@ def _entity_field(
     return vol.Optional(key, default=default)
 
 
-def _read_only_selector() -> SelectSelector:
-    """Return the read-only level selector."""
-    return SelectSelector(
-        SelectSelectorConfig(
-            options=list(READ_ONLY_MODES),
-            mode=SelectSelectorMode.DROPDOWN,
-        )
-    )
-
-
 def _basic_schema(defaults: Mapping[str, Any]) -> vol.Schema:
     bypass_entity = defaults[CONF_AC_IDLE_BYPASS_ENTITY_ID]
     bypass_field = (
@@ -215,9 +197,6 @@ def _basic_schema(defaults: Mapping[str, Any]) -> vol.Schema:
                 CONF_AC_IDLE_BYPASS_ENABLED,
                 default=defaults[CONF_AC_IDLE_BYPASS_ENABLED],
             ): BooleanSelector(),
-            vol.Required(
-                CONF_READ_ONLY_MODE, default=defaults[CONF_READ_ONLY_MODE]
-            ): _read_only_selector(),
             vol.Required(
                 CONF_AC_IDLE_BYPASS_PRESET,
                 default=defaults[CONF_AC_IDLE_BYPASS_PRESET],
@@ -275,14 +254,6 @@ def _manual_schema(defaults: Mapping[str, Any]) -> vol.Schema:
                 CONF_MAX_MANUAL_MINUTES,
                 default=defaults[CONF_MAX_MANUAL_MINUTES],
             ): _number(1, 1440, 1, "min"),
-            vol.Required(
-                CONF_MANUAL_BLOCKS_SCHEDULE,
-                default=defaults[CONF_MANUAL_BLOCKS_SCHEDULE],
-            ): BooleanSelector(),
-            vol.Required(
-                CONF_MANUAL_READ_ONLY_MODE,
-                default=defaults[CONF_MANUAL_READ_ONLY_MODE],
-            ): _read_only_selector(),
             vol.Required(
                 CONF_VELAIR_ENABLED,
                 default=defaults[CONF_VELAIR_ENABLED],

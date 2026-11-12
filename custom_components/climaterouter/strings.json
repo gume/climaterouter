@@ -15,7 +15,6 @@
               "outdoor_sensor_entity_id": "Outdoor temperature sensor (optional)",
               "ac_idle_bypass_entity_id": "Device thermostat below the AC VTherm (optional)",
               "ac_idle_bypass_enabled": "Enable AC idle bypass",
-              "read_only_mode": "Read-only level (schedule)",
               "ac_idle_bypass_preset": "Preset used for the idle setpoint"
             },
             "data_description": {
@@ -25,7 +24,6 @@
               "outdoor_sensor_entity_id": "Temperature sensor used to choose the route. Leave empty to hold the radiator route.",
               "ac_idle_bypass_entity_id": "Climate entity controlled by the AC VTherm. Leave empty to use the first underlying climate reported by the VTherm.",
               "ac_idle_bypass_enabled": "In heat mode, when the AC VTherm reports idle, write the preset temperature directly to the device thermostat so it stops heating.",
-              "read_only_mode": "Read-only level for the underlying thermostats while a schedule is in control. off writes normally; soft suppresses writes but keeps the requested state on the proxy; hard suppresses writes and mirrors the real underlying state.",
               "ac_idle_bypass_preset": "VTherm preset whose temperature is used for the idle setpoint. The VTherm is expected to restore its own setpoint when heating resumes."
             }
           },
@@ -55,20 +53,16 @@
           },
           "manual": {
             "name": "Manual mode",
-            "description": "Default and maximum manual timer, read-only level, scheduler pause switch, and the manual/schedule lock.",
+            "description": "Default and maximum manual timer, Velair pause, and the scheduler pause switch.",
             "data": {
               "default_manual_minutes": "Default manual timer (0 = no timer)",
               "max_manual_minutes": "Maximum manual timer",
-              "manual_blocks_schedule": "Block schedule/automation commands while manual",
-              "manual_read_only_mode": "Read-only level in manual mode",
               "velair_enabled": "Pause Velair in manual mode",
               "scheduler_pause_switch_entity_id": "Scheduler pause switch (optional)"
             },
             "data_description": {
               "default_manual_minutes": "Timer for a new manual session. 0 keeps manual mode active until ended.",
               "max_manual_minutes": "Upper limit for the manual timer.",
-              "manual_blocks_schedule": "Keep schedule and automation commands out while manual mode is active. The latest schedule state is remembered and applied when manual mode ends. User commands still work.",
-              "manual_read_only_mode": "Read-only level for the underlying thermostats while manual mode is active. off writes normally; soft suppresses writes but keeps the requested state on the proxy; hard suppresses writes and mirrors the real underlying state.",
               "velair_enabled": "Pause Velair for the remaining manual time when manual mode starts, and resume automatic control on the ClimateRouter proxy when it ends.",
               "scheduler_pause_switch_entity_id": "Switch or input_boolean turned on while manual mode is active and off when it ends. Chauffage's pause switch can be used here."
             }
@@ -141,7 +135,6 @@
               "outdoor_sensor_entity_id": "Outdoor temperature sensor (optional)",
               "ac_idle_bypass_entity_id": "Device thermostat below the AC VTherm (optional)",
               "ac_idle_bypass_enabled": "Enable AC idle bypass",
-              "read_only_mode": "Read-only level (schedule)",
               "ac_idle_bypass_preset": "Preset used for the idle setpoint"
             },
             "data_description": {
@@ -151,7 +144,6 @@
               "outdoor_sensor_entity_id": "Temperature sensor used to choose the route. Leave empty to hold the radiator route.",
               "ac_idle_bypass_entity_id": "Climate entity controlled by the AC VTherm. Leave empty to use the first underlying climate reported by the VTherm.",
               "ac_idle_bypass_enabled": "In heat mode, when the AC VTherm reports idle, write the preset temperature directly to the device thermostat so it stops heating.",
-              "read_only_mode": "Read-only level for the underlying thermostats while a schedule is in control. off writes normally; soft suppresses writes but keeps the requested state on the proxy; hard suppresses writes and mirrors the real underlying state.",
               "ac_idle_bypass_preset": "VTherm preset whose temperature is used for the idle setpoint. The VTherm is expected to restore its own setpoint when heating resumes."
             }
           },
@@ -181,20 +173,16 @@
           },
           "manual": {
             "name": "Manual mode",
-            "description": "Default and maximum manual timer, read-only level, scheduler pause switch, and the manual/schedule lock.",
+            "description": "Default and maximum manual timer, Velair pause, and the scheduler pause switch.",
             "data": {
               "default_manual_minutes": "Default manual timer (0 = no timer)",
               "max_manual_minutes": "Maximum manual timer",
-              "manual_blocks_schedule": "Block schedule/automation commands while manual",
-              "manual_read_only_mode": "Read-only level in manual mode",
               "velair_enabled": "Pause Velair in manual mode",
               "scheduler_pause_switch_entity_id": "Scheduler pause switch (optional)"
             },
             "data_description": {
               "default_manual_minutes": "Timer for a new manual session. 0 keeps manual mode active until ended.",
               "max_manual_minutes": "Upper limit for the manual timer.",
-              "manual_blocks_schedule": "Keep schedule and automation commands out while manual mode is active. The latest schedule state is remembered and applied when manual mode ends. User commands still work.",
-              "manual_read_only_mode": "Read-only level for the underlying thermostats while manual mode is active. off writes normally; soft suppresses writes but keeps the requested state on the proxy; hard suppresses writes and mirrors the real underlying state.",
               "velair_enabled": "Pause Velair for the remaining manual time when manual mode starts, and resume automatic control on the ClimateRouter proxy when it ends.",
               "scheduler_pause_switch_entity_id": "Switch or input_boolean turned on while manual mode is active and off when it ends. Chauffage's pause switch can be used here."
             }
@@ -297,7 +285,6 @@
           "outdoor_sensor_entity_id": "Outdoor temperature sensor (optional)",
           "ac_idle_bypass_entity_id": "Device thermostat below the AC VTherm (optional)",
           "ac_idle_bypass_enabled": "Enable AC idle bypass",
-          "read_only_mode": "Read-only level (schedule)",
           "ac_idle_bypass_preset": "Preset used for the idle setpoint"
         },
         "data_description": {
@@ -307,7 +294,6 @@
           "outdoor_sensor_entity_id": "Temperature sensor used to choose the route. Leave empty to hold the radiator route.",
           "ac_idle_bypass_entity_id": "Climate entity controlled by the AC VTherm. Leave empty to use the first underlying climate reported by the VTherm.",
           "ac_idle_bypass_enabled": "In heat mode, when the AC VTherm reports idle, write the preset temperature directly to the device thermostat so it stops heating.",
-          "read_only_mode": "Read-only level for the underlying thermostats while a schedule is in control. off writes normally; soft suppresses writes but keeps the requested state on the proxy; hard suppresses writes and mirrors the real underlying state.",
           "ac_idle_bypass_preset": "VTherm preset whose temperature is used for the idle setpoint. The VTherm is expected to restore its own setpoint when heating resumes."
         }
       },
@@ -341,16 +327,12 @@
         "data": {
           "default_manual_minutes": "Default manual timer (0 = no timer)",
           "max_manual_minutes": "Maximum manual timer",
-          "manual_blocks_schedule": "Block schedule/automation commands while manual",
-          "manual_read_only_mode": "Read-only level in manual mode",
           "velair_enabled": "Pause Velair in manual mode",
           "scheduler_pause_switch_entity_id": "Scheduler pause switch (optional)"
         },
         "data_description": {
           "default_manual_minutes": "Timer for a new manual session. 0 keeps manual mode active until ended.",
           "max_manual_minutes": "Upper limit for the manual timer.",
-          "manual_blocks_schedule": "Keep schedule and automation commands out while manual mode is active. The latest schedule state is remembered and applied when manual mode ends. User commands still work.",
-          "manual_read_only_mode": "Read-only level for the underlying thermostats while manual mode is active. off writes normally; soft suppresses writes but keeps the requested state on the proxy; hard suppresses writes and mirrors the real underlying state.",
           "velair_enabled": "Pause Velair for the remaining manual time when manual mode starts, and resume automatic control on the ClimateRouter proxy when it ends.",
           "scheduler_pause_switch_entity_id": "Switch or input_boolean turned on while manual mode is active and off when it ends. Chauffage's pause switch can be used here."
         }

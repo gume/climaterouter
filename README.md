@@ -76,7 +76,7 @@ user-initiated commands; schedule and automation traffic keeps running. See
 |---|---|
 | One climate entity | Scheduler/UI see `climate.climaterouter`; no scheduler changes required. |
 | Single thermostat | Either the radiator or the AC may be omitted; the route is then fixed and all other features keep working. |
-| Read-only targets | `off`/`soft`/`hard` levels for schedule and manual control. `soft` suppresses every underlying write while the proxy keeps showing the command; `hard` mirrors the real underlying state and dismisses commands. |
+| Read-only schedule control | Runtime select `select.<name>_read_only_mode` with `off`/`soft`/`hard`, changeable while the entry is configured. `soft` suppresses every underlying write while the proxy keeps showing the command; `hard` mirrors the real underlying state and dismisses commands. Manual mode is never read-only: user moves still write, while scheduler/automation moves are always deferred. |
 | Scheduler pause switch | Optional generic switch/`input_boolean` turned on while manual mode is active and off when it ends (for example Chauffage's pause switch). |
 | Off preset | The proxy always exposes the `off` preset as a scheduler-friendly equivalent of an HVAC off command. |
 | Temperature-based routing | Outdoor sensor plus optional `select` override; hysteresis and minimum dwell time. |
@@ -88,7 +88,7 @@ user-initiated commands; schedule and automation traffic keeps running. See
 | AC fan proxy | The AC fan mode is mirrored, stored while the AC is inactive, and applied or replayed only when the AC is active. Fan changes do not start manual mode. |
 | AC idle bypass | Optional: while the AC VTherm reports idle in heat mode, write a `frost`/`eco`/`comfort` preset temperature to the device thermostat below it. The VTherm restores its own setpoint when heating resumes. |
 | Velair | Optional: pause Velair for the remaining manual time when manual mode starts and resume automatic control on the ClimateRouter proxy when it ends. |
-| Two locks | Optional `lock.climaterouter_lock` (UI lock, user commands only) with a 4–8 digit code and auto-relock; `manual_blocks_schedule` keeps scheduler/automation moves out of manual mode and remembers the latest schedule state. |
+| Two locks | Optional `lock.climaterouter_lock` (UI lock, user commands only) with a 4–8 digit code and auto-relock; manual mode always keeps scheduler/automation moves out and remembers the latest schedule state. |
 
 ## Planned entities
 
@@ -110,6 +110,7 @@ user-initiated commands; schedule and automation traffic keeps running. See
 - `sensor.climaterouter_boost_remaining` — minutes left in boost (`0` when boost is inactive).
 - `sensor.climaterouter_last_handover` — timestamp of the last completed handover.
 - `sensor.climaterouter_conflict_count` — diagnostic conflict counter.
+- `select.climaterouter_read_only_mode` — runtime `off` / `soft` / `hard` schedule-write guard.
 - `select.climaterouter_route_override` — `auto` / `radiator` / `ac` (manual route override).
 - `switch.climaterouter_manual_mode` — enter manual mode / return to schedule.
 - `select.climaterouter_manual_timer` — timer length or `off`.

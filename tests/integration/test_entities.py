@@ -415,6 +415,7 @@ async def test_internal_entities_use_the_diagnostic_and_config_sections(hass) ->
     assert category("sensor", "manual_remaining") is None
     assert category("sensor", "boost_remaining") is None
     assert category("select", "route_override") is EntityCategory.CONFIG
+    assert category("select", "read_only_mode") is None
     assert category("select", "manual_timer") is EntityCategory.CONFIG
     assert category("button", "recalculate_route") is EntityCategory.CONFIG
     assert category("button", "clear_conflicts") is EntityCategory.CONFIG
@@ -422,12 +423,26 @@ async def test_internal_entities_use_the_diagnostic_and_config_sections(hass) ->
 
 
 async def test_climate_exposes_read_only_mode_and_off_preset(hass) -> None:
-    """The proxy exposes the read-only levels and the synthetic off preset."""
-    _entry, coordinator = await _setup(hass, read_only_mode="soft", manual_read_only_mode="hard")
+    """The proxy exposes the read-only level and the synthetic off preset."""
+    _entry, coordinator = await _setup(hass, read_only_mode="soft")
 
     state = hass.states.get(coordinator.climate_entity_id)
     assert state is not None
     assert state.attributes["read_only_mode"] == "soft"
-    assert state.attributes["manual_read_only_mode"] == "hard"
     assert state.attributes["effective_read_only"] == "soft"
     assert "off" in state.attributes["preset_modes"]
+
+    select_id = hass.states.get("select.test_router_read_only_mode")
+    assert select_id is not None
+    assert select_id.state == "soft"
+    assert select_id.attributes["options"] == ["off", "soft", "hard"]
+
+    await hass.services.async_call(
+        "select",
+        "select_option",
+        {"entity_id": select_id.entity_id, "option": "hard"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+    assert coordinator.read_only_mode == "hard"
+    assert hass.states.get(select_id.entity_id).state == "hard"

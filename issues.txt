@@ -7,9 +7,9 @@
   deadline at the moment of the call (start, timer change, or restored session), so a session with 37 minutes
   left pauses Velair for 37 minutes. An infinite manual session still pauses Velair without a deadline.
 - [x] Add soft/hard read-only modes for the underlying climates, both for schedule and manual control.
-  Resolved in `b8430f6` (0.9.0). `read_only_mode` and `manual_read_only_mode` select `off`/`soft`/`hard`;
-  `soft` suppresses every underlying write while the proxy keeps the requested state, and `hard` mirrors the
-  real underlying state and dismisses commands.
+  Resolved in `b8430f6` (0.9.0); the manual level was removed again in 0.9.1 (see below). `read_only_mode`
+  selects `off`/`soft`/`hard`; `soft` suppresses every underlying write while the proxy keeps the requested
+  state, and `hard` mirrors the real underlying state and dismisses commands.
 - [x] Support setups with only one climate (radiator or AC) while keeping all other features.
   Resolved in `b8430f6` (0.9.0). Either the radiator or the AC may be omitted (at least one is required); the
   route is fixed to the configured target and never falls back to an unconfigured one.
@@ -26,10 +26,12 @@
   Resolved in `41733d8` (0.9.1). The command preview executed the publish commands before the confirmation
   prompt and then ran them again; it now only prints, and the real commands run once after confirmation.
 - [x] The config forms should explain soft/hard and show the read-only selectors in a better position.
-  Resolved in 0.9.1. Both hints now describe `off`, `soft` and `hard`, and each read-only selector moved one
-  position up in its section.
+  Superseded in 0.9.1: the schedule read-only level is now the runtime
+  `select.<name>_read_only_mode` entity in Controls, so it can be changed after setup. The manual read-only
+  setting, including soft/hard, is removed entirely; manual mode always accepts user writes and always defers
+  scheduler/automation commands.
 
 ## Open
 
-- [ ] Release 0.9.1, install it in the test HA through the Marketplace, and live-verify read-only soft/hard,
-      a single-thermostat entry, the Chauffage pause switch and the `off` preset.
+- [ ] Release 0.9.1, install it in the test HA through the Marketplace, and live-verify the runtime read-only
+      select, a single-thermostat entry, the Chauffage pause switch and the `off` preset.

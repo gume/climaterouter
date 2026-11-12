@@ -417,9 +417,7 @@ class RouterSnapshot:
     locked: bool = False
     lock_has_code: bool = False
     auto_relock_sec: int = DEFAULT_AUTO_RELOCK_SEC
-    manual_blocks_schedule: bool = True
     read_only_mode: str = READ_ONLY_OFF
-    manual_read_only_mode: str = READ_ONLY_OFF
     configured_targets: frozenset[Target] = frozenset()
     targets: dict[Target, UnderlyingState] = field(default_factory=dict)
     hvac_modes: tuple[str, ...] = (HVAC_OFF, HVAC_HEAT)
@@ -454,7 +452,7 @@ class RouterSnapshot:
     def effective_read_only(self) -> str:
         """Return the read-only level that applies right now."""
         if self.manual_mode is not None:
-            return self.manual_read_only_mode
+            return READ_ONLY_OFF
         return self.read_only_mode
 
     @property
@@ -506,7 +504,7 @@ class RouterSnapshot:
     @property
     def schedule_locked(self) -> bool:
         """Return whether manual mode currently blocks schedule commands."""
-        return self.manual_blocks_schedule and self.manual_mode is not None
+        return self.manual_mode is not None
 
 
 @dataclass(frozen=True)
@@ -577,14 +575,12 @@ class RouterConfig:
     lock_enabled: bool = False
     lock_code: str = ""
     auto_relock_sec: int = DEFAULT_AUTO_RELOCK_SEC
-    manual_blocks_schedule: bool = True
     expose_vtherm_identity: bool = False
     velair_enabled: bool = False
     ac_idle_bypass_enabled: bool = False
     ac_idle_bypass_entity_id: str = ""
     ac_idle_bypass_preset: str = DEFAULT_AC_IDLE_BYPASS_PRESET
     read_only_mode: str = READ_ONLY_OFF
-    manual_read_only_mode: str = READ_ONLY_OFF
     scheduler_pause_switch_entity_id: str = ""
 
     @property
@@ -661,7 +657,6 @@ class RouterConfig:
             lock_enabled=_bool("lock_enabled", False),
             lock_code=str(data.get("lock_code") or ""),
             auto_relock_sec=_int("auto_relock_sec", DEFAULT_AUTO_RELOCK_SEC),
-            manual_blocks_schedule=_bool("manual_blocks_schedule", True),
             expose_vtherm_identity=_bool("expose_vtherm_identity", False),
             velair_enabled=_bool("velair_enabled", False),
             ac_idle_bypass_enabled=_bool("ac_idle_bypass_enabled", False),
@@ -672,7 +667,6 @@ class RouterConfig:
                 else DEFAULT_AC_IDLE_BYPASS_PRESET
             ),
             read_only_mode=_choice("read_only_mode", READ_ONLY_MODES, READ_ONLY_OFF),
-            manual_read_only_mode=_choice("manual_read_only_mode", READ_ONLY_MODES, READ_ONLY_OFF),
             scheduler_pause_switch_entity_id=str(
                 data.get("scheduler_pause_switch_entity_id") or ""
             ),
@@ -693,21 +687,3 @@ def lock_blocks_context(
     if not (enabled and locked):
         return False
     return user_id is not None
-
-
-def manual_lock_blocks_context(
-    *,
-    enabled: bool,
-    manual_active: bool,
-    user_id: str | None,
-) -> bool:
-    """Return whether manual mode should defer this command.
-
-    While manual mode is active, schedule/automation commands (no ``user_id``)
-    are kept as the baseline and are not applied to the targets. User commands
-    must always be accepted so the manual setpoint can be adjusted without
-    unlocking.
-    """
-    if not (enabled and manual_active):
-        return False
-    return user_id is None

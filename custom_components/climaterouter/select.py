@@ -10,6 +10,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import ClimateRouterCoordinator
 from .entity import RouterEntity
+from .models import READ_ONLY_MODES
 
 PARALLEL_UPDATES = 0
 
@@ -19,11 +20,12 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the route override and manual timer selects."""
+    """Set up the route override, read-only, and manual timer selects."""
     coordinator: ClimateRouterCoordinator = entry.runtime_data
     async_add_entities(
         [
             RouterRouteOverrideSelect(coordinator, entry),
+            RouterReadOnlySelect(coordinator, entry),
             RouterManualTimerSelect(coordinator, entry),
         ]
     )
@@ -50,6 +52,28 @@ class RouterRouteOverrideSelect(RouterEntity, SelectEntity):
 
     async def async_select_option(self, option: str) -> None:
         await self.coordinator.async_set_route_override(option)
+
+
+class RouterReadOnlySelect(RouterEntity, SelectEntity):
+    """Choose whether the router may write to the underlying thermostats."""
+
+    _attr_name = "Read-only mode"
+    _attr_icon = "mdi:eye-off-outline"
+
+    def __init__(self, coordinator: ClimateRouterCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_read_only_mode"
+
+    @property
+    def options(self) -> list[str]:
+        return list(READ_ONLY_MODES)
+
+    @property
+    def current_option(self) -> str:
+        return self.coordinator.read_only_mode
+
+    async def async_select_option(self, option: str) -> None:
+        await self.coordinator.async_set_read_only_mode(option)
 
 
 class RouterManualTimerSelect(RouterEntity, SelectEntity):
