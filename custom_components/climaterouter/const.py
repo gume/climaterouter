@@ -8,7 +8,7 @@ from homeassistant.const import Platform
 
 DOMAIN: Final = "climaterouter"
 NAME: Final = "ClimateRouter"
-VERSION: Final = "0.10.1"
+VERSION: Final = "0.11.0"
 
 PLATFORMS: Final = [
     Platform.CLIMATE,
@@ -51,6 +51,8 @@ CONF_AC_IDLE_BYPASS_ENTITY_ID: Final = "ac_idle_bypass_entity_id"
 CONF_AC_IDLE_BYPASS_PRESET: Final = "ac_idle_bypass_preset"
 CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID: Final = "scheduler_pause_switch_entity_id"
 CONF_SCHEDULER_PAUSE_SWITCH_INVERT: Final = "scheduler_pause_switch_invert"
+CONF_OFF_PRESET_ENABLED: Final = "off_preset_enabled"
+CONF_OFF_PRESET_KEEPS_LIVE_STATE: Final = "off_preset_keeps_live_state"
 
 CONFLICT_POLICIES: Final = ["monitor", "reassert", "adopt"]
 

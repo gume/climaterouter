@@ -446,3 +446,12 @@ async def test_climate_exposes_read_only_mode_and_off_preset(hass) -> None:
     await hass.async_block_till_done()
     assert coordinator.read_only_mode == "hard"
     assert hass.states.get(select_id.entity_id).state == "hard"
+
+
+async def test_climate_hides_the_off_preset_when_disabled(hass) -> None:
+    """The off preset leaves the preset list when its option is disabled."""
+    _entry, coordinator = await _setup(hass, off_preset_enabled=False)
+
+    state = hass.states.get(coordinator.climate_entity_id)
+    assert state is not None
+    assert "off" not in state.attributes["preset_modes"]

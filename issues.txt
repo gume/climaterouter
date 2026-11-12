@@ -33,9 +33,16 @@
 - [x] The scheduler pause switch should be invertible, so it can signal either free or busy.
   Resolved in 0.10.1. `scheduler_pause_switch_invert` flips the polarity: off (default) signals busy with on while
   manual mode is active; on signals free with the entity on while the schedule is in control.
+- [x] The manual-signal inversion toggle has no label or hint.
+  Resolved in 0.11.0. The form field is labelled "Invert the manual signal (on = schedule free)" and its hint
+  explains both polarities.
+- [x] The `off` preset should be optional and offer a detached mode that keeps ClimateRouter live.
+  Resolved in 0.11.0. The new **Presets** section has `off_preset_enabled` (default on) and
+  `off_preset_keeps_live_state` (default off). Detached mode stops the underlying climate but keeps the proxy in
+  its last live state, copying the active target's mode, setpoint, fan and action so a scheduler that refuses to
+  start while the climate is off can resume.
 
 ## Open
 
-- [ ] Release 0.10.1, install it in the test HA through the Marketplace, and live-verify the runtime read-only
-      select, a single-thermostat entry, the Chauffage pause switch (including its inverted polarity) and the
-      `off` preset.
+- [ ] Release 0.11.0, install it in the test HA through the Marketplace, and live-verify the labelled manual-signal
+      toggle, the optional `off` preset, and its detached live-state mode.

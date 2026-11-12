@@ -25,6 +25,7 @@ from .models import (
     HVAC_COOL,
     HVAC_HEAT,
     HVAC_OFF,
+    PRESET_OFF,
     SetpointKind,
     Target,
 )
@@ -138,6 +139,10 @@ class RouterClimate(RouterEntity, ClimateEntity):
     @property
     def _active_state(self):
         snapshot = self._snapshot
+        if snapshot.off_preset_active and snapshot.off_preset_target is not None:
+            # Keep the last live target's current temperature visible while
+            # the decoupled off preset is active.
+            return snapshot.targets.get(snapshot.off_preset_target)
         target = snapshot.active_target
         if target is not None:
             return snapshot.targets.get(target)
@@ -165,6 +170,11 @@ class RouterClimate(RouterEntity, ClimateEntity):
     @property
     def native_target_temperature(self) -> float | None:
         desired = self._snapshot.desired
+        if self._snapshot.off_preset_active:
+            if desired.setpoint_kind == SetpointKind.TEMPERATURE:
+                return desired.target_temperature
+            state = self._active_state
+            return state.target_temperature if state else None
         if self._optimistic and desired.setpoint_kind == SetpointKind.TEMPERATURE:
             return desired.target_temperature
         state = self._active_state
@@ -188,6 +198,10 @@ class RouterClimate(RouterEntity, ClimateEntity):
     def hvac_mode(self) -> HVACMode:
         snapshot = self._snapshot
         desired = snapshot.desired
+        if snapshot.off_preset_active:
+            if desired.hvac_mode in (HVAC_HEAT, HVAC_COOL):
+                return HVACMode(desired.hvac_mode)
+            return HVACMode.HEAT
         if not snapshot.hard_read_only and desired.hvac_mode == HVAC_OFF:
             return HVACMode.OFF
         if self._optimistic and desired.hvac_mode in (HVAC_HEAT, HVAC_COOL):
@@ -200,6 +214,12 @@ class RouterClimate(RouterEntity, ClimateEntity):
     @property
     def hvac_action(self) -> HVACAction | None:
         snapshot = self._snapshot
+        if snapshot.off_preset_active:
+            action = snapshot.off_preset_hvac_action
+            try:
+                return HVACAction(action) if action is not None else HVACAction.IDLE
+            except ValueError:
+                return HVACAction.IDLE
         if not snapshot.hard_read_only and snapshot.desired.hvac_mode == HVAC_OFF:
             return HVACAction.OFF
         actions = [
@@ -217,6 +237,8 @@ class RouterClimate(RouterEntity, ClimateEntity):
 
     @property
     def preset_mode(self) -> str | None:
+        if self._snapshot.off_preset_active:
+            return PRESET_OFF
         desired = self._snapshot.desired
         if self._optimistic and desired.setpoint_kind == SetpointKind.PRESET:
             return desired.preset_mode
@@ -252,6 +274,11 @@ class RouterClimate(RouterEntity, ClimateEntity):
                 snapshot.pending_target.value if snapshot.pending_target else "none"
             ),
             "route_reason": snapshot.route_reason,
+            "off_preset_active": snapshot.off_preset_active,
+            "off_preset_target": (
+                snapshot.off_preset_target.value if snapshot.off_preset_target else None
+            ),
+            "off_preset_hvac_action": snapshot.off_preset_hvac_action,
             "outdoor_temperature": snapshot.outdoor_temperature,
             "outdoor_sensor_stale": snapshot.outdoor_stale,
             "route_override": snapshot.route_override,

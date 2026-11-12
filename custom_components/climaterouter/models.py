@@ -35,6 +35,8 @@ ROUTE_BOTH = "both"
 DEFAULT_AUTO_RELOCK_SEC = 30
 AC_IDLE_BYPASS_PRESETS = ("frost", "eco", "comfort")
 DEFAULT_AC_IDLE_BYPASS_PRESET = "frost"
+DEFAULT_OFF_PRESET_ENABLED = True
+DEFAULT_OFF_PRESET_KEEPS_LIVE_STATE = False
 
 
 class Target(str, Enum):  # noqa: UP042
@@ -314,6 +316,46 @@ class ManualMode:
         )
 
 
+@dataclass
+class OffPresetHold:
+    """The proxy's live state while the decoupled off preset is active.
+
+    The underlying thermostats are off, but the proxy keeps the last live
+    state so schedulers that stop working when the climate is off can still
+    resume. ``target`` is the target whose state was copied, and
+    ``hvac_action`` keeps its last action for display.
+    """
+
+    desired: DesiredState
+    target: Target | None = None
+    hvac_action: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for the store."""
+        return {
+            "desired": self.desired.to_dict(),
+            "target": self.target.value if self.target else None,
+            "hvac_action": self.hvac_action,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> OffPresetHold | None:
+        """Deserialize a hold from the store, tolerating bad data."""
+        desired_data = data.get("desired")
+        if not isinstance(desired_data, dict):
+            return None
+        raw_target = data.get("target")
+        target = (
+            Target(raw_target) if raw_target in {candidate.value for candidate in Target} else None
+        )
+        action = data.get("hvac_action")
+        return cls(
+            desired=DesiredState.from_dict(desired_data),
+            target=target,
+            hvac_action=str(action) if action is not None else None,
+        )
+
+
 @dataclass(frozen=True)
 class BoostState:
     """A bounded period with both targets active."""
@@ -422,6 +464,9 @@ class RouterSnapshot:
     targets: dict[Target, UnderlyingState] = field(default_factory=dict)
     hvac_modes: tuple[str, ...] = (HVAC_OFF, HVAC_HEAT)
     preset_modes: tuple[str, ...] = ("none", PRESET_OFF)
+    off_preset_active: bool = False
+    off_preset_target: Target | None = None
+    off_preset_hvac_action: str | None = None
     fan_modes: tuple[str, ...] = ()
     min_temp: float = 7.0
     max_temp: float = 35.0
@@ -583,6 +628,8 @@ class RouterConfig:
     read_only_mode: str = READ_ONLY_OFF
     scheduler_pause_switch_entity_id: str = ""
     scheduler_pause_switch_invert: bool = False
+    off_preset_enabled: bool = DEFAULT_OFF_PRESET_ENABLED
+    off_preset_keeps_live_state: bool = DEFAULT_OFF_PRESET_KEEPS_LIVE_STATE
 
     @property
     def configured_targets(self) -> frozenset[Target]:
@@ -672,6 +719,11 @@ class RouterConfig:
                 data.get("scheduler_pause_switch_entity_id") or ""
             ),
             scheduler_pause_switch_invert=_bool("scheduler_pause_switch_invert", False),
+            off_preset_enabled=_bool("off_preset_enabled", DEFAULT_OFF_PRESET_ENABLED),
+            off_preset_keeps_live_state=_bool(
+                "off_preset_keeps_live_state",
+                DEFAULT_OFF_PRESET_KEEPS_LIVE_STATE,
+            ),
         )
 
 

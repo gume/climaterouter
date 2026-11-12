@@ -105,6 +105,17 @@ In shoulder seasons, the outdoor temperature may route the same schedule to the 
 The select is a runtime control in the Controls section, so it can be changed after setup, and its value survives a
 restart. Manual mode ignores it: user moves always write, while scheduler/automation moves are always deferred.
 
+### Off preset
+
+The synthetic `off` preset lets a scheduler that can only change presets switch the heating off. It is enabled in
+**Settings → Devices & services → ClimateRouter → Configure → Presets** and can be hidden again there.
+
+When **Keep ClimateRouter live when the off preset is used** is off (the default), the off preset behaves like an
+HVAC off command: the proxy turns off together with the underlying thermostat. When it is on, the preset turns off
+the underlying thermostat but keeps the proxy in its last live state (mode, setpoint and last action), so a
+scheduler that refuses to start while the climate is off can resume later. A new live command ends that hold and
+starts the target again.
+
 ## 5. Route override
 
 `select.climaterouter_route_override` forces routing without an external helper:

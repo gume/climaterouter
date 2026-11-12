@@ -86,6 +86,7 @@ from .models import (
     DesiredState,
     HandoverState,
     ManualMode,
+    OffPresetHold,
     RouteDecision,
     RouteInputs,
     RouterConfig,
@@ -130,6 +131,8 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._desired = DesiredState()
         self._manual: ManualMode | None = None
         self._manual_unsub: Any | None = None
+        self._off_preset: OffPresetHold | None = None
+        self._off_preset_pending = False
         self._boost: BoostState | None = None
         self._boost_unsub: Any | None = None
         self._active_targets: frozenset[Target] = frozenset()
@@ -365,6 +368,67 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             desired.target_temperature = float(temperature)
             desired.preset_mode = None
 
+    def _clear_off_preset(self) -> None:
+        """Drop a decoupled off-preset hold after a new live command."""
+        if self._off_preset is None and not self._off_preset_pending:
+            return
+        self._off_preset = None
+        self._off_preset_pending = False
+        self._sync_desired()
+
+    def _off_preset_live_state(self) -> DesiredState:
+        """Copy the last live state before the underlying targets are stopped."""
+        if self._manual is not None:
+            return self._manual.desired.copy()
+        active = self._single_active() or self._first_on_target()
+        if active is not None and self._states[active].hvac_mode not in (None, HVAC_OFF):
+            return self._adopt_desired(active)
+        if not self._desired.is_empty:
+            return self._desired.copy()
+        return DesiredState(hvac_mode=HVAC_HEAT)
+
+    def _activate_off_preset_hold(self, desired: DesiredState | None = None) -> None:
+        """Keep the proxy live while the underlying targets are off."""
+        live = desired.copy() if desired is not None else self._off_preset_live_state()
+        target = self._single_active() or self._first_on_target() or self._last_route
+        action = self._states[target].hvac_action if target is not None else None
+        self._off_preset = OffPresetHold(
+            desired=live.copy(),
+            target=target,
+            hvac_action=action,
+        )
+        self._off_preset_pending = False
+        self._baseline = live.copy()
+        self._sync_desired()
+
+    async def _async_apply_off_preset(self, context: Context | None) -> None:
+        """Apply the synthetic off preset, coupled or with a live proxy."""
+        if not (self.config.off_preset_enabled and self.config.off_preset_keeps_live_state):
+            # Coupled behaviour: the proxy follows the underlying climate off.
+            if self._defers_schedule_command(context):
+                self._baseline.hvac_mode = HVAC_OFF
+            else:
+                self._clear_off_preset()
+                self._end_manual("off")
+                self._apply_mode(HVAC_OFF)
+            await self._async_command_received()
+            return
+
+        if self._defers_schedule_command(context):
+            # A scheduler off during manual mode is remembered for the return
+            # to schedule instead of stopping the manual session.
+            self._off_preset_pending = True
+            self._baseline.hvac_mode = HVAC_OFF
+            await self._async_command_received()
+            return
+
+        live = self._off_preset_live_state()
+        self._activate_off_preset_hold(live)
+        self._end_manual("off")
+        self._baseline = live.copy()
+        self._sync_desired()
+        await self._async_command_received()
+
     async def async_set_temperature(
         self,
         temperature: float | None = None,
@@ -379,6 +443,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         if preset_mode == PRESET_OFF:
             await self.async_set_preset_mode(PRESET_OFF, context=context)
             return
+        self._clear_off_preset()
 
         from_user = self._is_user_context(context)
         has_setpoint = temperature is not None or preset_mode is not None
@@ -460,6 +525,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._ensure_unlocked(context)
         if hvac_mode not in MODES:
             raise HomeAssistantError(f"Unsupported HVAC mode: {hvac_mode}")
+        self._clear_off_preset()
         from_user = self._is_user_context(context)
         defer = self._defers_schedule_command(context)
         if hvac_mode == HVAC_OFF:
@@ -480,15 +546,9 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         """Handle a preset change."""
         self._ensure_unlocked(context)
         if preset_mode == PRESET_OFF:
-            # The "off" preset is a convenience for schedulers that can only
-            # set presets. It behaves exactly like an HVAC off command.
-            if self._defers_schedule_command(context):
-                self._baseline.hvac_mode = HVAC_OFF
-            else:
-                self._end_manual("off")
-                self._apply_mode(HVAC_OFF)
-            await self._async_command_received()
+            await self._async_apply_off_preset(context)
             return
+        self._clear_off_preset()
         if self._manual is not None and self._is_user_context(context):
             self._apply_setpoint(self._manual.desired, temperature=None, preset_mode=preset_mode)
         elif (
@@ -521,6 +581,9 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         # it, but the timer keeps running.
         if self._manual is not None:
             self._manual.desired.fan_mode = fan_mode
+        elif self._off_preset is not None:
+            self._off_preset.desired.fan_mode = fan_mode
+            self._sync_desired()
         else:
             self._baseline.fan_mode = fan_mode
         await self._async_command_received()
@@ -528,6 +591,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
     async def async_turn_on(self, context: Context | None = None) -> None:
         """Turn the proxy on in the last known (or heat) mode."""
         self._ensure_unlocked(context)
+        self._clear_off_preset()
         if self._baseline.hvac_mode in (None, HVAC_OFF):
             self._baseline.hvac_mode = HVAC_HEAT
         await self._async_command_received()
@@ -535,6 +599,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
     async def async_turn_off(self, context: Context | None = None) -> None:
         """Turn everything off immediately."""
         self._ensure_unlocked(context)
+        self._clear_off_preset()
         if not self._defers_schedule_command(context):
             self._end_manual("off")
         # A scheduler off is remembered as the return state; a user off ends
@@ -776,6 +841,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             return
         if hvac_mode is not None and hvac_mode not in MODES:
             raise HomeAssistantError(f"Unsupported HVAC mode: {hvac_mode}")
+        self._clear_off_preset()
 
         if self._manual is not None:
             desired = self._manual.desired.copy()
@@ -931,6 +997,17 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         if self._manual is None:
             return
         manual = self._manual
+        pending_off = self._off_preset_pending
+        self._off_preset_pending = False
+        if (
+            pending_off
+            and cause != "off"
+            and self.config.off_preset_enabled
+            and self.config.off_preset_keeps_live_state
+        ):
+            # A scheduler off preset arrived during manual mode. Keep the
+            # proxy live and stop the underlying targets once manual ends.
+            self._activate_off_preset_hold(manual.desired)
         if cause != "off" and self._baseline.is_empty:
             # No schedule command exists yet, so there is nothing to return to.
             # Keep the current manual state running instead of blanking the
@@ -953,6 +1030,9 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
 
     def _sync_desired(self) -> None:
         """Recompute the effective desired state from baseline and manual mode."""
+        if self._off_preset is not None:
+            self._desired = self._off_preset.desired.copy()
+            return
         self._desired = self._baseline.with_manual_mode(self._manual)
 
     async def _async_manual_expired(self, _now: datetime) -> None:
@@ -1011,6 +1091,8 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             HandoverState.STARTING_NEW,
         ):
             raise HomeAssistantError("Cannot start boost while a handover is pending")
+
+        self._clear_off_preset()
 
         for target in self._configured_targets():
             state = self._states[target]
@@ -1413,6 +1495,17 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             self._refresh_inputs()
 
             if not self._ready:
+                self._publish()
+                return
+
+            if self._off_preset is not None:
+                # The decoupled off preset keeps the proxy live while the
+                # underlying targets are stopped.
+                await self._async_stop_all()
+                self._active_targets = frozenset()
+                self._pending_target = None
+                self._handover_state = HandoverState.OFF
+                self._route_reason = "off_preset"
                 self._publish()
                 return
 
@@ -2347,7 +2440,8 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             for target in configured:
                 presets.update(self._states[target].preset_modes)
         presets.add("none")
-        presets.add(PRESET_OFF)
+        if self.config.off_preset_enabled:
+            presets.add(PRESET_OFF)
 
         active = self._single_active()
         active_state = self._states.get(active) if active is not None else None
@@ -2391,6 +2485,11 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             targets=dict(self._states),
             hvac_modes=tuple(hvac_modes),
             preset_modes=tuple(sorted(presets)),
+            off_preset_active=self._off_preset is not None,
+            off_preset_target=(self._off_preset.target if self._off_preset is not None else None),
+            off_preset_hvac_action=(
+                self._off_preset.hvac_action if self._off_preset is not None else None
+            ),
             fan_modes=ac.fan_modes if Target.AC in configured else (),
             min_temp=active_state.min_temp or 7.0,
             max_temp=active_state.max_temp or 35.0,
@@ -2484,6 +2583,20 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             boost = BoostState.from_dict(boost_data)
             if boost is not None and not boost.is_expired(dt_util.utcnow()):
                 self._boost = boost
+        off_preset_data = data.get("off_preset")
+        if (
+            isinstance(off_preset_data, dict)
+            and self.config.off_preset_enabled
+            and self.config.off_preset_keeps_live_state
+        ):
+            self._off_preset = OffPresetHold.from_dict(off_preset_data)
+        if (
+            data.get("off_preset_pending") is True
+            and self._manual is not None
+            and self.config.off_preset_enabled
+            and self.config.off_preset_keeps_live_state
+        ):
+            self._off_preset_pending = True
         self._sync_desired()
         last_route = data.get("last_route")
         if last_route in (Target.RADIATOR.value, Target.AC.value):
@@ -2512,6 +2625,8 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             "version": STORAGE_VERSION,
             "desired": self._baseline.to_dict(),
             "manual_mode": self._manual.to_dict() if self._manual is not None else None,
+            "off_preset": self._off_preset.to_dict() if self._off_preset is not None else None,
+            "off_preset_pending": self._off_preset_pending,
             "boost": self._boost.to_dict() if self._boost is not None else None,
             "last_route": self._last_route.value if self._last_route else None,
             "last_handover": (self._last_handover.isoformat() if self._last_handover else None),

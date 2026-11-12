@@ -31,7 +31,7 @@ Scheduler / User UI / Automations
 
 ## Status
 
-**M1–M6 implemented, plus the 0.8.x proxy rework and the 0.9.x/0.10.x single/read-only batch (current version 0.10.1).** The integration package provides the config flow, proxy climate
+**M1–M6 implemented, plus the 0.8.x proxy rework, the 0.9.x/0.10.x single/read-only batch and the 0.11.0 preset batch (current version 0.11.0).** The integration package provides the config flow, proxy climate
 entity, outdoor routing, safe handover, proxy-owned manual mode/timer, conflict detection, feature-flagged boost,
 two separate locks, optional single-thermostat setups, read-only underlying control, status entities, services and
 diagnostics. See [`docs/HANDOVER.md`](docs/HANDOVER.md) for the exact state, test results, known gaps and next steps.
@@ -78,7 +78,7 @@ user-initiated commands; schedule and automation traffic keeps running. See
 | Single thermostat | Either the radiator or the AC may be omitted; the route is then fixed and all other features keep working. |
 | Read-only schedule control | Runtime select `select.<name>_read_only_mode` with `off`/`soft`/`hard`, changeable while the entry is configured. `soft` suppresses every underlying write while the proxy keeps showing the command; `hard` mirrors the real underlying state and dismisses commands. Manual mode is never read-only: user moves still write, while scheduler/automation moves are always deferred. |
 | Scheduler pause switch | Optional generic switch/`input_boolean` turned on while manual mode is active and off when it ends (for example Chauffage's pause switch). Enable `scheduler_pause_switch_invert` to signal the opposite: on while the schedule is free, off in manual mode. |
-| Off preset | The proxy always exposes the `off` preset as a scheduler-friendly equivalent of an HVAC off command. |
+| Off preset | Optional synthetic preset in the **Presets** options section. By default it behaves like an HVAC off command; enable **Keep ClimateRouter live when the off preset is used** to stop only the underlying thermostat and keep the proxy in its last live state (a workaround for schedulers that refuse to start while the climate is off). |
 | Temperature-based routing | Outdoor sensor plus optional `select` override; hysteresis and minimum dwell time. |
 | Safe handover | Route change is deferred until the old target is idle; old target is turned off before the new one starts. |
 | Manual mode | Moving the temperature/preset or `climaterouter.enter_manual_mode` starts proxy-owned manual mode with an optional timer; additional moves do not reset it. While it is active, scheduler/automation moves are remembered but not applied, and `return_to_schedule` (or timer expiry) returns to the latest schedule state. A direct user move on the VTherm card itself is adopted into manual mode. Survives handover/restart. |

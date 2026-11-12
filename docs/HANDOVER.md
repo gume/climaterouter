@@ -143,7 +143,8 @@ for confirmation and then failed by trying to recreate the tag, and repositions 
 fuller hints. **0.10.0** (tag/release `v0.10.0`, commit `a04a74e`) moves the schedule read-only level out of the
 setup forms into a runtime `select` entity, removes the manual soft/hard setting, and makes manual mode always
 defer scheduler/automation commands. **0.10.1** (`fd706b8`) adds `scheduler_pause_switch_invert` so the optional
-pause switch can signal free instead of busy. None of 0.8.6–0.10.1 has been installed or live-verified yet.
+pause switch can signal free instead of busy. **0.11.0** adds the labelled manual-signal toggle and the optional
+`off` preset with its decoupled live-proxy mode. None of 0.8.6–0.11.0 has been installed or live-verified yet.
 
 ---
 
@@ -799,6 +800,7 @@ ACs; later versions use the two VTherm entities described in section 4.
 | 0.9.1 release published | Tag/release `v0.9.1` on `ecb76d4`; print-only release preview and read-only form hints; pending Marketplace install and live check |
 | 0.10.0 release published | Tag/release `v0.10.0` on `a04a74e`; runtime `select.<name>_read_only_mode`, manual read-only setting removed, manual mode always defers scheduler/automation commands; pending Marketplace install and live check |
 | 0.10.1 release candidate | `scheduler_pause_switch_invert` can signal free instead of busy; full suite 191 passed |
+| 0.11.0 release candidate | Labelled manual-signal toggle; optional `off` preset with a decoupled live-proxy mode; full suite 200 passed |
 
 The owner reports live verification through version **0.8.0** for M4 manual mode, M5 conflicts, M6 boost, the native
 lock, the 0.8.0 proxy rework, and the read-only VTherm display pass-through. The live instance currently runs the
@@ -1153,6 +1155,21 @@ filed names") is the only open item and is intentionally skipped for this batch.
 - [x] `scheduler_pause_switch_invert` flips the optional pause-switch polarity, so it can signal either busy (on
       while manual mode is active, the default) or free (on while the schedule is in control) (`fd706b8`).
 - [x] Model, config-flow, and coordinator tests cover the option and both polarities; full suite 191 passed.
+
+### 8.13 0.11.0 optional decoupled off preset
+
+- [x] The pause-switch inversion toggle is labelled **Invert the manual signal (on = schedule free)** and keeps
+      the longer hint that explains both polarities.
+- [x] A new **Presets** section in the setup/reconfigure form and the options menu exposes **Expose the off preset**
+      (default on, preserving 0.9/0.10 behaviour) and **Keep ClimateRouter live when the off preset is used**
+      (default off).
+- [x] Coupled mode keeps the old behaviour: the off preset ends manual mode and turns the proxy and the underlying
+      climate off. Decoupled mode copies the last live state (mode, setpoint, fan and last action) from the active
+      target, stops the underlying targets, and keeps the proxy heating/cooling with the `off` preset selected.
+- [x] A scheduler off during manual mode is held until manual mode ends. Any new live command clears the hold and
+      resumes the underlying target. The hold is persisted across restarts and exposed in the climate attributes,
+      diagnostics and snapshot.
+- [x] Model, config-flow, coordinator and translation tests cover the feature; full suite 200 passed.
 
 ---
 

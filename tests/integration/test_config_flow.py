@@ -17,6 +17,7 @@ from custom_components.climaterouter.config_flow import (
     SECTION_DISPLAY,
     SECTION_LOCK,
     SECTION_MANUAL,
+    SECTION_PRESETS,
     SECTION_ROUTING,
     _flatten_sections,
     _validate_input,
@@ -40,6 +41,8 @@ from custom_components.climaterouter.const import (
     CONF_MILD_THRESHOLD,
     CONF_MIN_ROUTE_DWELL,
     CONF_NAME,
+    CONF_OFF_PRESET_ENABLED,
+    CONF_OFF_PRESET_KEEPS_LIVE_STATE,
     CONF_OUTDOOR_SENSOR_ENTITY_ID,
     CONF_OUTDOOR_STALE_AFTER,
     CONF_RADIATOR_ENTITY_ID,
@@ -67,6 +70,7 @@ def _form_input(**basic: Any) -> dict[str, Any]:
         },
         "routing": {},
         "manual": {},
+        "presets": {},
         "conflicts": {},
         "boost": {},
         "lock": {},
@@ -94,6 +98,7 @@ async def test_user_flow_creates_entry(hass) -> None:
         "basic",
         "routing",
         "manual",
+        "presets",
         "conflicts",
         "boost",
         "lock",
@@ -107,6 +112,8 @@ async def test_user_flow_creates_entry(hass) -> None:
     assert result["data"][CONF_RADIATOR_ENTITY_ID] == RADIATOR
     assert result["data"][CONF_AC_ENTITY_ID] == AC
     assert result["data"][CONF_OUTDOOR_SENSOR_ENTITY_ID] == OUTDOOR
+    assert result["data"][CONF_OFF_PRESET_ENABLED] is True
+    assert result["data"][CONF_OFF_PRESET_KEEPS_LIVE_STATE] is False
     assert "basic" not in result["data"]
 
 
@@ -695,3 +702,33 @@ async def test_options_manual_section_saves_pause_switch(hass) -> None:
     assert result["type"] is data_entry_flow.FlowResultType.MENU
     assert entry.data[CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID] == "switch.chauffage_pause"
     assert entry.data[CONF_SCHEDULER_PAUSE_SWITCH_INVERT] is True
+
+
+async def test_options_presets_section_saves_off_preset_options(hass) -> None:
+    """The presets section persists the off preset and its live-state mode."""
+    _set_entities(hass)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Test Router",
+        data=_form_input()["basic"],
+        unique_id=f"{RADIATOR}|{AC}",
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": SECTION_PRESETS}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_OFF_PRESET_ENABLED: True,
+            CONF_OFF_PRESET_KEEPS_LIVE_STATE: True,
+        },
+    )
+
+    assert result["type"] is data_entry_flow.FlowResultType.MENU
+    assert entry.data[CONF_OFF_PRESET_ENABLED] is True
+    assert entry.data[CONF_OFF_PRESET_KEEPS_LIVE_STATE] is True

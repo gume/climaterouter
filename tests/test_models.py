@@ -12,6 +12,7 @@ from climaterouter.models import (
     Conflict,
     DesiredState,
     ManualMode,
+    OffPresetHold,
     RouterConfig,
     RouterSnapshot,
     SetpointKind,
@@ -266,6 +267,41 @@ def test_router_config_read_only_defaults_and_invalid_values() -> None:
 
     invalid = RouterConfig.from_mapping({"read_only_mode": "frozen"})
     assert invalid.read_only_mode == READ_ONLY_OFF
+
+
+def test_router_config_parses_off_preset_settings() -> None:
+    config = RouterConfig.from_mapping(
+        {
+            "off_preset_enabled": "on",
+            "off_preset_keeps_live_state": "yes",
+        }
+    )
+    assert config.off_preset_enabled is True
+    assert config.off_preset_keeps_live_state is True
+
+
+def test_router_config_off_preset_defaults() -> None:
+    config = RouterConfig.from_mapping({})
+    assert config.off_preset_enabled is True
+    assert config.off_preset_keeps_live_state is False
+
+
+def test_off_preset_hold_serialization_round_trips() -> None:
+    hold = OffPresetHold(
+        desired=DesiredState(
+            hvac_mode="heat",
+            setpoint_kind=SetpointKind.TEMPERATURE,
+            target_temperature=21.0,
+        ),
+        target=Target.RADIATOR,
+        hvac_action="heating",
+    )
+    restored = OffPresetHold.from_dict(hold.to_dict())
+    assert restored is not None
+    assert restored.desired.hvac_mode == "heat"
+    assert restored.desired.target_temperature == 21.0
+    assert restored.target is Target.RADIATOR
+    assert restored.hvac_action == "heating"
 
 
 def test_router_config_configured_targets_and_single_target() -> None:

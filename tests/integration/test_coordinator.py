@@ -1881,6 +1881,115 @@ async def test_off_preset_is_deferred_for_a_scheduler_during_manual_mode(hass) -
     assert coordinator.data.desired.hvac_mode == HVAC_OFF
 
 
+async def test_off_preset_can_be_disabled(hass) -> None:
+    """The synthetic off preset is only advertised when it is enabled."""
+    _entry, coordinator = await _setup(hass, off_preset_enabled=False)
+
+    assert PRESET_OFF not in coordinator.data.preset_modes
+
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+    await coordinator.async_set_preset_mode(PRESET_OFF)
+    await hass.async_block_till_done()
+
+    # A direct off-preset call remains a safe off command even when hidden.
+    assert coordinator.data.desired.hvac_mode == HVAC_OFF
+
+
+async def test_decoupled_off_preset_keeps_the_proxy_live(hass) -> None:
+    """The off preset stops the target but keeps the proxy heating."""
+    _entry, coordinator = await _setup(hass, off_preset_keeps_live_state=True)
+    calls = async_mock_service(hass, "climate", "set_hvac_mode")
+
+    await coordinator.async_set_temperature(temperature=21, hvac_mode=HVAC_HEAT)
+    await hass.async_block_till_done()
+    assert coordinator.data.active_targets == frozenset({Target.RADIATOR})
+
+    hass.states.async_set(
+        RADIATOR,
+        HVAC_HEAT,
+        {
+            "hvac_modes": [HVAC_HEAT],
+            "hvac_action": "heating",
+            "temperature": 21,
+            "min_temp": 7,
+            "max_temp": 35,
+        },
+    )
+    await hass.async_block_till_done()
+
+    await coordinator.async_set_preset_mode(PRESET_OFF)
+    await hass.async_block_till_done()
+
+    assert coordinator.data.off_preset_active is True
+    assert coordinator.data.off_preset_target is Target.RADIATOR
+    assert coordinator.data.desired.hvac_mode == HVAC_HEAT
+    assert coordinator.data.desired.target_temperature == 21
+    assert coordinator.data.active_targets == frozenset()
+    assert any(
+        call.data.get("entity_id") == RADIATOR and call.data.get("hvac_mode") == HVAC_OFF
+        for call in calls
+    )
+
+    climate = hass.states.get(coordinator.climate_entity_id)
+    assert climate is not None
+    assert climate.state == HVAC_HEAT
+    assert climate.attributes["preset_mode"] == PRESET_OFF
+    assert climate.attributes["off_preset_active"] is True
+    assert climate.attributes["temperature"] == 21
+
+    # A new live command resumes the underlying target and drops the hold.
+    await coordinator.async_set_temperature(temperature=22)
+    await hass.async_block_till_done()
+
+    assert coordinator.data.off_preset_active is False
+    assert coordinator.data.desired.hvac_mode == HVAC_HEAT
+    assert coordinator.data.desired.target_temperature == 22
+    assert coordinator.data.active_targets == frozenset({Target.RADIATOR})
+
+
+async def test_deferred_decoupled_off_preset_starts_after_manual_mode(hass) -> None:
+    """A scheduler off during manual mode holds the live state on return."""
+    _entry, coordinator = await _setup(hass, off_preset_keeps_live_state=True)
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+    await coordinator.async_enter_manual_mode(temperature=22, duration_minutes=30, context=USER)
+    await hass.async_block_till_done()
+
+    await coordinator.async_set_preset_mode(PRESET_OFF)
+    await hass.async_block_till_done()
+
+    assert coordinator.data.manual_mode is not None
+    assert coordinator.data.off_preset_active is False
+
+    await coordinator.async_return_to_schedule()
+    await hass.async_block_till_done()
+
+    assert coordinator.data.manual_mode is None
+    assert coordinator.data.off_preset_active is True
+    assert coordinator.data.desired.hvac_mode == HVAC_HEAT
+    assert coordinator.data.desired.target_temperature == 22
+    assert coordinator.data.active_targets == frozenset()
+
+
+async def test_decoupled_off_preset_hold_survives_reload(hass) -> None:
+    """The live proxy hold is restored without re-enabling the target."""
+    entry, coordinator = await _setup(hass, off_preset_keeps_live_state=True)
+    await coordinator.async_set_temperature(temperature=21, hvac_mode=HVAC_HEAT)
+    await hass.async_block_till_done()
+    await coordinator.async_set_preset_mode(PRESET_OFF)
+    await hass.async_block_till_done()
+
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    reloaded = entry.runtime_data
+    assert reloaded is not coordinator
+    assert reloaded.data.off_preset_active is True
+    assert reloaded.data.off_preset_target is Target.RADIATOR
+    assert reloaded.data.desired.hvac_mode == HVAC_HEAT
+    assert reloaded.data.desired.target_temperature == 21
+    assert reloaded.data.active_targets == frozenset()
+
+
 async def test_single_climate_routes_to_the_only_target(hass) -> None:
     """A single-thermostat entry bypasses outdoor routing and the AC."""
     _entry, coordinator = await _setup(

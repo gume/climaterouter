@@ -48,6 +48,8 @@ from .const import (
     CONF_MIN_ROUTE_DWELL,
     CONF_NAME,
     CONF_OFF_CONFIRM_TIMEOUT,
+    CONF_OFF_PRESET_ENABLED,
+    CONF_OFF_PRESET_KEEPS_LIVE_STATE,
     CONF_OUTDOOR_SENSOR_ENTITY_ID,
     CONF_OUTDOOR_STALE_AFTER,
     CONF_RADIATOR_ENTITY_ID,
@@ -72,6 +74,8 @@ from .models import (
     DEFAULT_MILD_THRESHOLD,
     DEFAULT_MIN_ROUTE_DWELL,
     DEFAULT_OFF_CONFIRM_TIMEOUT,
+    DEFAULT_OFF_PRESET_ENABLED,
+    DEFAULT_OFF_PRESET_KEEPS_LIVE_STATE,
     DEFAULT_OUTDOOR_STALE_AFTER,
     DEFAULT_SETTLE_TIME,
     DEFAULT_STARTUP_GRACE,
@@ -81,6 +85,7 @@ from .models import (
 SECTION_BASIC = "basic"
 SECTION_ROUTING = "routing"
 SECTION_MANUAL = "manual"
+SECTION_PRESETS = "presets"
 SECTION_CONFLICTS = "conflicts"
 SECTION_BOOST = "boost"
 SECTION_LOCK = "lock"
@@ -90,6 +95,7 @@ OPTION_MENU = [
     SECTION_BASIC,
     SECTION_ROUTING,
     SECTION_MANUAL,
+    SECTION_PRESETS,
     SECTION_CONFLICTS,
     SECTION_BOOST,
     SECTION_LOCK,
@@ -135,6 +141,11 @@ def _defaults(current: Mapping[str, Any] | None = None) -> dict[str, Any]:
             CONF_SCHEDULER_PAUSE_SWITCH_ENTITY_ID, ""
         ),
         CONF_SCHEDULER_PAUSE_SWITCH_INVERT: current.get(CONF_SCHEDULER_PAUSE_SWITCH_INVERT, False),
+        CONF_OFF_PRESET_ENABLED: current.get(CONF_OFF_PRESET_ENABLED, DEFAULT_OFF_PRESET_ENABLED),
+        CONF_OFF_PRESET_KEEPS_LIVE_STATE: current.get(
+            CONF_OFF_PRESET_KEEPS_LIVE_STATE,
+            DEFAULT_OFF_PRESET_KEEPS_LIVE_STATE,
+        ),
         CONF_TEMPERATURE_TOLERANCE: current.get(
             CONF_TEMPERATURE_TOLERANCE, DEFAULT_TEMPERATURE_TOLERANCE
         ),
@@ -272,6 +283,21 @@ def _manual_schema(defaults: Mapping[str, Any]) -> vol.Schema:
     )
 
 
+def _presets_schema(defaults: Mapping[str, Any]) -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_OFF_PRESET_ENABLED,
+                default=defaults[CONF_OFF_PRESET_ENABLED],
+            ): BooleanSelector(),
+            vol.Required(
+                CONF_OFF_PRESET_KEEPS_LIVE_STATE,
+                default=defaults[CONF_OFF_PRESET_KEEPS_LIVE_STATE],
+            ): BooleanSelector(),
+        }
+    )
+
+
 def _conflicts_schema(defaults: Mapping[str, Any]) -> vol.Schema:
     return vol.Schema(
         {
@@ -345,6 +371,7 @@ def _sectioned_schema(current: Mapping[str, Any] | None = None) -> vol.Schema:
             vol.Required(SECTION_BASIC): section(_basic_schema(defaults)),
             vol.Required(SECTION_ROUTING): section(_routing_schema(defaults), {"collapsed": True}),
             vol.Required(SECTION_MANUAL): section(_manual_schema(defaults), {"collapsed": True}),
+            vol.Required(SECTION_PRESETS): section(_presets_schema(defaults), {"collapsed": True}),
             vol.Required(SECTION_CONFLICTS): section(
                 _conflicts_schema(defaults), {"collapsed": True}
             ),
@@ -575,6 +602,12 @@ class ClimateRouterOptionsFlow(OptionsFlow):
     async def async_step_manual(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Edit manual-mode defaults."""
         return await self._async_section_step(SECTION_MANUAL, _manual_schema, user_input)
+
+    async def async_step_presets(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Edit the synthetic off preset."""
+        return await self._async_section_step(SECTION_PRESETS, _presets_schema, user_input)
 
     async def async_step_conflicts(
         self, user_input: dict[str, Any] | None = None

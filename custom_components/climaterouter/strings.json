@@ -59,14 +59,26 @@
               "max_manual_minutes": "Maximum manual timer",
               "velair_enabled": "Pause Velair in manual mode",
               "scheduler_pause_switch_entity_id": "Scheduler pause switch (optional)",
-              "scheduler_pause_switch_invert": "Invert pause switch polarity (on = free)"
+              "scheduler_pause_switch_invert": "Invert the manual signal (on = schedule free)"
             },
             "data_description": {
               "default_manual_minutes": "Timer for a new manual session. 0 keeps manual mode active until ended.",
               "max_manual_minutes": "Upper limit for the manual timer.",
               "velair_enabled": "Pause Velair for the remaining manual time when manual mode starts, and resume automatic control on the ClimateRouter proxy when it ends.",
               "scheduler_pause_switch_entity_id": "Switch or input_boolean turned on while manual mode is active and off when it ends. Chauffage's pause switch can be used here.",
-              "scheduler_pause_switch_invert": "Leave off to turn the switch on while manual mode is active (busy). Turn on to invert it: the switch stays on while the schedule is free and turns off in manual mode."
+              "scheduler_pause_switch_invert": "Leave off so the pause switch turns on while manual mode is active (busy). Turn on to invert the manual signal: the switch stays on while the schedule is free and turns off in manual mode."
+            }
+          },
+          "presets": {
+            "name": "Presets",
+            "description": "Synthetic presets offered by the ClimateRouter proxy.",
+            "data": {
+              "off_preset_enabled": "Expose the off preset",
+              "off_preset_keeps_live_state": "Keep ClimateRouter live when the off preset is used"
+            },
+            "data_description": {
+              "off_preset_enabled": "Add off to the proxy preset list so a scheduler that can only change presets can stop the underlying climate.",
+              "off_preset_keeps_live_state": "Turn on so the off preset stops the underlying thermostat but keeps the proxy in its last heating/cooling state. This lets schedulers that refuse to start while the climate is off keep working. Turn off so the proxy turns off together with the underlying climate."
             }
           },
           "conflicts": {
@@ -181,14 +193,26 @@
               "max_manual_minutes": "Maximum manual timer",
               "velair_enabled": "Pause Velair in manual mode",
               "scheduler_pause_switch_entity_id": "Scheduler pause switch (optional)",
-              "scheduler_pause_switch_invert": "Invert pause switch polarity (on = free)"
+              "scheduler_pause_switch_invert": "Invert the manual signal (on = schedule free)"
             },
             "data_description": {
               "default_manual_minutes": "Timer for a new manual session. 0 keeps manual mode active until ended.",
               "max_manual_minutes": "Upper limit for the manual timer.",
               "velair_enabled": "Pause Velair for the remaining manual time when manual mode starts, and resume automatic control on the ClimateRouter proxy when it ends.",
               "scheduler_pause_switch_entity_id": "Switch or input_boolean turned on while manual mode is active and off when it ends. Chauffage's pause switch can be used here.",
-              "scheduler_pause_switch_invert": "Leave off to turn the switch on while manual mode is active (busy). Turn on to invert it: the switch stays on while the schedule is free and turns off in manual mode."
+              "scheduler_pause_switch_invert": "Leave off so the pause switch turns on while manual mode is active (busy). Turn on to invert the manual signal: the switch stays on while the schedule is free and turns off in manual mode."
+            }
+          },
+          "presets": {
+            "name": "Presets",
+            "description": "Synthetic presets offered by the ClimateRouter proxy.",
+            "data": {
+              "off_preset_enabled": "Expose the off preset",
+              "off_preset_keeps_live_state": "Keep ClimateRouter live when the off preset is used"
+            },
+            "data_description": {
+              "off_preset_enabled": "Add off to the proxy preset list so a scheduler that can only change presets can stop the underlying climate.",
+              "off_preset_keeps_live_state": "Turn on so the off preset stops the underlying thermostat but keeps the proxy in its last heating/cooling state. This lets schedulers that refuse to start while the climate is off keep working. Turn off so the proxy turns off together with the underlying climate."
             }
           },
           "conflicts": {
@@ -272,6 +296,7 @@
           "basic": "Thermostats",
           "routing": "Routing",
           "manual": "Manual mode",
+          "presets": "Presets",
           "conflicts": "Conflicts",
           "boost": "Boost",
           "lock": "UI lock",
@@ -333,14 +358,26 @@
           "max_manual_minutes": "Maximum manual timer",
           "velair_enabled": "Pause Velair in manual mode",
           "scheduler_pause_switch_entity_id": "Scheduler pause switch (optional)",
-          "scheduler_pause_switch_invert": "Invert pause switch polarity (on = free)"
+          "scheduler_pause_switch_invert": "Invert the manual signal (on = schedule free)"
         },
         "data_description": {
           "default_manual_minutes": "Timer for a new manual session. 0 keeps manual mode active until ended.",
           "max_manual_minutes": "Upper limit for the manual timer.",
           "velair_enabled": "Pause Velair for the remaining manual time when manual mode starts, and resume automatic control on the ClimateRouter proxy when it ends.",
           "scheduler_pause_switch_entity_id": "Switch or input_boolean turned on while manual mode is active and off when it ends. Chauffage's pause switch can be used here.",
-          "scheduler_pause_switch_invert": "Leave off to turn the switch on while manual mode is active (busy). Turn on to invert it: the switch stays on while the schedule is free and turns off in manual mode."
+          "scheduler_pause_switch_invert": "Leave off so the pause switch turns on while manual mode is active (busy). Turn on to invert the manual signal: the switch stays on while the schedule is free and turns off in manual mode."
+        }
+      },
+      "presets": {
+        "title": "Presets",
+        "description": "Synthetic presets offered by the ClimateRouter proxy.",
+        "data": {
+          "off_preset_enabled": "Expose the off preset",
+          "off_preset_keeps_live_state": "Keep ClimateRouter live when the off preset is used"
+        },
+        "data_description": {
+          "off_preset_enabled": "Add off to the proxy preset list so a scheduler that can only change presets can stop the underlying climate.",
+          "off_preset_keeps_live_state": "Turn on so the off preset stops the underlying thermostat but keeps the proxy in its last heating/cooling state. This lets schedulers that refuse to start while the climate is off keep working. Turn off so the proxy turns off together with the underlying climate."
         }
       },
       "conflicts": {
