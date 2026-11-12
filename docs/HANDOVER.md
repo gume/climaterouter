@@ -120,9 +120,10 @@
 | `ecb76d4` | `fix: explain and reposition the read-only level fields` |
 | `dea47ab` | `feat: make read-only mode a runtime select and always defer manual schedules` |
 | `a04a74e` | `chore: bump version to 0.10.0` |
+| `fd706b8` | `feat: allow inverting the scheduler pause switch polarity` |
 
 Everything through `ecb76d4` is on `origin/main`; `v0.9.1` is tagged and released from it. The 0.10.0 commits
-(`dea47ab`, `a04a74e`, and the pause-switch polarity change) are local until the owner pushes them. The test
+(`dea47ab`, `a04a74e`, `fd706b8`) are local until the owner pushes them. The test
 instance still runs the Marketplace release **v0.8.3** (tag `v0.8.3`, commit `723c5c0`): `update.climaterouter`
 reported `installed_version` = `latest_version` = `v0.8.3` at the last live check. The 0.8.4 release was published on 2026-11-09 but has not yet
 been installed in the test instance. The 0.8.5 release is cut from the commit that adds this handover update; after
@@ -1142,7 +1143,7 @@ filed names") is the only open item and is intentionally skipped for this batch.
 - [x] Legacy `read_only_mode` entry data seeds the runtime value on first start; legacy `manual_read_only_mode` and
       `manual_blocks_schedule` data are ignored.
 - [x] `scheduler_pause_switch_invert` flips the optional pause-switch polarity, so it can signal either busy (on
-      while manual mode is active, the default) or free (on while the schedule is in control).
+      while manual mode is active, the default) or free (on while the schedule is in control) (`fd706b8`).
 - [x] Config-flow, translation, entity, persistence, and manual-write tests pass; full suite 191 passed.
 
 ---
