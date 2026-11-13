@@ -10,6 +10,7 @@ from homeassistant.helpers import config_validation as cv
 
 from .const import DOMAIN, PLATFORMS
 from .coordinator import ClimateRouterCoordinator
+from .runtime_translations import async_ensure_runtime_translations
 from .services import async_register_services
 
 _LOGGER = logging.getLogger(__name__)
@@ -22,6 +23,10 @@ async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
     """Register integration-wide services."""
     hass.data.setdefault(DOMAIN, {})
     async_register_services(hass)
+    # A partially updated install can leave the runtime translation file behind
+    # the Python code, which shows raw field keys in the options dialog. Repair
+    # it and drop the cached translations so the next browser fetch is current.
+    await async_ensure_runtime_translations(hass)
     return True
 
 
