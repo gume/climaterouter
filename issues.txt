@@ -59,7 +59,8 @@
   route is still visible while the system is off.
 - [x] Manual mode did not switch on when the user made a change.
   Resolved in 0.11.1. A user setpoint, preset, heat/cool mode, turn-on, or direct VTherm change now starts manual
-  mode. The baseline is seeded before the live-mode check so the first move after a restart is not lost.
+  mode. The baseline is seeded before the live-mode check, and a running target's mode is adopted when the stored
+  baseline is still off, so the first move after a restart is not lost.
 
 ## Open
 

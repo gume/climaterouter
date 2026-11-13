@@ -124,6 +124,7 @@
 | `9293b64` | `chore: bump version to 0.10.1` |
 | `5871a6c` | `feat: label the manual signal and add a decoupled off preset` |
 | `a152c63` | `fix: start manual mode on user changes and keep the off preset live` |
+| `4b90145` | `fix: adopt a live target mode when the baseline is off` |
 
 Everything through `a04a74e` is on `origin/main`; `v0.9.1` and `v0.10.0` are tagged and released from `ecb76d4`
 and `a04a74e`. The 0.10.1, 0.11.0 and 0.11.1 commits are local until the owner pushes them. The test
@@ -1188,8 +1189,9 @@ filed names") is the only open item and is intentionally skipped for this batch.
 ### 8.14 0.11.1 user-change manual mode and off-preset live state
 
 - [x] Any user change now starts manual mode: a setpoint, a preset, a heat/cool mode change, turning the proxy on,
-      or a direct change on the active VTherm. The baseline is seeded before the live-mode check, so the first
-      move after a restart is not lost (`a152c63`).
+      or a direct change on the active VTherm. The baseline is seeded before the live-mode check, and a running
+      target's mode is adopted when the stored baseline is still off, so the first move after a restart is not
+      lost (`a152c63`, `4b90145`).
 - [x] The decoupled `off` preset never copies an `off` state into the proxy. When the underlying targets are
       already off it reuses the last live desired state (persisted as `last_live`) and falls back to the last
       known setpoint, presenting the proxy as heating.
