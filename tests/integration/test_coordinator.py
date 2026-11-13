@@ -171,6 +171,67 @@ async def test_turn_off_ends_manual_mode(hass) -> None:
     assert coordinator.data.active_targets == frozenset()
 
 
+async def test_user_turn_on_starts_manual_mode(hass) -> None:
+    """Turning the proxy on from the UI starts manual mode."""
+    _entry, coordinator = await _setup(hass, outdoor=5.0)
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+    await coordinator.async_turn_off()
+    await hass.async_block_till_done()
+    assert coordinator.data.desired.hvac_mode == HVAC_OFF
+    assert coordinator.data.manual_mode is None
+
+    await coordinator.async_turn_on(context=USER)
+    await hass.async_block_till_done()
+
+    manual = coordinator.data.manual_mode
+    assert manual is not None
+    assert manual.desired.hvac_mode == HVAC_HEAT
+    assert coordinator.data.desired.hvac_mode == HVAC_HEAT
+
+
+async def test_user_hvac_mode_change_starts_manual_mode(hass) -> None:
+    """A user heat/cool change starts manual mode, like a setpoint change."""
+    _entry, coordinator = await _setup(hass, outdoor=5.0)
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+    await hass.async_block_till_done()
+    assert coordinator.data.manual_mode is None
+
+    await coordinator.async_set_hvac_mode(HVAC_COOL, context=USER)
+    await hass.async_block_till_done()
+
+    manual = coordinator.data.manual_mode
+    assert manual is not None
+    assert manual.desired.hvac_mode == HVAC_COOL
+
+
+async def test_direct_user_vtherm_move_starts_manual_mode(hass) -> None:
+    """A direct VTherm move by the user starts manual mode."""
+    _entry, coordinator = await _setup(hass, outdoor=5.0)
+    await coordinator.async_set_temperature(temperature=20, hvac_mode=HVAC_HEAT)
+    await hass.async_block_till_done()
+    assert coordinator.data.manual_mode is None
+    assert coordinator.data.active_targets == frozenset({Target.RADIATOR})
+
+    hass.states.async_set(
+        RADIATOR,
+        HVAC_HEAT,
+        {
+            "hvac_modes": [HVAC_HEAT],
+            "hvac_action": "heating",
+            "temperature": 23,
+            "min_temp": 7,
+            "max_temp": 35,
+        },
+        context=USER,
+    )
+    await hass.async_block_till_done()
+
+    manual = coordinator.data.manual_mode
+    assert manual is not None
+    assert manual.desired.hvac_mode == HVAC_HEAT
+    assert manual.desired.target_temperature == 23
+
+
 async def test_falls_back_to_ac_when_radiator_unavailable(hass) -> None:
     """A cold route falls back to a capable target when the first one is gone."""
     _entry, coordinator = await _setup(hass, outdoor=5.0)
@@ -1945,6 +2006,41 @@ async def test_decoupled_off_preset_keeps_the_proxy_live(hass) -> None:
     assert coordinator.data.desired.hvac_mode == HVAC_HEAT
     assert coordinator.data.desired.target_temperature == 22
     assert coordinator.data.active_targets == frozenset({Target.RADIATOR})
+
+
+async def test_decoupled_off_preset_keeps_live_when_targets_are_already_off(hass) -> None:
+    """The off preset never copies an off state into the live proxy."""
+    _entry, coordinator = await _setup(hass, off_preset_keeps_live_state=True)
+    await coordinator.async_set_temperature(temperature=21, hvac_mode=HVAC_HEAT)
+    await hass.async_block_till_done()
+    assert coordinator.data.desired.hvac_mode == HVAC_HEAT
+
+    # The underlying VTherm has already switched itself off. The off preset
+    # must keep the proxy live instead of adopting that off state.
+    hass.states.async_set(
+        RADIATOR,
+        HVAC_OFF,
+        {
+            "hvac_modes": [HVAC_HEAT],
+            "temperature": 21,
+            "min_temp": 7,
+            "max_temp": 35,
+        },
+    )
+    await hass.async_block_till_done()
+
+    await coordinator.async_set_preset_mode(PRESET_OFF)
+    await hass.async_block_till_done()
+
+    assert coordinator.data.off_preset_active is True
+    assert coordinator.data.desired.hvac_mode == HVAC_HEAT
+    assert coordinator.data.desired.target_temperature == 21
+    assert coordinator.data.active_targets == frozenset()
+
+    climate = hass.states.get(coordinator.climate_entity_id)
+    assert climate is not None
+    assert climate.state == HVAC_HEAT
+    assert climate.attributes["preset_mode"] == PRESET_OFF
 
 
 async def test_deferred_decoupled_off_preset_starts_after_manual_mode(hass) -> None:

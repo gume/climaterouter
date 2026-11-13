@@ -35,6 +35,7 @@ def _serialize_snapshot(snapshot: RouterSnapshot) -> dict[str, Any]:
         "active_targets": sorted(target.value for target in snapshot.active_targets),
         "configured_targets": sorted(target.value for target in snapshot.configured_targets),
         "pending_target": (snapshot.pending_target.value if snapshot.pending_target else None),
+        "route_target": (snapshot.route_target.value if snapshot.route_target else None),
         "route_reason": snapshot.route_reason,
         "handover_state": snapshot.handover_state.value,
         "desired": snapshot.desired.to_dict(),

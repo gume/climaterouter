@@ -442,6 +442,7 @@ class RouterSnapshot:
     available: bool = True
     active_targets: frozenset[Target] = frozenset()
     pending_target: Target | None = None
+    route_target: Target | None = None
     route_reason: str = "off"
     handover_state: HandoverState = HandoverState.OFF
     desired: DesiredState = field(default_factory=DesiredState)

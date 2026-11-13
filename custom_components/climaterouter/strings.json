@@ -59,7 +59,7 @@
               "max_manual_minutes": "Maximum manual timer",
               "velair_enabled": "Pause Velair in manual mode",
               "scheduler_pause_switch_entity_id": "Scheduler pause switch (optional)",
-              "scheduler_pause_switch_invert": "Invert the manual signal (on = schedule free)"
+              "scheduler_pause_switch_invert": "Pause switch polarity is inverted (on = schedule free)"
             },
             "data_description": {
               "default_manual_minutes": "Timer for a new manual session. 0 keeps manual mode active until ended.",
@@ -73,8 +73,8 @@
             "name": "Presets",
             "description": "Synthetic presets offered by the ClimateRouter proxy.",
             "data": {
-              "off_preset_enabled": "Expose the off preset",
-              "off_preset_keeps_live_state": "Keep ClimateRouter live when the off preset is used"
+              "off_preset_enabled": "Offer the off preset",
+              "off_preset_keeps_live_state": "Keep ClimateRouter on when the off preset is used"
             },
             "data_description": {
               "off_preset_enabled": "Add off to the proxy preset list so a scheduler that can only change presets can stop the underlying climate.",
@@ -193,7 +193,7 @@
               "max_manual_minutes": "Maximum manual timer",
               "velair_enabled": "Pause Velair in manual mode",
               "scheduler_pause_switch_entity_id": "Scheduler pause switch (optional)",
-              "scheduler_pause_switch_invert": "Invert the manual signal (on = schedule free)"
+              "scheduler_pause_switch_invert": "Pause switch polarity is inverted (on = schedule free)"
             },
             "data_description": {
               "default_manual_minutes": "Timer for a new manual session. 0 keeps manual mode active until ended.",
@@ -207,8 +207,8 @@
             "name": "Presets",
             "description": "Synthetic presets offered by the ClimateRouter proxy.",
             "data": {
-              "off_preset_enabled": "Expose the off preset",
-              "off_preset_keeps_live_state": "Keep ClimateRouter live when the off preset is used"
+              "off_preset_enabled": "Offer the off preset",
+              "off_preset_keeps_live_state": "Keep ClimateRouter on when the off preset is used"
             },
             "data_description": {
               "off_preset_enabled": "Add off to the proxy preset list so a scheduler that can only change presets can stop the underlying climate.",
@@ -358,7 +358,7 @@
           "max_manual_minutes": "Maximum manual timer",
           "velair_enabled": "Pause Velair in manual mode",
           "scheduler_pause_switch_entity_id": "Scheduler pause switch (optional)",
-          "scheduler_pause_switch_invert": "Invert the manual signal (on = schedule free)"
+          "scheduler_pause_switch_invert": "Pause switch polarity is inverted (on = schedule free)"
         },
         "data_description": {
           "default_manual_minutes": "Timer for a new manual session. 0 keeps manual mode active until ended.",
@@ -372,8 +372,8 @@
         "title": "Presets",
         "description": "Synthetic presets offered by the ClimateRouter proxy.",
         "data": {
-          "off_preset_enabled": "Expose the off preset",
-          "off_preset_keeps_live_state": "Keep ClimateRouter live when the off preset is used"
+          "off_preset_enabled": "Offer the off preset",
+          "off_preset_keeps_live_state": "Keep ClimateRouter on when the off preset is used"
         },
         "data_description": {
           "off_preset_enabled": "Add off to the proxy preset list so a scheduler that can only change presets can stop the underlying climate.",

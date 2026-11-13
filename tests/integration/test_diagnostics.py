@@ -68,10 +68,19 @@ async def test_diagnostics_serializes_snapshot_and_redacts_code(hass) -> None:
     assert diagnostics["snapshot"]["ready"] is True
     assert diagnostics["snapshot"]["manual_mode"] is not None
     assert diagnostics["snapshot"]["targets"]["radiator"]["entity_id"] == RADIATOR
+    assert diagnostics["snapshot"]["route_target"] == "radiator"
     assert diagnostics["targets_present"] == ["ac", "radiator"]
     assert diagnostics["active_targets"] == ["radiator"]
 
     await coordinator.async_return_to_schedule()
+
+    # active_targets is intentionally empty when everything is off; route_target
+    # keeps the last routed target visible.
+    await coordinator.async_turn_off()
+    await hass.async_block_till_done()
+    diagnostics = await async_get_config_entry_diagnostics(hass, entry)
+    assert diagnostics["snapshot"]["active_targets"] == []
+    assert diagnostics["snapshot"]["route_target"] == "radiator"
 
 
 async def test_diagnostics_reports_unloaded_entry(hass) -> None:

@@ -41,8 +41,28 @@
   `off_preset_keeps_live_state` (default off). Detached mode stops the underlying climate but keeps the proxy in
   its last live state, copying the active target's mode, setpoint, fan and action so a scheduler that refuses to
   start while the climate is off can resume.
+- [x] The manual-mode options still showed a raw `scheduler_pause_switch_invert` key, an unnamed **Presets**
+  submenu, and bare `off_preset_*` fields.
+  Resolved in 0.11.1. The installed 0.11.0 bundle already contained every label and hint; Home Assistant's
+  frontend had cached the 0.10.0 config-flow translations, which lacked those keys. The labels are now clearer
+  ("Pause switch polarity is inverted (on = schedule free)", "Offer the off preset", "Keep ClimateRouter on when
+  the off preset is used") and the handover notes that a hard browser reload (Ctrl+Shift+R) is required after an
+  update before judging config-flow strings.
+- [x] With a detached `off` preset, turning the preset on while the underlying climate was already off copied the
+  off state into ClimateRouter instead of keeping the proxy live.
+  Resolved in 0.11.1. The decoupled hold now never copies an `off` state: it reuses the last live desired state
+  (persisted across restarts) and falls back to the last known setpoint, presenting the proxy as heating.
+- [x] Diagnostics showed an `active target` that looked like it was always `none`.
+  Resolved in 0.11.1. `active_target` remains the target currently being driven and is intentionally empty when
+  everything is off. Diagnostics, the `active_target` sensor attributes, and the proxy now also expose
+  `route_target` (the active target, otherwise the pending target, otherwise the last routed target) so the last
+  route is still visible while the system is off.
+- [x] Manual mode did not switch on when the user made a change.
+  Resolved in 0.11.1. A user setpoint, preset, heat/cool mode, turn-on, or direct VTherm change now starts manual
+  mode. The baseline is seeded before the live-mode check so the first move after a restart is not lost.
 
 ## Open
 
-- [ ] Release 0.11.0, install it in the test HA through the Marketplace, and live-verify the labelled manual-signal
-      toggle, the optional `off` preset, and its detached live-state mode.
+- [ ] Release 0.11.1, install it in the test HA through the Marketplace, hard-reload the browser, and live-verify
+      the clearer labels, the detached `off` preset with all targets off, `route_target`, and manual mode starting
+      on a user change.

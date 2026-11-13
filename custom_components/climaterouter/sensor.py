@@ -339,6 +339,12 @@ class RouterSensor(RouterEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
+        if self._key in ("active_target", "pending_target"):
+            route_target = self._snapshot.route_target
+            return {
+                "route_target": route_target.value if route_target else "none",
+                "route_reason": self._snapshot.route_reason,
+            }
         if self._key == "conflict_detail":
             return _conflict_attributes(self._snapshot)
         if self._key == "target_mismatch_detail":
