@@ -522,6 +522,11 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             # is not lost when no schedule command is known yet.
             self._ensure_manual_baseline()
             desired = self._baseline.copy()
+            if desired.hvac_mode in (None, HVAC_OFF):
+                # The stored baseline may still be off after a restart while a
+                # target is already running; adopt that live mode so the user
+                # move starts manual mode instead of being dropped.
+                desired.hvac_mode = self._live_hvac_mode() or desired.hvac_mode
             if hvac_mode is not None:
                 if hvac_mode not in MODES:
                     raise HomeAssistantError(f"Unsupported HVAC mode: {hvac_mode}")
@@ -598,6 +603,8 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             # A user preset change starts manual mode, like a setpoint change.
             self._ensure_manual_baseline()
             desired = self._baseline.copy()
+            if desired.hvac_mode in (None, HVAC_OFF):
+                desired.hvac_mode = self._live_hvac_mode() or desired.hvac_mode
             self._apply_setpoint(desired, temperature=None, preset_mode=preset_mode)
             if desired.hvac_mode in (HVAC_HEAT, HVAC_COOL):
                 self._start_manual(dt_util.utcnow(), desired=desired)
@@ -766,6 +773,14 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         active = self._single_active() or self._first_on_target()
         if active is not None:
             self._baseline = self._adopt_desired(active)
+
+    def _live_hvac_mode(self) -> str | None:
+        """Return the mode of a currently running underlying target, if any."""
+        active = self._single_active() or self._first_on_target()
+        if active is None:
+            return None
+        mode = self._states[active].hvac_mode
+        return mode if mode in (HVAC_HEAT, HVAC_COOL) else None
 
     def _manual_deadline(self, minutes: int, now: datetime) -> datetime:
         """Validate a manual duration and return its absolute deadline."""
