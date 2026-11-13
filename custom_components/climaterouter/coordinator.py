@@ -516,7 +516,11 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
                 temperature=temperature,
                 preset_mode=preset_mode,
             )
-        elif from_user and (has_setpoint or hvac_mode is not None):
+        elif (
+            from_user
+            and self._read_only_mode_value == READ_ONLY_OFF
+            and (has_setpoint or hvac_mode is not None)
+        ):
             # Any user change starts manual mode. Seed the baseline from an
             # already running target first, so the first move after a restart
             # is not lost when no schedule command is known yet.
@@ -579,7 +583,11 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
                 self._apply_mode(HVAC_OFF)
         elif self._manual is not None and from_user:
             self._manual.desired.hvac_mode = hvac_mode
-        elif from_user and hvac_mode in (HVAC_HEAT, HVAC_COOL):
+        elif (
+            from_user
+            and self._read_only_mode_value == READ_ONLY_OFF
+            and hvac_mode in (HVAC_HEAT, HVAC_COOL)
+        ):
             # A user turning the proxy on (or switching heat/cool) starts a
             # manual session so the schedule cannot immediately override it.
             self._ensure_manual_baseline()
@@ -599,7 +607,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._clear_off_preset()
         if self._manual is not None and self._is_user_context(context):
             self._apply_setpoint(self._manual.desired, temperature=None, preset_mode=preset_mode)
-        elif self._is_user_context(context):
+        elif self._is_user_context(context) and self._read_only_mode_value == READ_ONLY_OFF:
             # A user preset change starts manual mode, like a setpoint change.
             self._ensure_manual_baseline()
             desired = self._baseline.copy()
@@ -644,7 +652,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
         self._clear_off_preset()
         if self._baseline.hvac_mode in (None, HVAC_OFF):
             self._baseline.hvac_mode = HVAC_HEAT
-        if self._is_user_context(context):
+        if self._is_user_context(context) and self._read_only_mode_value == READ_ONLY_OFF:
             # A user turning the proxy on starts manual mode, exactly like a
             # setpoint change, so the schedule cannot switch it off again.
             self._ensure_manual_baseline()
