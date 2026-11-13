@@ -125,6 +125,7 @@
 | `5871a6c` | `feat: label the manual signal and add a decoupled off preset` |
 | `a152c63` | `fix: start manual mode on user changes and keep the off preset live` |
 | `4b90145` | `fix: adopt a live target mode when the baseline is off` |
+| `8bc68c8` | `feat: expose route_target on the proxy attributes` |
 
 Everything through `a04a74e` is on `origin/main`; `v0.9.1` and `v0.10.0` are tagged and released from `ecb76d4`
 and `a04a74e`. The 0.10.1, 0.11.0 and 0.11.1 commits are local until the owner pushes them. The test
@@ -1196,8 +1197,9 @@ filed names") is the only open item and is intentionally skipped for this batch.
       already off it reuses the last live desired state (persisted as `last_live`) and falls back to the last
       known setpoint, presenting the proxy as heating.
 - [x] `active_target` keeps its meaning (the target currently being driven; empty when everything is off).
-      `route_target` is added to the snapshot, diagnostics and the `active_target`/`pending_target` sensor
-      attributes: it is the active target, otherwise the pending target, otherwise the last routed target.
+      `route_target` is added to the snapshot, diagnostics, the proxy attributes and the
+      `active_target`/`pending_target` sensor attributes: it is the active target, otherwise the pending target,
+      otherwise the last routed target.
 - [x] The pause-switch and off-preset labels are clearer. The raw keys and the unnamed **Presets** submenu seen
       after installing 0.11.0 were caused by the frontend caching the 0.10.0 config-flow translations, not by
       missing strings; a hard browser reload is required after an update.
