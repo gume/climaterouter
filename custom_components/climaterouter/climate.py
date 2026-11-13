@@ -273,6 +273,7 @@ class RouterClimate(RouterEntity, ClimateEntity):
             "pending_target": (
                 snapshot.pending_target.value if snapshot.pending_target else "none"
             ),
+            "route_target": (snapshot.route_target.value if snapshot.route_target else "none"),
             "route_reason": snapshot.route_reason,
             "off_preset_active": snapshot.off_preset_active,
             "off_preset_target": (

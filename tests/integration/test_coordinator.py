@@ -2041,6 +2041,8 @@ async def test_decoupled_off_preset_keeps_live_when_targets_are_already_off(hass
     assert climate is not None
     assert climate.state == HVAC_HEAT
     assert climate.attributes["preset_mode"] == PRESET_OFF
+    assert climate.attributes["active_target"] == "none"
+    assert climate.attributes["route_target"] == "radiator"
 
 
 async def test_deferred_decoupled_off_preset_starts_after_manual_mode(hass) -> None:
