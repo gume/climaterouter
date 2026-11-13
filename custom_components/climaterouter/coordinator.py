@@ -2523,6 +2523,7 @@ class ClimateRouterCoordinator(DataUpdateCoordinator[RouterSnapshot]):
             presets.add(PRESET_OFF)
 
         active = self._single_active()
+        route_target: Target | None
         if len(self._active_targets) > 1:
             route_target = None
         elif active is not None:
