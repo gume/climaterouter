@@ -61,9 +61,21 @@
   Resolved in 0.11.1. A user setpoint, preset, heat/cool mode, turn-on, or direct VTherm change now starts manual
   mode. The baseline is seeded before the live-mode check, and a running target's mode is adopted when the stored
   baseline is still off, so the first move after a restart is not lost.
+- [x] A user setpoint or preset change lifted a soft/hard runtime read-only level by starting manual mode.
+  Resolved in 0.11.2 (`97c3b9c`). Implicit manual start now requires the runtime read-only level to be `off`; an
+  explicit manual-mode request still bypasses read-only, which is the documented behaviour.
+- [x] The raw `scheduler_pause_switch_invert` key, the unnamed **Presets** submenu and the bare `off_preset_*`
+  fields persisted even after the labels were fixed and Home Assistant was restarted.
+  Resolved in 0.11.2 (`8dbe79d`). Home Assistant never reads `strings.json` at runtime; it loads
+  `translations/en.json`, and an interrupted update can leave the previous release's copy on disk while the code
+  is new. The installed 0.11.0 archive does contain every label, and both HA 2025.1.4 and HA 2026.11.0 resolve
+  them through `async_get_translations`, so the data was never the problem. Setup now compares the flattened key
+  sets and rewrites the runtime file from `strings.json` when keys are missing, invalidates Home Assistant's
+  translation cache where that API exists, and logs a warning. The browser still has to reload once, because the
+  frontend keeps integration-specific `options`/`config` translations in memory until a full page load.
 
 ## Open
 
-- [ ] Release 0.11.1, install it in the test HA through the Marketplace, hard-reload the browser, and live-verify
-      the clearer labels, the detached `off` preset with all targets off, `route_target`, and manual mode starting
-      on a user change.
+- [ ] Install 0.11.2 in the test HA through the Marketplace, hard-reload the browser, and live-verify the clearer
+      labels, the detached `off` preset with all targets off, `route_target`, manual mode starting on a user
+      change, and the absence of the translation-repair warning in the log.

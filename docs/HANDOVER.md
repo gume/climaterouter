@@ -126,6 +126,9 @@
 | `a152c63` | `fix: start manual mode on user changes and keep the off preset live` |
 | `4b90145` | `fix: adopt a live target mode when the baseline is off` |
 | `8bc68c8` | `feat: expose route_target on the proxy attributes` |
+| `97c3b9c` | `fix: keep implicit manual mode disabled under soft/hard read-only` |
+| `8dbe79d` | `fix: repair a stale runtime translation file on setup` |
+| `f29ef44` | `chore: bump version to 0.11.2` |
 
 Everything through `a04a74e` is on `origin/main`; `v0.9.1` and `v0.10.0` are tagged and released from `ecb76d4`
 and `a04a74e`. The 0.10.1, 0.11.0 and 0.11.1 commits are local until the owner pushes them. The test
@@ -150,8 +153,9 @@ defer scheduler/automation commands. **0.10.1** (`fd706b8`) adds `scheduler_paus
 pause switch can signal free instead of busy. **0.11.0** adds the labelled manual-signal toggle and the optional
 `off` preset with its decoupled live-proxy mode. **0.11.1** (`a152c63`) fixes the four issues reported against
 0.11.0: any user change starts manual mode, the decoupled off preset never copies an off state, `route_target`
-explains the last route while `active_target` is empty, and the config labels are clearer. None of 0.8.6–0.11.1
-has been installed or live-verified yet.
+explains the last route while `active_target` is empty, and the config labels are clearer. **0.11.2** (`8dbe79d`)
+keeps an implicit manual start out of soft/hard read-only and repairs a stale runtime translation file on setup.
+None of 0.8.6–0.11.2 has been installed or live-verified yet.
 
 ---
 
@@ -1207,6 +1211,33 @@ filed names") is the only open item and is intentionally skipped for this batch.
       off, and `route_target` in diagnostics. Local suite 72 passed, 1 skipped (integration tests need the HA
       harness).
 
+### 8.15 0.11.2 translation self-heal and read-only manual start
+
+- [x] The raw keys reported after installing 0.11.0 were **not** missing data. The published `v0.11.0` archive
+      and the checkout both contain every label and hint, and Home Assistant's own loader resolves them for the
+      `options` and `config` categories in English, German and Hungarian fallback on both HA 2025.1.4 and HA
+      2026.11.0. The symptom set (one raw manual key, an unnamed **Presets** menu entry, bare `off_preset_*`
+      fields, every other label correct) matches the 0.10.0 `options` map exactly: 0.10.0 had the manual step
+      without `scheduler_pause_switch_invert` and no presets step at all.
+- [x] `runtime_translations.py` repairs the one part that code can repair: Home Assistant loads
+      `translations/en.json`, never `strings.json`, so an interrupted update can leave the previous release's
+      file next to the new Python code. `async_setup` now compares the flattened key sets, rewrites the runtime
+      file from `strings.json` when keys are missing, invalidates Home Assistant's translation cache through
+      `async_invalidate_translations` (guarded, the API is newer than 2025.1.4), and logs a warning. A file that
+      already has every key is never overwritten.
+- [x] The self-heal runs from `async_setup`, not `async_setup_entry`. An `await` inside the entry setup path
+      widened the existing reload/teardown race and left the startup-grace timer of a discarded coordinator
+      scheduled in some option-flow tests; the domain setup runs once per Home Assistant start and cannot race
+      with an entry unload.
+- [x] `tests/integration/test_translations_runtime.py` resolves every menu option, section name, field label and
+      field hint through `homeassistant.helpers.translation.async_get_translations` instead of comparing the two
+      JSON files, so a file Home Assistant refuses to load now fails the suite. It also covers `_missing_keys`,
+      the repair path with temporary paths, the no-op path, and that `async_setup` calls the helper.
+- [x] Implicit manual start now requires the runtime read-only level to be `off`; a user setpoint or preset
+      change used to lift soft/hard read-only. An explicit manual-mode request still bypasses read-only.
+- [x] Local suite 213 passed with the HA 2025.1.4 harness; the new translation tests also pass on the HA 2026.11.0
+      harness. `ruff check .` and `ruff format --check .` are clean.
+
 ---
 
 ## 9. Gotchas
@@ -1235,6 +1266,11 @@ filed names") is the only open item and is intentionally skipped for this batch.
 - **Config-flow translations are cached by the frontend.** After updating a custom integration, the browser can
   keep showing the previous release's labels, raw keys, or an unnamed section. Hard-reload (Ctrl+Shift+R) or
   reconnect before judging config-flow strings; the installed `translations/en.json` may already be correct.
+- **Home Assistant never reads `strings.json` at runtime.** Only `translations/<language>.json` is loaded, so the
+  two files must ship together. `runtime_translations.py` compares their flattened key sets at setup and rewrites
+  the runtime file from `strings.json` when keys are missing, then logs a warning; it never touches a file that
+  already has every key. The frontend still keeps integration-specific `options`/`config` translations in memory
+  until a full page load, so the browser reload remains the last step after an update.
 
 ---
 
