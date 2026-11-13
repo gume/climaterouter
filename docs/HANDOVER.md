@@ -1,6 +1,6 @@
 # Handover — ClimateRouter
 
-**Date:** 2026-11-12
+**Date:** 2026-11-13
 **Branch:** `main`
 **Relevant commits:**
 
@@ -121,10 +121,12 @@
 | `dea47ab` | `feat: make read-only mode a runtime select and always defer manual schedules` |
 | `a04a74e` | `chore: bump version to 0.10.0` |
 | `fd706b8` | `feat: allow inverting the scheduler pause switch polarity` |
+| `9293b64` | `chore: bump version to 0.10.1` |
+| `5871a6c` | `feat: label the manual signal and add a decoupled off preset` |
+| `a152c63` | `fix: start manual mode on user changes and keep the off preset live` |
 
 Everything through `a04a74e` is on `origin/main`; `v0.9.1` and `v0.10.0` are tagged and released from `ecb76d4`
-and `a04a74e`. The 0.10.1 commits (`fd706b8`, `9293b64`, and the version bump) are local until the owner pushes
-them. The test
+and `a04a74e`. The 0.10.1, 0.11.0 and 0.11.1 commits are local until the owner pushes them. The test
 instance still runs the Marketplace release **v0.8.3** (tag `v0.8.3`, commit `723c5c0`): `update.climaterouter`
 reported `installed_version` = `latest_version` = `v0.8.3` at the last live check. The 0.8.4 release was published on 2026-11-09 but has not yet
 been installed in the test instance. The 0.8.5 release is cut from the commit that adds this handover update; after
@@ -144,7 +146,10 @@ fuller hints. **0.10.0** (tag/release `v0.10.0`, commit `a04a74e`) moves the sch
 setup forms into a runtime `select` entity, removes the manual soft/hard setting, and makes manual mode always
 defer scheduler/automation commands. **0.10.1** (`fd706b8`) adds `scheduler_pause_switch_invert` so the optional
 pause switch can signal free instead of busy. **0.11.0** adds the labelled manual-signal toggle and the optional
-`off` preset with its decoupled live-proxy mode. None of 0.8.6–0.11.0 has been installed or live-verified yet.
+`off` preset with its decoupled live-proxy mode. **0.11.1** (`a152c63`) fixes the four issues reported against
+0.11.0: any user change starts manual mode, the decoupled off preset never copies an off state, `route_target`
+explains the last route while `active_target` is empty, and the config labels are clearer. None of 0.8.6–0.11.1
+has been installed or live-verified yet.
 
 ---
 
@@ -246,7 +251,9 @@ Version **0.9.0** adds four owner-requested capabilities:
 Version **0.10.0** supersedes the read-only part of 0.9.0: the schedule level is now the runtime
 `select.<name>_read_only_mode` entity (persisted across restarts), the manual level is removed, and manual mode
 always defers scheduler/automation commands while still accepting user writes. Version **0.10.1** adds
-`scheduler_pause_switch_invert` so the optional pause switch can signal free instead of busy.
+`scheduler_pause_switch_invert` so the optional pause switch can signal free instead of busy. Version **0.11.1**
+makes every user change start manual mode, keeps the decoupled `off` preset live even when the underlying climate
+is already off, and exposes `route_target` next to the intentionally empty `active_target`.
 
 `scripts/release.sh` now checks local and remote tags independently, refuses a tag that points at another commit,
 and only creates/pushes a tag when it is missing, so rerunning a release is idempotent. Version **0.9.1** fixes a
@@ -801,6 +808,7 @@ ACs; later versions use the two VTherm entities described in section 4.
 | 0.10.0 release published | Tag/release `v0.10.0` on `a04a74e`; runtime `select.<name>_read_only_mode`, manual read-only setting removed, manual mode always defers scheduler/automation commands; pending Marketplace install and live check |
 | 0.10.1 release candidate | `scheduler_pause_switch_invert` can signal free instead of busy; full suite 191 passed |
 | 0.11.0 release candidate | Labelled manual-signal toggle; optional `off` preset with a decoupled live-proxy mode; full suite 200 passed |
+| 0.11.1 release candidate | Manual mode starts on every user change; off preset never copies an off state; `route_target` added; clearer config labels; local suite 72 passed, 1 skipped (integration tests added) |
 
 The owner reports live verification through version **0.8.0** for M4 manual mode, M5 conflicts, M6 boost, the native
 lock, the 0.8.0 proxy rework, and the read-only VTherm display pass-through. The live instance currently runs the
@@ -876,6 +884,12 @@ section 8.2 for the full list.
 
 ### 8.1 Immediate
 
+**Current (0.11.1):** the owner must push `main`, refresh the Marketplace (or restart Home Assistant), install
+0.11.1 and hard-reload the browser. Then verify that every user change starts manual mode (setpoint, preset,
+heat/cool, turn-on, and a direct VTherm move), that the detached `off` preset keeps the proxy heating/cooling when
+the underlying climate is already off, that `sensor.<name>_active_target` exposes `route_target`, and that the
+options form shows the clearer labels instead of raw keys.
+
 1. **Done:** `v0.8.5` is tagged and released from this commit. Next: refresh the Marketplace or restart Home
    Assistant, install the update, and confirm the brand icon, all entities, the timer `off` badge, the
    scheduler/manual protection, and the conflict/mismatch detail sensors. Do not re-add the old
@@ -909,15 +923,15 @@ section 8.2 for the full list.
 
 ### 8.2 Automated tests and CI
 
-Status as of 2026-11-12:
+Status as of 2026-11-13:
 
 | Check | Result |
 |---|---|
 | `ruff check .` | clean |
 | `ruff format --check .` | clean |
-| Pure unit tests (no HA) | 69 passed |
-| Integration tests (HA harness) | 122 passed |
-| Full suite (HA harness) | 191 passed, 0 failures |
+| Pure unit tests (no HA) | 72 passed, 1 integration module skipped locally |
+| Integration tests (HA harness) | 122 passed at the last CI run; the 0.11.1 tests have not run locally |
+| Full suite (HA harness) | 191 passed at the last CI run; re-run in CI for 0.11.1 |
 | `mypy custom_components/climaterouter` | clean in CI; a newer local mypy reports the known `ConfigFlow, domain=` false positive |
 | CI installs `requirements_test.txt` | yes (intentionally unpinned, includes `mypy`) |
 | CI matrix | full HA suite on Python 3.13; pure unit tests on Python 3.12 and 3.13 |
@@ -1171,6 +1185,24 @@ filed names") is the only open item and is intentionally skipped for this batch.
       diagnostics and snapshot.
 - [x] Model, config-flow, coordinator and translation tests cover the feature; full suite 200 passed.
 
+### 8.14 0.11.1 user-change manual mode and off-preset live state
+
+- [x] Any user change now starts manual mode: a setpoint, a preset, a heat/cool mode change, turning the proxy on,
+      or a direct change on the active VTherm. The baseline is seeded before the live-mode check, so the first
+      move after a restart is not lost (`a152c63`).
+- [x] The decoupled `off` preset never copies an `off` state into the proxy. When the underlying targets are
+      already off it reuses the last live desired state (persisted as `last_live`) and falls back to the last
+      known setpoint, presenting the proxy as heating.
+- [x] `active_target` keeps its meaning (the target currently being driven; empty when everything is off).
+      `route_target` is added to the snapshot, diagnostics and the `active_target`/`pending_target` sensor
+      attributes: it is the active target, otherwise the pending target, otherwise the last routed target.
+- [x] The pause-switch and off-preset labels are clearer. The raw keys and the unnamed **Presets** submenu seen
+      after installing 0.11.0 were caused by the frontend caching the 0.10.0 config-flow translations, not by
+      missing strings; a hard browser reload is required after an update.
+- [x] Integration tests cover user turn-on, user heat/cool, a direct VTherm move, the off preset with all targets
+      off, and `route_target` in diagnostics. Local suite 72 passed, 1 skipped (integration tests need the HA
+      harness).
+
 ---
 
 ## 9. Gotchas
@@ -1196,6 +1228,9 @@ filed names") is the only open item and is intentionally skipped for this batch.
   `ruff format --check .` are clean and CI enforces them. Run the formatter before committing.
 - **The `.storage` test entries are not in git.** A fresh clone has no `ClimateRouter Test` or
   `Fake HVAC Lab 2`.
+- **Config-flow translations are cached by the frontend.** After updating a custom integration, the browser can
+  keep showing the previous release's labels, raw keys, or an unnamed section. Hard-reload (Ctrl+Shift+R) or
+  reconnect before judging config-flow strings; the installed `translations/en.json` may already be correct.
 
 ---
 
